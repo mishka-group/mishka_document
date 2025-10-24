@@ -1,0 +1,35 @@
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# If you run "mix test --cover", coverage assets end up here.
+/cover/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# Where third-party dependencies like ExDoc output generated docs.
+/doc/
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Also ignore archive artifacts (built via "mix archive.build").
+*.ez
+
+# Ignore package tarball (built via "mix hex.build").
+mishka_document-*.tar
+
+# Temporary files, for example, from tests.
+/tmp/
+
+# Derived by `mix ash.codegen`, never written by hand — a local build artifact, not source.
+/priv/repo/migrations/
+/priv/resource_snapshots/
+
+# MishkaInstaller's plugin registry lives here on disk and survives runs; a stale row naming a
+# module that no longer exists makes every hook for that event refuse to run.
+/.mnesia/
+
+# Mnesia writes a crash dump into the CWD, next to `erl_crash.dump` and for the same reasons. One
+# is 800 KB of binary, and a test run of this extension left one here.
+MnesiaCore.*
