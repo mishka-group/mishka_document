@@ -60,4 +60,8 @@ defmodule MishkaDocument do
       end
     end
   end
+
+  resources do
+    resource MishkaDocument.EventLog
+  end
 end
