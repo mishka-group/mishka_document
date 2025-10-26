@@ -11,6 +11,7 @@ defmodule MishkaDocument.Test.Factory do
   Document records are tenant-scoped, so each wrapper pops `:site_id` and passes it as the Ash tenant.
   """
 
+  import MishkaDocument.Dev.Generator, except: [generate: 1, generate: 2]
   import MishkaCmsCore.Dev.Generator, except: [generate: 1, generate: 2]
   import Ash.Generator, only: [generate: 1]
 
@@ -133,4 +134,63 @@ defmodule MishkaDocument.Test.Factory do
   end
 
   # MediaCategory factory
+
+  # Workspace factory
+  def create_workspace!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {skip_version, overrides} = Keyword.pop(overrides, :skip_version, false)
+
+    # Workspace MUST have a site_id (not global)
+    site_id = site_id || create_site!().id
+    tenant = site_id
+
+    # Step 1: Create workspace (no version_ids needed)
+    workspace =
+      overrides
+      |> workspace(tenant)
+      |> generate()
+
+    # Step 2: Create a default version unless skip_version is true
+    unless skip_version do
+      _version = create_workspace_version!(workspace_id: workspace.id, site_id: site_id)
+    end
+
+    workspace
+  end
+
+  # WorkspaceVersion factory
+  def create_workspace_version!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {workspace_id, overrides} = Keyword.pop(overrides, :workspace_id)
+
+    {site_id, workspace_id} =
+      cond do
+        site_id && workspace_id ->
+          {site_id, workspace_id}
+
+        workspace_id ->
+          workspace =
+            Ash.get!(MishkaDocument.Workspace, workspace_id,
+              action: :master_get,
+              authorize?: false
+            )
+
+          {workspace.site_id, workspace.id}
+
+        site_id ->
+          workspace = create_workspace!(site_id: site_id)
+          {site_id, workspace.id}
+
+        true ->
+          workspace = create_workspace!()
+          {workspace.site_id, workspace.id}
+      end
+
+    tenant = site_id
+
+    overrides
+    |> Keyword.put(:workspace_id, workspace_id)
+    |> workspace_version(tenant)
+    |> generate()
+  end
 end

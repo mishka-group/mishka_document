@@ -62,6 +62,8 @@ defmodule MishkaDocument do
   end
 
   resources do
+    resource MishkaDocument.Workspace
+    resource MishkaDocument.WorkspaceVersion
     resource MishkaDocument.EventLog
   end
 end
