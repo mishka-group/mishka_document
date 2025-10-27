@@ -193,4 +193,78 @@ defmodule MishkaDocument.Test.Factory do
     |> workspace_version(tenant)
     |> generate()
   end
+
+  # WorkspaceVersionLineage factory
+  def create_workspace_version_lineage!(overrides \\ []) do
+    {new_version_id, overrides} = Keyword.pop(overrides, :new_version_id)
+    {source_version_id, overrides} = Keyword.pop(overrides, :source_version_id)
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+
+    # An explicit past cloned_at keeps lineage timestamps deterministic across a test run.
+    overrides =
+      Keyword.put_new(
+        overrides,
+        :cloned_at,
+        DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+      )
+
+    # If new_version_id not provided, create a new version
+    if is_nil(new_version_id) && is_nil(source_version_id) do
+      # Create both versions in same workspace
+      site_id = site_id || create_site!().id
+      workspace = create_workspace!(site_id: site_id)
+      source = create_workspace_version!(workspace_id: workspace.id, site_id: site_id)
+      new_version = create_workspace_version!(workspace_id: workspace.id, site_id: site_id)
+      tenant = site_id
+
+      overrides
+      |> Keyword.put(:new_version_id, new_version.id)
+      |> Keyword.put(:source_version_id, source.id)
+      |> workspace_version_lineage(tenant)
+      |> generate()
+    else
+      # Extract site_id from one of the provided versions
+      version_for_site =
+        cond do
+          new_version_id ->
+            Ash.get!(MishkaDocument.WorkspaceVersion, new_version_id,
+              action: :master_get,
+              authorize?: false
+            )
+
+          source_version_id ->
+            Ash.get!(MishkaDocument.WorkspaceVersion, source_version_id,
+              action: :master_get,
+              authorize?: false
+            )
+
+          true ->
+            nil
+        end
+
+      site_id = site_id || version_for_site.site_id
+      tenant = site_id
+
+      # If only one version provided, create the other
+      new_version_id =
+        new_version_id ||
+          create_workspace_version!(
+            workspace_id: version_for_site.workspace_id,
+            site_id: site_id
+          ).id
+
+      source_version_id =
+        source_version_id ||
+          create_workspace_version!(
+            workspace_id: version_for_site.workspace_id,
+            site_id: site_id
+          ).id
+
+      overrides
+      |> Keyword.put(:new_version_id, new_version_id)
+      |> Keyword.put(:source_version_id, source_version_id)
+      |> workspace_version_lineage(tenant)
+      |> generate()
+    end
+  end
 end

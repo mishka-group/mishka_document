@@ -1031,6 +1031,20 @@ defmodule MishkaDocument.WorkspaceVersion do
       destination_attribute :source_version_id
       description "Versions that were cloned from this version"
     end
+
+    # Lineage tracking - when this version was created by cloning
+    has_one :lineage_as_new, MishkaDocument.WorkspaceVersionLineage do
+      public? true
+      destination_attribute :new_version_id
+      description "Lineage record when this version was created by cloning"
+    end
+
+    # Lineage tracking - versions cloned from this version
+    has_many :lineage_as_source, MishkaDocument.WorkspaceVersionLineage do
+      public? true
+      destination_attribute :source_version_id
+      description "Lineage records for versions cloned from this version"
+    end
   end
 
   identities do

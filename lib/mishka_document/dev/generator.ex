@@ -68,4 +68,18 @@ defmodule MishkaDocument.Dev.Generator do
       tenant: tenant
     )
   end
+
+  def workspace_version_lineage(opts \\ [], tenant \\ nil) do
+    changeset_generator(
+      MishkaDocument.WorkspaceVersionLineage,
+      :create,
+      authorize?: false,
+      defaults: [
+        new_version_id: nil,
+        source_version_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
 end
