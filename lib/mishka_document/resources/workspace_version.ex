@@ -1045,6 +1045,31 @@ defmodule MishkaDocument.WorkspaceVersion do
       destination_attribute :source_version_id
       description "Lineage records for versions cloned from this version"
     end
+
+    # Relationship - for public users (guests/users without permissions)
+    has_many :sections, MishkaDocument.Section do
+      public? true
+      destination_attribute :workspace_version_id
+      read_action :public_list
+      description "Published approved sections of this version (public access)"
+    end
+
+    # Relationship - for admin users with tenant
+    has_many :tenant_sections, MishkaDocument.Section do
+      public? true
+      destination_attribute :workspace_version_id
+      description "All sections of this version (tenant admin access)"
+    end
+
+    # Bypass relationship - for master admin users without tenant
+    has_many :master_sections, MishkaDocument.Section do
+      public? true
+      destination_attribute :workspace_version_id
+      read_action :read_any
+      description "All sections of this version (master admin access, bypass tenant)"
+
+      filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
+    end
   end
 
   identities do

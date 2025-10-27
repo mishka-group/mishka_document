@@ -507,6 +507,239 @@ defmodule MishkaDocument.Test.EventLogTest do
       end
     end
 
+    describe "event tracking on Section create/update" do
+      test "creates event when section is created" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section",
+              slug: "test-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        events = get_events_for_record(section.id)
+        assert length(events) >= 1
+
+        create_event = Enum.find(events, &(&1.action == :create))
+        assert create_event != nil
+        assert create_event.metadata["title"] == "Test Section"
+        assert create_event.metadata["site_id"] == site.id
+      end
+
+      # TODO: https://discord.com/channels/711271361523351632/1019647368196534283
+      # TODO: We should fix the problem with the event log when section is updated
+      test "creates event when section is updated" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Original Section",
+              slug: "original-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        section
+        |> Ash.Changeset.for_update(
+          :update,
+          %{title: "Updated Section"},
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.update!()
+
+        events = get_events_for_record(section.id)
+        # Find the update event with the new title (not the language_group_id auto-update)
+        update_event =
+          Enum.find(events, &(&1.action == :update && &1.metadata["title"] == "Updated Section"))
+
+        assert update_event != nil
+        assert update_event.metadata["title"] == "Updated Section"
+      end
+
+      test "creates event when section is soft-deleted (archived)" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "To Archive Section",
+              slug: "to-archive-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        section
+        |> Ash.Changeset.for_destroy(:destroy, %{}, tenant: site.id, authorize?: false)
+        |> Ash.destroy!()
+
+        events = get_events_for_record(section.id)
+        destroy_event = Enum.find(events, &(&1.action == :destroy))
+
+        assert destroy_event != nil
+        assert destroy_event.metadata["title"] == "To Archive Section"
+      end
+
+      test "creates event for permanent_destroy" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "To Delete",
+              slug: "to-delete",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        section
+        |> Ash.Changeset.for_destroy(:permanent_destroy, %{}, tenant: site.id, authorize?: false)
+        |> Ash.destroy!()
+
+        events = get_events_for_record(section.id)
+        destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
+
+        assert destroy_event != nil
+        assert destroy_event.metadata["title"] == "To Delete"
+      end
+    end
+
+    describe "event tracking on Tag create/update" do
+      test "creates event when tag is created" do
+        site = create_site!()
+
+        tag =
+          MishkaDocument.Tag
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              name: "Test Tag",
+              slug: "test-tag"
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        events = get_events_for_record(tag.id)
+        assert length(events) >= 1
+
+        create_event = Enum.find(events, &(&1.action == :create))
+        assert create_event != nil
+        assert create_event.metadata["title"] == "Test Tag"
+        assert create_event.metadata["site_id"] == site.id
+      end
+
+      test "creates event when tag is updated" do
+        site = create_site!()
+
+        tag =
+          MishkaDocument.Tag
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              name: "Original Tag",
+              slug: "original-tag"
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        tag
+        |> Ash.Changeset.for_update(
+          :update,
+          %{name: "Updated Tag"},
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.update!()
+
+        events = get_events_for_record(tag.id)
+
+        update_event =
+          Enum.find(events, &(&1.action == :update && &1.metadata["title"] == "Updated Tag"))
+
+        assert update_event != nil
+        assert update_event.metadata["title"] == "Updated Tag"
+      end
+
+      test "creates event for permanent_destroy" do
+        site = create_site!()
+
+        tag =
+          MishkaDocument.Tag
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              name: "To Delete",
+              slug: "to-delete"
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        tag
+        |> Ash.Changeset.for_destroy(:permanent_destroy, %{}, tenant: site.id, authorize?: false)
+        |> Ash.destroy!()
+
+        events = get_events_for_record(tag.id)
+        destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
+
+        assert destroy_event != nil
+        assert destroy_event.metadata["title"] == "To Delete"
+      end
+    end
+
     describe "event tracking on WorkspaceVersion create/update" do
       test "creates event when workspace version is created" do
         site = create_site!()

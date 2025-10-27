@@ -82,4 +82,67 @@ defmodule MishkaDocument.Dev.Generator do
       tenant: tenant
     )
   end
+
+  def section(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Section,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        title: sequence(:title, &"Test Section #{&1}"),
+        slug: sequence(:slug, &"test-section-#{&1}"),
+        content: sequence(:content, &"Test section content #{&1}"),
+        order_position: 0,
+        change_version: "0.0.1",
+        content_review_status: :pending,
+        technical_review_status: :pending,
+        schema: [],
+        seo_tags: [],
+        permissions: [],
+        language: "en",
+        language_group_id: nil,
+        workspace_version_id: nil,
+        parent_section_id: nil,
+        section_lineage_id: nil,
+        source_section_id: nil,
+        site_id: nil,
+        tag_ids: []
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def document_tag(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Tag,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        name: sequence(:name, &"Test Document Tag #{&1}"),
+        slug: sequence(:slug, &"test-document-tag-#{&1}"),
+        language: "en",
+        language_group_id: nil,
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def section_tag(opts \\ [], _tenant \\ nil) do
+    changeset_generator(
+      MishkaDocument.SectionTag,
+      :assign,
+      authorize?: false,
+      defaults: [
+        section_id: nil,
+        tag_id: nil
+      ],
+      overrides: opts,
+      tenant: nil
+    )
+  end
 end

@@ -1633,6 +1633,21 @@ defmodule MishkaDocument.Workspace do
       public? true
       description "How many versions this workspace has (master admin access, bypass tenant)"
     end
+
+    # The card's tag chips. A workspace has no tags of its own — its sections carry them — so this
+    # gathers the names three relationships away. A `list` aggregate joins them into the page's own
+    # query rather than costing a read per card.
+    list :tag_names, [:tenant_versions, :tenant_sections, :tenant_tags], :name do
+      public? true
+      uniq? true
+      description "Names of every tag on this workspace's sections"
+    end
+
+    list :master_tag_names, [:master_versions, :master_sections, :master_tags], :name do
+      public? true
+      uniq? true
+      description "Names of every tag on this workspace's sections (master access, bypass tenant)"
+    end
   end
 
   identities do

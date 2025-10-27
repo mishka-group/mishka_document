@@ -267,4 +267,63 @@ defmodule MishkaDocument.Test.Factory do
       |> generate()
     end
   end
+
+  # Section factory
+  def create_section!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {workspace_version_id, overrides} = Keyword.pop(overrides, :workspace_version_id)
+
+    # Section MUST have site_id and workspace_version_id
+    site_id = site_id || create_site!().id
+
+    workspace_version_id =
+      workspace_version_id ||
+        create_workspace_version!(
+          workspace_id: create_workspace!(site_id: site_id).id,
+          site_id: site_id
+        ).id
+
+    tenant = site_id
+
+    overrides
+    |> Keyword.put(:site_id, site_id)
+    |> Keyword.put(:workspace_version_id, workspace_version_id)
+    |> section(tenant)
+    |> generate()
+  end
+
+  # Document Tag factory (MishkaDocument.Tag)
+  def create_document_tag!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    # Tag MUST have a site_id (not global)
+    site_id = site_id || create_site!().id
+    tenant = site_id
+
+    overrides
+    |> document_tag(tenant)
+    |> generate()
+  end
+
+  # SectionTag factory (MishkaDocument.SectionTag - join table)
+  def create_section_tag!(overrides \\ []) do
+    # Get or create section_id and tag_id
+    {section_id, overrides} = Keyword.pop(overrides, :section_id)
+    {tag_id, overrides} = Keyword.pop(overrides, :tag_id)
+
+    section_id = section_id || create_section!().id
+
+    # A tag of the section's own site: a section is never tagged with another site's tag.
+    tag_id =
+      tag_id ||
+        create_document_tag!(
+          site_id:
+            Ash.get!(MishkaDocument.Section, section_id, action: :master_get, authorize?: false).site_id
+        ).id
+
+    overrides
+    |> Keyword.put(:section_id, section_id)
+    |> Keyword.put(:tag_id, tag_id)
+    |> section_tag(nil)
+    |> generate()
+  end
 end
