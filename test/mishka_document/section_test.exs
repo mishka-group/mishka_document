@@ -612,6 +612,146 @@ defmodule MishkaDocument.Test.SectionTest do
       end
     end
 
+    describe "contributors_count calculation" do
+      test "counts unique contributors from EventLog (Section and Note changes)" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+        version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        # Create users
+        user1 = create_user!(email: "contributor1@test.com")
+        user2 = create_user!(email: "contributor2@test.com")
+
+        # User 1: Creates a section (generates EventLog with actor)
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: version.id,
+              title: "Test Section",
+              slug: "test-section-contributors"
+            },
+            actor: user1,
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        # User 1: Updates the section (should still count as 1 unique contributor)
+        section
+        |> Ash.Changeset.for_update(
+          :update,
+          %{title: "Updated Section"},
+          actor: user1,
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.update!()
+
+        # User 2: Creates a note for this section (generates EventLog with section_id in metadata)
+        MishkaDocument.Note
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            section_id: section.id,
+            title: "Note by User 2",
+            content: "Note content"
+          },
+          actor: user2,
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.create!()
+
+        # Load section with contributors_count
+        section_with_count =
+          Ash.get!(Section, section.id,
+            tenant: site.id,
+            authorize?: false,
+            load: [:contributors_count]
+          )
+
+        # User1 (section create + update) + User2 (note create) = 2 unique contributors
+        assert section_with_count.contributors_count == 2
+      end
+
+      test "returns 0 when section created without actor" do
+        site = create_site!()
+        # create_section! doesn't pass an actor, so no EventLog entry has actor_id
+        section = create_section!(site_id: site.id)
+
+        section_with_count =
+          Ash.get!(Section, section.id,
+            tenant: site.id,
+            authorize?: false,
+            load: [:contributors_count]
+          )
+
+        # No actor in EventLog entries = 0 contributors
+        assert section_with_count.contributors_count == 0
+      end
+
+      test "only counts create and update actions, not destroy" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+        version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        user = create_user!(email: "destroyer@test.com")
+
+        # User creates a section
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: version.id,
+              title: "Section to test",
+              slug: "section-to-test"
+            },
+            actor: user,
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        # Create a note then destroy it (destroy action should not count as contribution)
+        note =
+          MishkaDocument.Note
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              section_id: section.id,
+              title: "Note to archive",
+              content: "Content"
+            },
+            actor: user,
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        # Archive the note
+        note
+        |> Ash.Changeset.for_destroy(:destroy, %{},
+          actor: user,
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.destroy!()
+
+        section_with_count =
+          Ash.get!(Section, section.id,
+            tenant: site.id,
+            authorize?: false,
+            load: [:contributors_count]
+          )
+
+        # User has 1 section create + 1 note create = still 1 unique contributor
+        assert section_with_count.contributors_count == 1
+      end
+    end
+
     describe "content_word_count calculation" do
       test "counts words in content field" do
         site = create_site!()

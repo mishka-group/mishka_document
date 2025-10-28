@@ -2069,6 +2069,31 @@ defmodule MishkaDocument.Section do
       description "All versions of this section across workspace versions"
     end
 
+    # Relationship - for public users (guests/users without permissions)
+    has_many :notes, MishkaDocument.Note do
+      public? true
+      destination_attribute :section_id
+      read_action :public_list
+      description "Published approved notes of this section (public access)"
+    end
+
+    # Relationship - for admin users with tenant
+    has_many :tenant_notes, MishkaDocument.Note do
+      public? true
+      destination_attribute :section_id
+      description "All notes of this section (tenant admin access)"
+    end
+
+    # Bypass relationship - for master admin users without tenant
+    has_many :master_notes, MishkaDocument.Note do
+      public? true
+      destination_attribute :section_id
+      read_action :read_any
+      description "All notes of this section (master admin access, bypass tenant)"
+
+      filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
+    end
+
     # Tag relationships - for public approved tags
     many_to_many :tags, MishkaDocument.Tag do
       public? true

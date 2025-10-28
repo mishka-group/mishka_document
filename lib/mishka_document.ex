@@ -66,6 +66,7 @@ defmodule MishkaDocument do
     resource MishkaDocument.WorkspaceVersion
     resource MishkaDocument.WorkspaceVersionLineage
     resource MishkaDocument.Section
+    resource MishkaDocument.Note
     resource MishkaDocument.Tag
     resource MishkaDocument.SectionTag
     resource MishkaDocument.EventLog

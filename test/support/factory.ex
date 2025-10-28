@@ -304,6 +304,22 @@ defmodule MishkaDocument.Test.Factory do
     |> generate()
   end
 
+  # Note factory (MishkaDocument.Note)
+  def create_note!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {section_id, overrides} = Keyword.pop(overrides, :section_id)
+
+    # Note MUST have a site_id (not global) and section_id
+    site_id = site_id || create_site!().id
+    section_id = section_id || create_section!(site_id: site_id).id
+    tenant = site_id
+
+    overrides
+    |> Keyword.put(:section_id, section_id)
+    |> note(tenant)
+    |> generate()
+  end
+
   # SectionTag factory (MishkaDocument.SectionTag - join table)
   def create_section_tag!(overrides \\ []) do
     # Get or create section_id and tag_id

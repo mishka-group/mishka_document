@@ -132,6 +132,29 @@ defmodule MishkaDocument.Dev.Generator do
     )
   end
 
+  def note(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Note,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        section_id: nil,
+        title: sequence(:title, &"Test Note #{&1}"),
+        content: sequence(:content, &"Test note content #{&1}"),
+        order_position: 0,
+        change_version: "0.0.1",
+        content_review_status: :pending,
+        technical_review_status: :pending,
+        schema: [],
+        seo_tags: [],
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
   def section_tag(opts \\ [], _tenant \\ nil) do
     changeset_generator(
       MishkaDocument.SectionTag,
