@@ -343,6 +343,60 @@ defmodule MishkaDocument.Test.Factory do
     |> generate()
   end
 
+  # Issue factory (MishkaDocument.Issue)
+  def create_issue!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {reporter_id, overrides} = Keyword.pop(overrides, :reporter_id)
+    {section_id, overrides} = Keyword.pop(overrides, :section_id)
+    {note_id, overrides} = Keyword.pop(overrides, :note_id)
+
+    # Issue MUST have a site_id (not global)
+    site_id = site_id || create_site!().id
+
+    # Get or create reporter user (will be used as actor)
+    reporter =
+      if reporter_id do
+        Ash.get!(MishkaCmsCore.Accounts.User, reporter_id, authorize?: false)
+      else
+        create_user!()
+      end
+
+    # Issue MUST have either section_id or note_id (or both)
+    # If neither provided, create a section
+    {section_id, note_id} =
+      case {section_id, note_id} do
+        {nil, nil} ->
+          created_section_id = create_section!(site_id: site_id).id
+          {created_section_id, nil}
+
+        {s, n} ->
+          {s, n}
+      end
+
+    tenant = site_id
+
+    # Build attributes map with defaults
+    attrs =
+      %{
+        title: "Test Issue",
+        description: "Test issue description",
+        issue_type: :other
+      }
+      |> Map.merge(Enum.into(overrides, %{}))
+      |> Map.put_new(:section_id, section_id)
+      |> Map.put_new(:note_id, note_id)
+      |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+    # Create issue with actor (reporter will be set from actor automatically)
+    MishkaDocument.Issue
+    |> Ash.Changeset.for_create(:create, attrs,
+      actor: reporter,
+      tenant: tenant,
+      authorize?: false
+    )
+    |> Ash.create!()
+  end
+
   # SectionDraft factory (MishkaDocument.SectionDraft)
   def create_section_draft!(overrides \\ []) do
     {site_id, overrides} = Keyword.pop(overrides, :site_id)

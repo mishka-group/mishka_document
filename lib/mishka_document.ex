@@ -71,6 +71,7 @@ defmodule MishkaDocument do
     resource MishkaDocument.NoteDraft
     resource MishkaDocument.Tag
     resource MishkaDocument.SectionTag
+    resource MishkaDocument.Issue
     resource MishkaDocument.EventLog
   end
 end

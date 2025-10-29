@@ -169,6 +169,26 @@ defmodule MishkaDocument.Dev.Generator do
     )
   end
 
+  def issue(opts \\ [], tenant \\ nil) do
+    changeset_generator(
+      MishkaDocument.Issue,
+      :master_create,
+      authorize?: false,
+      defaults: [
+        note_id: nil,
+        section_id: nil,
+        reporter_id: nil,
+        title: sequence(:title, &"Test Issue #{&1}"),
+        description: sequence(:description, &"Test issue description #{&1}"),
+        issue_type: :other,
+        status: :open,
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
   def section_draft(opts \\ [], tenant \\ nil, actor \\ nil) do
     changeset_generator(
       MishkaDocument.SectionDraft,
