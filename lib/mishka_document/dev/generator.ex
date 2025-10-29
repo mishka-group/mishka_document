@@ -168,4 +168,99 @@ defmodule MishkaDocument.Dev.Generator do
       tenant: nil
     )
   end
+
+  def section_draft(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.SectionDraft,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        workspace_version_id: nil,
+        source_section_id: nil,
+        parent_section_id: nil,
+        title: sequence(:title, &"Test Section Draft #{&1}"),
+        slug: sequence(:slug, &"test-section-draft-#{&1}"),
+        content: sequence(:content, &"Test section draft content #{&1}"),
+        order_position: 0,
+        change_version: "0.0.1",
+        version_increment_type: :minor,
+        content_review_status: :pending,
+        technical_review_status: :pending,
+        schema: [],
+        seo_tags: [],
+        permissions: [],
+        language: "en",
+        language_group_id: nil,
+        created_by_user_id: nil,
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def note_draft(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.NoteDraft,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        source_note_id: nil,
+        section_id: nil,
+        section_draft_id: nil,
+        title: sequence(:title, &"Test Note Draft #{&1}"),
+        content: sequence(:content, &"Test note draft content #{&1}"),
+        order_position: 0,
+        change_version: "0.0.1",
+        version_increment_type: :minor,
+        content_review_status: :pending,
+        technical_review_status: :pending,
+        schema: [],
+        seo_tags: [],
+        created_by_user_id: nil,
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  @doc """
+  Creates a note draft through the master action, which is the only path that can attach the draft
+  to a `section_draft_id`.
+
+  The tenant `:create` action resolves the parent section draft with
+  `Ash.get(MishkaDocument.SectionDraft, id, authorize?: false)` and passes no tenant, so on a
+  `global? false` resource that lookup always fails and the create is rejected with "Section draft
+  not found". `:master_create` performs the same lookup through `:master_get`, which bypasses
+  multitenancy. Note drafts hanging off a real section take `note_draft/3` instead.
+  """
+  def master_note_draft(opts \\ [], actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.NoteDraft,
+      :master_create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        source_note_id: nil,
+        section_id: nil,
+        section_draft_id: nil,
+        title: sequence(:title, &"Test Note Draft #{&1}"),
+        content: sequence(:content, &"Test note draft content #{&1}"),
+        order_position: 0,
+        change_version: "0.0.1",
+        version_increment_type: :minor,
+        content_review_status: :pending,
+        technical_review_status: :pending,
+        schema: [],
+        seo_tags: [],
+        created_by_user_id: nil,
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: nil
+    )
+  end
 end

@@ -322,6 +322,19 @@ defmodule MishkaDocument.Note do
 
   # Field-level policies for calculated fields
   field_policies do
+    # Draft count calculations are admin-only
+    field_policy [
+      :pending_note_draft_content_review_count,
+      :pending_note_draft_technical_review_count,
+      :approved_note_draft_count
+    ] do
+      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+                    permissions: [
+                      "admin:dashboard:document:section",
+                      "admin:api:document:section"
+                    ]}
+    end
+
     # All other fields use the default policy
     field_policy :* do
       authorize_if always()
@@ -798,12 +811,44 @@ defmodule MishkaDocument.Note do
 
       filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
     end
+
+    has_many :note_drafts, MishkaDocument.NoteDraft do
+      public? true
+      destination_attribute :source_note_id
+      description "All drafts for this note"
+    end
   end
 
   calculations do
     calculate :content_word_count, :integer, MishkaDocument.Resources.Calculations.WordCount do
       public? true
       description "Returns word count of the note content"
+    end
+  end
+
+  aggregates do
+    count :pending_note_draft_content_review_count, :note_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(content_review_status == :pending)
+      description "Returns count of note drafts pending content review for this note"
+    end
+
+    count :pending_note_draft_technical_review_count, :note_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(technical_review_status == :pending)
+      description "Returns count of note drafts pending technical review for this note"
+    end
+
+    count :approved_note_draft_count, :note_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(content_review_status == :approved and technical_review_status == :approved)
+      description "Returns count of note drafts with both reviews approved for this note"
     end
   end
 

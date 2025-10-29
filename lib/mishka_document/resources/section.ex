@@ -1261,6 +1261,11 @@ defmodule MishkaDocument.Section do
 
   field_policies do
     field_policy [
+      :pending_section_draft_content_review_count,
+      :pending_section_draft_technical_review_count,
+      :approved_section_draft_count,
+      :pending_note_draft_content_review_count,
+      :pending_note_draft_technical_review_count,
       :contributors_count,
       :breadcrumb_path,
       :section_versions_count
@@ -2124,6 +2129,30 @@ defmodule MishkaDocument.Section do
 
       filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
     end
+
+    # Draft relationships - for tenant admin users
+    has_many :section_drafts, MishkaDocument.SectionDraft do
+      public? true
+      destination_attribute :source_section_id
+      description "All drafts for this section (tenant admin access)"
+    end
+
+    # Bypass relationship - for master admin users without tenant
+    has_many :master_section_drafts, MishkaDocument.SectionDraft do
+      public? true
+      destination_attribute :source_section_id
+      read_action :read_any
+      description "All drafts for this section (master admin access, bypass tenant)"
+
+      filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
+    end
+
+    # Note drafts belonging to this section
+    has_many :note_drafts, MishkaDocument.NoteDraft do
+      public? true
+      destination_attribute :section_id
+      description "All note drafts for this section"
+    end
   end
 
   calculations do
@@ -2255,6 +2284,48 @@ defmodule MishkaDocument.Section do
     calculate :content_word_count, :integer, MishkaDocument.Resources.Calculations.WordCount do
       public? true
       description "Returns word count of the section content"
+    end
+  end
+
+  aggregates do
+    count :pending_section_draft_content_review_count, :section_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(content_review_status == :pending)
+      description "Returns count of section drafts pending content review for this section"
+    end
+
+    count :pending_section_draft_technical_review_count, :section_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(technical_review_status == :pending)
+      description "Returns count of section drafts pending technical review for this section"
+    end
+
+    count :approved_section_draft_count, :section_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(content_review_status == :approved and technical_review_status == :approved)
+      description "Returns count of section drafts with both reviews approved for this section"
+    end
+
+    count :pending_note_draft_content_review_count, :note_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(content_review_status == :pending)
+      description "Returns count of note drafts pending content review for this section"
+    end
+
+    count :pending_note_draft_technical_review_count, :note_drafts do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      filter expr(technical_review_status == :pending)
+      description "Returns count of note drafts pending technical review for this section"
     end
   end
 

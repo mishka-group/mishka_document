@@ -1012,5 +1012,281 @@ defmodule MishkaDocument.Test.EventLogTest do
         assert mark_event.metadata["title"] == "1.0.0"
       end
     end
+
+    describe "event tracking on NoteDraft create/update" do
+      test "creates event when note draft is created" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section",
+              slug: "test-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        note_draft =
+          MishkaDocument.NoteDraft
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              section_id: section.id,
+              title: "Test Note Draft",
+              content: "Test content",
+              change_version: "1.0.0",
+              version_increment_type: :major
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        events = get_events_for_record(note_draft.id)
+        assert length(events) >= 1
+
+        create_event = Enum.find(events, &(&1.action == :create))
+        assert create_event != nil
+        assert create_event.metadata["title"] == "Test Note Draft"
+        assert create_event.metadata["site_id"] == site.id
+      end
+
+      test "creates event when note draft is updated" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section",
+              slug: "test-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        note_draft =
+          MishkaDocument.NoteDraft
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              section_id: section.id,
+              title: "Original Draft",
+              content: "Original",
+              change_version: "1.0.0",
+              version_increment_type: :major
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        note_draft
+        |> Ash.Changeset.for_update(
+          :update,
+          %{title: "Updated Draft"},
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.update!()
+
+        events = get_events_for_record(note_draft.id)
+        update_event = Enum.find(events, &(&1.action == :update))
+
+        assert update_event != nil
+        assert update_event.metadata["title"] == "Updated Draft"
+      end
+
+      test "creates event for permanent_destroy" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section",
+              slug: "test-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        note_draft =
+          MishkaDocument.NoteDraft
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              section_id: section.id,
+              title: "To Delete",
+              content: "Test",
+              change_version: "1.0.0",
+              version_increment_type: :major
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        note_draft
+        |> Ash.Changeset.for_destroy(:permanent_destroy, %{}, tenant: site.id, authorize?: false)
+        |> Ash.destroy!()
+
+        events = get_events_for_record(note_draft.id)
+        destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
+
+        assert destroy_event != nil
+        assert destroy_event.metadata["title"] == "To Delete"
+      end
+    end
+
+    describe "event tracking on SectionDraft create/update" do
+      test "creates event when section draft is created" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section_draft =
+          MishkaDocument.SectionDraft
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section Draft",
+              slug: "test-section-draft",
+              language: "en",
+              change_version: "1.0.0",
+              version_increment_type: :major,
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        events = get_events_for_record(section_draft.id)
+        assert length(events) >= 1
+
+        create_event = Enum.find(events, &(&1.action == :create))
+        assert create_event != nil
+        assert create_event.metadata["title"] == "Test Section Draft"
+        assert create_event.metadata["site_id"] == site.id
+      end
+
+      test "creates event when section draft is updated" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section_draft =
+          MishkaDocument.SectionDraft
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Original Section Draft",
+              slug: "original-section-draft",
+              language: "en",
+              change_version: "1.0.0",
+              version_increment_type: :major,
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        section_draft
+        |> Ash.Changeset.for_update(
+          :update,
+          %{title: "Updated Section Draft"},
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.update!()
+
+        events = get_events_for_record(section_draft.id)
+        # Find the update event with the new title (not the language_group_id auto-update)
+        update_event =
+          Enum.find(
+            events,
+            &(&1.action == :update && &1.metadata["title"] == "Updated Section Draft")
+          )
+
+        assert update_event != nil
+        assert update_event.metadata["title"] == "Updated Section Draft"
+      end
+
+      test "creates event for permanent_destroy" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section_draft =
+          MishkaDocument.SectionDraft
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "To Delete",
+              slug: "to-delete",
+              language: "en",
+              change_version: "1.0.0",
+              version_increment_type: :major,
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        section_draft
+        |> Ash.Changeset.for_destroy(:permanent_destroy, %{}, tenant: site.id, authorize?: false)
+        |> Ash.destroy!()
+
+        events = get_events_for_record(section_draft.id)
+        destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
+
+        assert destroy_event != nil
+        assert destroy_event.metadata["title"] == "To Delete"
+      end
+    end
   end
 end

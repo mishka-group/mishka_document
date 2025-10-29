@@ -342,4 +342,77 @@ defmodule MishkaDocument.Test.Factory do
     |> section_tag(nil)
     |> generate()
   end
+
+  # SectionDraft factory (MishkaDocument.SectionDraft)
+  def create_section_draft!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {workspace_version_id, overrides} = Keyword.pop(overrides, :workspace_version_id)
+
+    # SectionDraft MUST have site_id and workspace_version_id
+    site_id = site_id || create_site!().id
+
+    workspace_version_id =
+      workspace_version_id ||
+        create_workspace_version!(
+          workspace_id: create_workspace!(site_id: site_id, skip_version: true).id,
+          site_id: site_id,
+          status: :draft
+        ).id
+
+    tenant = site_id
+
+    overrides
+    |> Keyword.put(:site_id, site_id)
+    |> Keyword.put(:workspace_version_id, workspace_version_id)
+    |> section_draft(tenant)
+    |> generate()
+  end
+
+  # NoteDraft factory (MishkaDocument.NoteDraft)
+  def create_note_draft!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {section_id, overrides} = Keyword.pop(overrides, :section_id)
+    {workspace_version_id, overrides} = Keyword.pop(overrides, :workspace_version_id)
+
+    # NoteDraft requires workspace_version_id AND (section_id XOR section_draft_id)
+    site_id = site_id || create_site!().id
+
+    # If neither section_id nor workspace_version_id provided, create both
+    {section_id, workspace_version_id} =
+      if is_nil(section_id) && is_nil(workspace_version_id) do
+        section = create_section!(site_id: site_id)
+        {section.id, section.workspace_version_id}
+      else
+        # If only workspace_version_id provided, create a section in that version
+        if is_nil(section_id) && workspace_version_id do
+          section =
+            create_section!(site_id: site_id, workspace_version_id: workspace_version_id)
+
+          {section.id, workspace_version_id}
+        else
+          # section_id provided, get workspace_version_id if needed
+          if section_id && is_nil(workspace_version_id) do
+            section =
+              Ash.get!(MishkaDocument.Section, section_id,
+                action: :master_get,
+                authorize?: false
+              )
+
+            {section_id, section.workspace_version_id}
+          else
+            {section_id, workspace_version_id}
+          end
+        end
+      end
+
+    tenant = site_id
+
+    overrides
+    |> Keyword.put(:site_id, site_id)
+    |> Keyword.put(:workspace_version_id, workspace_version_id)
+    |> Keyword.put(:section_id, section_id)
+    |> Keyword.put(:section_draft_id, nil)
+    |> note_draft(tenant)
+    |> generate()
+  end
 end
