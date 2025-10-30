@@ -194,6 +194,40 @@ defmodule MishkaDocument.Test.Factory do
     |> generate()
   end
 
+  # WorkspaceFollower factory
+  def create_workspace_follower!(overrides \\ []) do
+    {workspace_id, overrides} = Keyword.pop(overrides, :workspace_id)
+    {follower_user_id, overrides} = Keyword.pop(overrides, :follower_user_id)
+    {actor, overrides} = Keyword.pop(overrides, :actor)
+
+    # WorkspaceFollower MUST have a workspace_id
+    workspace_id = workspace_id || create_workspace!().id
+
+    # If follower_user_id is provided, look up or create that user
+    # Otherwise, use/create actor
+    {actor, _follower_user_id} =
+      cond do
+        actor && follower_user_id ->
+          {actor, follower_user_id}
+
+        actor ->
+          {actor, actor.id}
+
+        follower_user_id ->
+          {Ash.get!(MishkaCmsCore.Accounts.User, follower_user_id, authorize?: false),
+           follower_user_id}
+
+        true ->
+          user = create_user!()
+          {user, user.id}
+      end
+
+    overrides
+    |> Keyword.put(:workspace_id, workspace_id)
+    |> workspace_follower(actor)
+    |> generate()
+  end
+
   # WorkspaceVersionLineage factory
   def create_workspace_version_lineage!(overrides \\ []) do
     {new_version_id, overrides} = Keyword.pop(overrides, :new_version_id)

@@ -69,6 +69,21 @@ defmodule MishkaDocument.Dev.Generator do
     )
   end
 
+  def workspace_follower(opts \\ [], actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.WorkspaceFollower,
+      :create,
+      authorize?: false,
+      defaults: [
+        workspace_id: nil,
+        follower_user_id: nil,
+        notification_enabled: true
+      ],
+      overrides: opts,
+      actor: actor
+    )
+  end
+
   def workspace_version_lineage(opts \\ [], tenant \\ nil) do
     changeset_generator(
       MishkaDocument.WorkspaceVersionLineage,
