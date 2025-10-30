@@ -114,6 +114,21 @@ defmodule MishkaDocument.Dev.Generator do
     )
   end
 
+  def section_bookmark(opts \\ [], actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.SectionBookmark,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        section_id: nil,
+        user_id: nil
+      ],
+      overrides: opts,
+      tenant: nil
+    )
+  end
+
   def document_tag(opts \\ [], tenant \\ nil, actor \\ nil) do
     changeset_generator(
       MishkaDocument.Tag,

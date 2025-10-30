@@ -292,6 +292,38 @@ defmodule MishkaDocument.Test.Factory do
     |> generate()
   end
 
+  # SectionBookmark factory
+  def create_section_bookmark!(overrides \\ []) do
+    {user_id, overrides} = Keyword.pop(overrides, :user_id)
+    {section_id, _overrides} = Keyword.pop(overrides, :section_id)
+
+    # SectionBookmark requires both user and section
+    # Get or create user (need full user struct for actor)
+    user =
+      if user_id do
+        Ash.get!(MishkaCmsCore.Accounts.User, user_id, authorize?: false)
+      else
+        create_user!()
+      end
+
+    section_id =
+      section_id ||
+        create_section!(
+          content_review_status: :approved,
+          technical_review_status: :approved
+        ).id
+
+    # Use the create action with actor (which uses relate_actor)
+    MishkaDocument.SectionBookmark
+    |> Ash.Changeset.for_create(
+      :create,
+      %{section_id: section_id},
+      actor: user,
+      authorize?: false
+    )
+    |> Ash.create!()
+  end
+
   # Document Tag factory (MishkaDocument.Tag)
   def create_document_tag!(overrides \\ []) do
     {site_id, overrides} = Keyword.pop(overrides, :site_id)
