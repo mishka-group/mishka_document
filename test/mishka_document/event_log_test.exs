@@ -668,6 +668,209 @@ defmodule MishkaDocument.Test.EventLogTest do
       end
     end
 
+    describe "event tracking on IssueComment create/update" do
+      test "creates event when issue comment is created" do
+        site = create_site!()
+        user = create_user!(site_id: site.id)
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section",
+              slug: "test-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        issue =
+          MishkaDocument.Issue
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              section_id: section.id,
+              title: "Test Issue",
+              description: "Test Description",
+              issue_type: :typo,
+              status: :open
+            },
+            tenant: site.id,
+            actor: user,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        comment =
+          MishkaDocument.IssueComment
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              issue_id: issue.id,
+              content: "Test Comment"
+            },
+            tenant: site.id,
+            actor: user,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        events = get_events_for_record(comment.id)
+        assert length(events) >= 1
+
+        create_event = Enum.find(events, &(&1.action == :create))
+        assert create_event != nil
+        assert create_event.metadata["title"] == "Issue Comment"
+        assert create_event.metadata["site_id"] == site.id
+      end
+
+      test "creates event when issue comment is updated" do
+        site = create_site!()
+        user = create_user!(site_id: site.id)
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section",
+              slug: "test-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        issue =
+          MishkaDocument.Issue
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              section_id: section.id,
+              title: "Test Issue",
+              description: "Test Description",
+              issue_type: :typo,
+              status: :open
+            },
+            tenant: site.id,
+            actor: user,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        comment =
+          MishkaDocument.IssueComment
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              issue_id: issue.id,
+              content: "Original Comment"
+            },
+            tenant: site.id,
+            actor: user,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        comment
+        |> Ash.Changeset.for_update(
+          :update,
+          %{content: "Updated Comment"},
+          tenant: site.id,
+          authorize?: false
+        )
+        |> Ash.update!()
+
+        events = get_events_for_record(comment.id)
+        update_event = Enum.find(events, &(&1.action == :update))
+
+        assert update_event != nil
+        assert update_event.metadata["title"] == "Issue Comment"
+      end
+
+      test "creates event for permanent_destroy" do
+        site = create_site!()
+        user = create_user!(site_id: site.id)
+        workspace = create_workspace!(site_id: site.id)
+
+        workspace_version =
+          create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        section =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: workspace_version.id,
+              title: "Test Section",
+              slug: "test-section",
+              language: "en",
+              order_position: 0
+            },
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        issue =
+          MishkaDocument.Issue
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              section_id: section.id,
+              title: "Test Issue",
+              description: "Test Description",
+              issue_type: :typo,
+              status: :open
+            },
+            tenant: site.id,
+            actor: user,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        comment =
+          MishkaDocument.IssueComment
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              issue_id: issue.id,
+              content: "To Delete"
+            },
+            tenant: site.id,
+            actor: user,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        comment
+        |> Ash.Changeset.for_destroy(:permanent_destroy, %{}, tenant: site.id, authorize?: false)
+        |> Ash.destroy!()
+
+        events = get_events_for_record(comment.id)
+        destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
+
+        assert destroy_event != nil
+        assert destroy_event.metadata["title"] == "Issue Comment"
+      end
+    end
+
     describe "event tracking on Note create/update" do
       test "creates event when note is created" do
         site = create_site!()

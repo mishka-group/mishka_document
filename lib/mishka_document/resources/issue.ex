@@ -1173,6 +1173,12 @@ defmodule MishkaDocument.Issue do
       description "The user who reported this issue"
     end
 
+    has_many :comments, MishkaDocument.IssueComment do
+      public? true
+      destination_attribute :issue_id
+      description "Comments on this issue"
+    end
+
     # Master admin relationships - bypass tenant filtering
     belongs_to :master_note, MishkaDocument.Note do
       public? true
@@ -1194,6 +1200,15 @@ defmodule MishkaDocument.Issue do
       filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
     end
 
+    has_many :master_comments, MishkaDocument.IssueComment do
+      public? true
+      destination_attribute :issue_id
+      read_action :master_read
+      description "All comments on this issue (master admin access, bypass tenant)"
+
+      filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
+    end
+
     has_many :site_issues, MishkaDocument.Issue do
       source_attribute :site_id
       destination_attribute :site_id
@@ -1210,6 +1225,13 @@ defmodule MishkaDocument.Issue do
   end
 
   aggregates do
+    count :comments_count, :comments do
+      public? true
+      authorize? false
+      multitenancy :bypass
+      description "Returns count of comments for this issue"
+    end
+
     count :open_issues_count, :site_issues do
       public? true
       authorize? false

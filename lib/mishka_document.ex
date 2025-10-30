@@ -72,6 +72,7 @@ defmodule MishkaDocument do
     resource MishkaDocument.Tag
     resource MishkaDocument.SectionTag
     resource MishkaDocument.Issue
+    resource MishkaDocument.IssueComment
     resource MishkaDocument.EventLog
   end
 end

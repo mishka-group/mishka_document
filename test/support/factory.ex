@@ -397,6 +397,49 @@ defmodule MishkaDocument.Test.Factory do
     |> Ash.create!()
   end
 
+  # IssueComment factory (MishkaDocument.IssueComment)
+  def create_issue_comment!(overrides \\ []) do
+    {site_id, overrides} = Keyword.pop(overrides, :site_id)
+    {contributor_id, overrides} = Keyword.pop(overrides, :contributor_id)
+    {issue_id, overrides} = Keyword.pop(overrides, :issue_id)
+
+    # IssueComment MUST have a site_id (not global)
+    site_id = site_id || create_site!().id
+
+    # Get or create contributor user (will be used as actor). The default is a user of the comment's
+    # own site: a master's comment is read-only to that site's admins, so defaulting to a master
+    # would make every comment one a tenant cannot change. Pass a master's id to get one.
+    contributor =
+      if contributor_id do
+        Ash.get!(MishkaCmsCore.Accounts.User, contributor_id, authorize?: false)
+      else
+        create_user!(site_id: site_id)
+      end
+
+    # IssueComment MUST have an issue_id
+    issue_id = issue_id || create_issue!(site_id: site_id).id
+
+    tenant = site_id
+
+    # Build attributes map with defaults
+    attrs =
+      %{
+        content: "Test comment content"
+      }
+      |> Map.merge(Enum.into(overrides, %{}))
+      |> Map.put(:issue_id, issue_id)
+      |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+    # Create comment with actor (contributor will be set from actor automatically)
+    MishkaDocument.IssueComment
+    |> Ash.Changeset.for_create(:create, attrs,
+      actor: contributor,
+      tenant: tenant,
+      authorize?: false
+    )
+    |> Ash.create!()
+  end
+
   # SectionDraft factory (MishkaDocument.SectionDraft)
   def create_section_draft!(overrides \\ []) do
     {site_id, overrides} = Keyword.pop(overrides, :site_id)

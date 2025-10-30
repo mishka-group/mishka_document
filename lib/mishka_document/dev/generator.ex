@@ -189,6 +189,23 @@ defmodule MishkaDocument.Dev.Generator do
     )
   end
 
+  def issue_comment(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.IssueComment,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        issue_id: nil,
+        contributor_id: nil,
+        content: sequence(:content, &"Test comment content #{&1}"),
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
   def section_draft(opts \\ [], tenant \\ nil, actor \\ nil) do
     changeset_generator(
       MishkaDocument.SectionDraft,
