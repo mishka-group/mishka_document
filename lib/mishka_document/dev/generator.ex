@@ -144,6 +144,31 @@ defmodule MishkaDocument.Dev.Generator do
     )
   end
 
+  @doc """
+  Tracks one page view of a section.
+
+  `MishkaDocument.SectionView` is not site-scoped and takes no tenant. The view belongs to `actor`,
+  and a nil `actor` with a distinct `ip_address` is a guest view. The create action upserts on
+  `{section_id, user_id, ip_address}`, so repeated rows collapse instead of failing.
+  """
+  def section_view(opts \\ [], actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.SectionView,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        section_id: nil,
+        ip_address: sequence(:section_view_ip, &"203.0.113.#{rem(&1, 254) + 1}"),
+        user_agent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        referer: nil
+      ],
+      overrides: opts,
+      tenant: nil
+    )
+  end
+
   def document_tag(opts \\ [], tenant \\ nil, actor \\ nil) do
     changeset_generator(
       MishkaDocument.Tag,

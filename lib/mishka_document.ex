@@ -74,6 +74,7 @@ defmodule MishkaDocument do
     resource MishkaDocument.Issue
     resource MishkaDocument.IssueComment
     resource MishkaDocument.SectionBookmark
+    resource MishkaDocument.SectionView
     resource MishkaDocument.WorkspaceFollower
     resource MishkaDocument.EventLog
   end
