@@ -21,6 +21,7 @@ defmodule MishkaDocument.Workspace do
     extensions: [
       AshArchival.Resource,
       AshSlug,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -156,6 +157,15 @@ defmodule MishkaDocument.Workspace do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "workspace"
+
+    includes [:versions, :tenant_versions, :master_versions]
+
+    paginated_includes [:versions, :tenant_versions, :master_versions]
   end
 
   # Event tracking configuration for activity logging
@@ -992,6 +1002,19 @@ defmodule MishkaDocument.Workspace do
 
   # Field-level authorization policies
   field_policies do
+    # Admin-only fields. `maintainers_info` names the accounts that wrote the workspace by their
+    # email addresses, and the public workspace routes are anonymous. Either document area reads
+    # them, as it reads the workspace.
+    field_policy [:health_metrics, :maintainers_info] do
+      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+                    permissions: [
+                      "admin:dashboard:document:workspace",
+                      "admin:api:document:workspace",
+                      "admin:dashboard:document:section",
+                      "admin:api:document:section"
+                    ]}
+    end
+
     # All other fields are publicly accessible
     field_policy :* do
       authorize_if always()
@@ -1615,6 +1638,311 @@ defmodule MishkaDocument.Workspace do
       description "All versions of this workspace (master admin access, bypass tenant)"
 
       filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
+    end
+  end
+
+  calculations do
+    calculate :health_metrics, :map do
+      public? true
+
+      calculation fn records, _context ->
+        to_int = fn
+          nil -> 0
+          %Decimal{} = decimal -> Decimal.to_integer(decimal)
+          value when is_integer(value) -> value
+        end
+
+        Enum.map(records, fn record ->
+          sql = """
+          WITH section_count AS (
+            SELECT
+              COUNT(*) as sections_count
+            FROM mishka_document_sections s
+            JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+            WHERE wv.workspace_id = $1
+              AND s.site_id = $2
+              AND s.archived_at IS NULL
+          ),
+          current_month AS (
+            SELECT
+              -- Count total active items (sections + notes)
+              COUNT(*) FILTER (WHERE entity_type IN ('section', 'note')) as total_items,
+              -- Count approved items (both content and technical review approved)
+              COUNT(*) FILTER (
+                WHERE entity_type IN ('section', 'note')
+                AND content_review_status = 'approved'
+                AND technical_review_status = 'approved'
+              ) as approved_items
+            FROM (
+              -- Sections
+              SELECT
+                'section' as entity_type,
+                content_review_status,
+                technical_review_status
+              FROM mishka_document_sections s
+              JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND s.site_id = $2
+                AND s.archived_at IS NULL
+
+              UNION ALL
+
+              -- Notes (through sections)
+              SELECT
+                'note' as entity_type,
+                n.content_review_status,
+                n.technical_review_status
+              FROM mishka_document_notes n
+              JOIN mishka_document_sections s ON n.section_id = s.id
+              JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND n.site_id = $2
+                AND n.archived_at IS NULL
+
+              UNION ALL
+
+              -- Section Drafts (count as items needing review)
+              SELECT
+                'section' as entity_type,
+                sd.content_review_status,
+                sd.technical_review_status
+              FROM mishka_document_section_drafts sd
+              JOIN mishka_document_sections s ON sd.source_section_id = s.id
+              JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND sd.site_id = $2
+                AND sd.archived_at IS NULL
+
+              UNION ALL
+
+              -- Note Drafts (count as items needing review)
+              SELECT
+                'note' as entity_type,
+                content_review_status,
+                technical_review_status
+              FROM mishka_document_note_drafts nd
+              JOIN mishka_document_workspace_versions wv ON nd.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND nd.site_id = $2
+                AND nd.archived_at IS NULL
+            ) all_items
+          ),
+          last_month AS (
+            SELECT
+              COUNT(*) FILTER (WHERE entity_type IN ('section', 'note')) as total_items,
+              COUNT(*) FILTER (
+                WHERE entity_type IN ('section', 'note')
+                AND content_review_status = 'approved'
+                AND technical_review_status = 'approved'
+              ) as approved_items
+            FROM (
+              -- Sections updated before this month
+              SELECT
+                'section' as entity_type,
+                content_review_status,
+                technical_review_status
+              FROM mishka_document_sections s
+              JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND s.site_id = $2
+                AND s.archived_at IS NULL
+                AND s.updated_at < date_trunc('month', CURRENT_DATE)
+
+              UNION ALL
+
+              -- Notes updated before this month (through sections)
+              SELECT
+                'note' as entity_type,
+                n.content_review_status,
+                n.technical_review_status
+              FROM mishka_document_notes n
+              JOIN mishka_document_sections s ON n.section_id = s.id
+              JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND n.site_id = $2
+                AND n.archived_at IS NULL
+                AND n.updated_at < date_trunc('month', CURRENT_DATE)
+            ) last_month_items
+          ),
+          issue_stats AS (
+            SELECT
+              COUNT(*) as total_issues,
+              COUNT(*) FILTER (WHERE status = 'open') as open_issues,
+              COUNT(*) FILTER (WHERE status = 'resolved') as resolved_issues
+            FROM mishka_document_issues
+            WHERE site_id = $2
+            AND (
+              section_id IN (
+                SELECT s.id
+                FROM mishka_document_sections s
+                JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+                WHERE wv.workspace_id = $1 AND s.site_id = $2
+              )
+              OR note_id IN (
+                SELECT n.id
+                FROM mishka_document_notes n
+                JOIN mishka_document_sections s ON n.section_id = s.id
+                JOIN mishka_document_workspace_versions wv ON s.workspace_version_id = wv.id
+                WHERE wv.workspace_id = $1 AND n.site_id = $2
+              )
+            )
+            AND archived_at IS NULL
+          ),
+          contributor_stats AS (
+            SELECT
+              COUNT(DISTINCT created_by_user_id) as total_contributors,
+              COUNT(DISTINCT created_by_user_id) FILTER (
+                WHERE updated_at >= NOW() - INTERVAL '24 hours'
+              ) as active_today
+            FROM (
+              -- Section Drafts contributors
+              SELECT sd.created_by_user_id, sd.updated_at
+              FROM mishka_document_section_drafts sd
+              JOIN mishka_document_workspace_versions wv ON sd.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND sd.site_id = $2
+                AND sd.archived_at IS NULL
+                AND sd.content_review_status = 'approved'
+                AND sd.technical_review_status = 'approved'
+                AND sd.created_by_user_id IS NOT NULL
+
+              UNION ALL
+
+              -- Note Drafts contributors
+              SELECT nd.created_by_user_id, nd.updated_at
+              FROM mishka_document_note_drafts nd
+              JOIN mishka_document_workspace_versions wv ON nd.workspace_version_id = wv.id
+              WHERE wv.workspace_id = $1
+                AND nd.site_id = $2
+                AND nd.archived_at IS NULL
+                AND nd.content_review_status = 'approved'
+                AND nd.technical_review_status = 'approved'
+                AND nd.created_by_user_id IS NOT NULL
+            ) all_contributors
+          )
+          SELECT
+            -- Current completion percentage
+            CASE
+              WHEN cm.total_items = 0 THEN 0
+              ELSE ROUND((cm.approved_items::numeric / cm.total_items::numeric) * 100)
+            END as completion,
+
+            -- Last month completion percentage
+            CASE
+              WHEN lm.total_items = 0 THEN 0
+              ELSE ROUND((lm.approved_items::numeric / lm.total_items::numeric) * 100)
+            END as last_month_completion,
+
+            -- Trend (difference between current and last month)
+            CASE
+              WHEN cm.total_items = 0 THEN 0
+              WHEN lm.total_items = 0 THEN
+                ROUND((cm.approved_items::numeric / cm.total_items::numeric) * 100)
+              ELSE
+                ROUND((cm.approved_items::numeric / cm.total_items::numeric) * 100) -
+                ROUND((lm.approved_items::numeric / lm.total_items::numeric) * 100)
+            END as trend,
+
+            -- Quality score (sections/notes without open issues)
+            CASE
+              WHEN cm.total_items = 0 THEN 100
+              WHEN ist.total_issues = 0 THEN 100
+              ELSE ROUND(((cm.total_items - ist.open_issues)::numeric / cm.total_items::numeric) * 100)
+            END as quality,
+
+            -- Additional metrics
+            cm.total_items as total_items,
+            cm.approved_items as approved_items,
+            ist.open_issues as open_issues,
+            ist.resolved_issues as resolved_issues,
+
+            -- Contributor metrics
+            cs.total_contributors as contributors_count,
+            cs.active_today as active_contributors_today,
+
+            -- Section count
+            sc.sections_count as sections_count
+          FROM current_month cm, last_month lm, issue_stats ist, contributor_stats cs, section_count sc
+          """
+
+          {:ok, workspace_id_bin} = Ecto.UUID.dump(record.id)
+          {:ok, site_id_bin} = Ecto.UUID.dump(record.site_id)
+          result = Ecto.Adapters.SQL.query(@repo, sql, [workspace_id_bin, site_id_bin])
+
+          case result do
+            {:ok,
+             %{
+               rows: [
+                 [
+                   completion,
+                   _last_month,
+                   trend,
+                   quality,
+                   total,
+                   approved,
+                   open_issues,
+                   resolved,
+                   contributors,
+                   active_today,
+                   sections_count
+                 ]
+               ]
+             }} ->
+              %{
+                completion: to_int.(completion) || 0,
+                trend: to_int.(trend) || 0,
+                quality: to_int.(quality) || 100,
+                total_items: to_int.(total) || 0,
+                approved_items: to_int.(approved) || 0,
+                open_issues: to_int.(open_issues) || 0,
+                resolved_issues: to_int.(resolved) || 0,
+                contributors_count: to_int.(contributors) || 0,
+                active_contributors_today: to_int.(active_today) || 0,
+                sections_count: to_int.(sections_count) || 0
+              }
+
+            _ ->
+              %{
+                completion: 0,
+                trend: 0,
+                quality: 100,
+                total_items: 0,
+                approved_items: 0,
+                open_issues: 0,
+                resolved_issues: 0,
+                contributors_count: 0,
+                active_contributors_today: 0,
+                sections_count: 0
+              }
+          end
+        end)
+      end
+
+      description """
+      Returns workspace health metrics including:
+      - completion: Percentage of sections/notes fully approved (0-100)
+      - trend: Change in completion from last month (+/- percentage points)
+      - quality: Percentage of items without open issues (0-100)
+      - total_items: Total sections + notes (including drafts)
+      - approved_items: Count of fully approved items
+      - open_issues: Count of unresolved issues
+      - resolved_issues: Count of resolved issues
+      - contributors_count: Total unique contributors with approved drafts
+      - active_contributors_today: Contributors with drafts approved in the last 24 hours
+      - sections_count: Total count of all sections in the workspace
+      """
+    end
+
+    calculate :maintainers_info,
+              :map,
+              MishkaDocument.Resources.Calculations.WorkspaceMaintainers do
+      public? true
+
+      description """
+      Returns maintainer information based on EventLog.
+      Maintainers are users who have successfully created or updated Sections/Notes.
+      Returns: %{count: integer, maintainers: [%{user_id: uuid, email: string}]}
+      """
     end
   end
 

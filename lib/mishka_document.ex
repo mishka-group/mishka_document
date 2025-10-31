@@ -14,6 +14,102 @@ defmodule MishkaDocument do
       tag "MishkaDocument"
       group_by :domain
     end
+
+    routes do
+      base_route "/v1/master/admin/mishka-document/workspace", MishkaDocument.Workspace do
+        index :master_read
+        get :master_read
+        index :master_language_variants, route: "/language-variants"
+        index :master_archived, route: "/archived"
+        get :master_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/workspace", MishkaDocument.Workspace do
+        index :read
+        get :read
+        index :language_variants, route: "/language-variants"
+        index :archived, route: "/archived"
+        get :archived, route: "/archived/:id"
+        post :create
+        patch :update
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
+      base_route "/v1/master/admin/mishka-document/workspace-version",
+                 MishkaDocument.WorkspaceVersion do
+        index :master_read
+        get :master_get
+        index :master_by_workspace, route: "/workspace/:workspace_id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        delete :master_destroy, read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/workspace-version",
+                 MishkaDocument.WorkspaceVersion do
+        index :read
+        get :read
+        index :by_workspace, route: "/workspace/:workspace_id"
+        index :latest_versions, route: "/latest"
+        index :by_status, route: "/status/:status"
+        post :create
+        patch :update
+        patch :publish, route: "/:id/publish"
+        patch :mark_as_latest, route: "/:id/mark-latest"
+        delete :destroy
+      end
+
+      base_route "/v1/master/admin/mishka-document/workspace-version-lineage",
+                 MishkaDocument.WorkspaceVersionLineage do
+        index :master_read
+        get :master_get
+        index :master_by_new_version, route: "/new-version/:new_version_id"
+        index :master_by_source_version, route: "/source-version/:source_version_id"
+        index :master_by_date_range, route: "/date-range"
+        index :master_recent_clones, route: "/recent"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        delete :master_destroy, read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/workspace-version-lineage",
+                 MishkaDocument.WorkspaceVersionLineage do
+        index :read
+        get :read
+        index :by_new_version, route: "/new-version/:new_version_id"
+        index :by_source_version, route: "/source-version/:source_version_id"
+        index :by_date_range, route: "/date-range"
+        index :recent_clones, route: "/recent"
+        post :create
+        patch :update
+        delete :destroy
+      end
+
+      base_route "/v1/user/mishka-document/workspace", MishkaDocument.Workspace do
+        index :public_list
+        get :public_get, route: "/:id"
+      end
+
+      base_route "/v1/user/mishka-document/workspace-version", MishkaDocument.WorkspaceVersion do
+        index :public_list
+        get :public_get, route: "/:id"
+      end
+
+      base_route "/v1/user/mishka-document/workspace-version-lineage",
+                 MishkaDocument.WorkspaceVersionLineage do
+        get :public_get, route: "/:id"
+        index :public_by_new_version, route: "/new-version/:new_version_id"
+        index :public_by_source_version, route: "/source-version/:source_version_id"
+        index :public_recent_clones, route: "/recent"
+      end
+    end
   end
 
   mishka_gervaz do

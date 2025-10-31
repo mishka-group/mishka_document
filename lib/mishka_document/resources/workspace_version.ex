@@ -19,6 +19,7 @@ defmodule MishkaDocument.WorkspaceVersion do
     domain: MishkaDocument,
     data_layer: AshPostgres.DataLayer,
     extensions: [
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -79,6 +80,29 @@ defmodule MishkaDocument.WorkspaceVersion do
     end
 
     identity_index_names unique_version_per_workspace: "doc_ws_ver_uniq_idx"
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "workspace_version"
+
+    includes [
+      :workspace,
+      :source_version,
+      :lineage_as_new,
+      :lineage_as_source,
+      :sections,
+      :tenant_sections,
+      :master_sections
+    ]
+
+    paginated_includes [
+      :workspace,
+      :lineage_as_source,
+      :sections,
+      :tenant_sections,
+      :master_sections
+    ]
   end
 
   # Event tracking configuration for activity logging

@@ -35,7 +35,7 @@ defmodule MishkaDocument.WorkspaceVersionLineage do
     otp_app: :mishka_document,
     domain: MishkaDocument,
     data_layer: AshPostgres.DataLayer,
-    extensions: [GuardedStruct.AshResource],
+    extensions: [AshJsonApi.Resource, GuardedStruct.AshResource],
     authorizers: [Ash.Policy.Authorizer],
     notifiers: [MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook]
 
@@ -72,6 +72,15 @@ defmodule MishkaDocument.WorkspaceVersionLineage do
     end
 
     identity_index_names unique_new_version: "doc_ws_ver_lin_uniq_idx"
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "workspace_version_lineage"
+
+    includes [:new_version, :source_version, :site]
+
+    paginated_includes []
   end
 
   guardedstruct do
