@@ -23,6 +23,7 @@ defmodule MishkaDocument.SectionDraft do
     extensions: [
       AshArchival.Resource,
       AshSlug,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -124,6 +125,21 @@ defmodule MishkaDocument.SectionDraft do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "section_draft"
+
+    includes [
+      :workspace_version,
+      :source_section,
+      :parent_section,
+      :created_by_user,
+      :note_drafts
+    ]
+
+    paginated_includes [:note_drafts]
   end
 
   # Event tracking configuration for activity logging

@@ -2337,5 +2337,163 @@ defmodule MishkaDocumentWeb.Api.Json.NoteTest do
         assert body["data"]["attributes"]["approved_note_draft_count"] == 1
       end
     end
+
+    describe "MULTIPLE DRAFTS - allow multiple users to create drafts for same note" do
+      test "multiple users can create different drafts for same note and version", %{
+        site: site,
+        tenant_admin: tenant_admin
+      } do
+        # Create workspace, version, section, and note
+        workspace =
+          create_workspace!(
+            site_id: site.id,
+            title: "Test Workspace",
+            slug: "test-workspace",
+            language: "en"
+          )
+
+        ws_version =
+          create_workspace_version!(
+            workspace_id: workspace.id,
+            site_id: site.id,
+            version_number: "1.0.0",
+            status: :draft
+          )
+
+        section =
+          create_section!(
+            workspace_version_id: ws_version.id,
+            site_id: site.id,
+            title: "Test Section",
+            slug: "test-section",
+            content: "Section content",
+            language: "en"
+          )
+
+        note =
+          create_note!(
+            section_id: section.id,
+            site_id: site.id,
+            title: "Original Note",
+            content: "Original content"
+          )
+
+        # Create token for tenant user
+        token = sign_in_tenant(tenant_admin)
+
+        # User 1 creates a draft for the note (targeting version 1.0.1)
+        draft1_attrs = %{
+          "type" => "note_draft",
+          "attributes" => %{
+            "workspace_version_id" => ws_version.id,
+            "section_id" => section.id,
+            "source_note_id" => note.id,
+            "title" => "User 1 Draft - Updated Note",
+            "content" => "User 1's proposed changes",
+            "change_version" => "1.0.1",
+            "version_increment_type" => "minor"
+          }
+        }
+
+        response1 =
+          make_api_request(
+            "/api/json/v1/tenant/admin/mishka-document/note-draft",
+            draft1_attrs,
+            method: :post,
+            headers: [
+              {"authorization", "Bearer #{token}"},
+              {"x-site-id", site.id},
+              {"content-type", "application/vnd.api+json"}
+            ]
+          )
+
+        assert response1.status == 201
+
+        # User 2 creates ANOTHER draft for the SAME note and SAME version
+        draft2_attrs = %{
+          "type" => "note_draft",
+          "attributes" => %{
+            "workspace_version_id" => ws_version.id,
+            "section_id" => section.id,
+            "source_note_id" => note.id,
+            "title" => "User 2 Draft - Different Changes",
+            "content" => "User 2's different proposed changes",
+            "change_version" => "1.0.1",
+            "version_increment_type" => "minor"
+          }
+        }
+
+        response2 =
+          make_api_request(
+            "/api/json/v1/tenant/admin/mishka-document/note-draft",
+            draft2_attrs,
+            method: :post,
+            headers: [
+              {"authorization", "Bearer #{token}"},
+              {"x-site-id", site.id},
+              {"content-type", "application/vnd.api+json"}
+            ]
+          )
+
+        # Should succeed - no unique constraint violation!
+        assert response2.status == 201
+
+        # User 3 creates YET ANOTHER draft for the SAME note and SAME version
+        draft3_attrs = %{
+          "type" => "note_draft",
+          "attributes" => %{
+            "workspace_version_id" => ws_version.id,
+            "section_id" => section.id,
+            "source_note_id" => note.id,
+            "title" => "User 3 Draft - Third Option",
+            "content" => "User 3's alternative proposal",
+            "change_version" => "1.0.1",
+            "version_increment_type" => "minor"
+          }
+        }
+
+        response3 =
+          make_api_request(
+            "/api/json/v1/tenant/admin/mishka-document/note-draft",
+            draft3_attrs,
+            method: :post,
+            headers: [
+              {"authorization", "Bearer #{token}"},
+              {"x-site-id", site.id},
+              {"content-type", "application/vnd.api+json"}
+            ]
+          )
+
+        # Should also succeed!
+        assert response3.status == 201
+
+        # Verify all 3 drafts exist by querying with filter
+        response =
+          make_api_request(
+            "/api/json/v1/tenant/admin/mishka-document/note-draft?filter[source_note_id]=#{note.id}",
+            %{},
+            method: :get,
+            headers: [
+              {"authorization", "Bearer #{token}"},
+              {"x-site-id", site.id}
+            ]
+          )
+
+        assert response.status == 200
+        body = Jason.decode!(response.resp_body)
+
+        # Should have 3 drafts for this note
+        assert length(body["data"]) == 3
+
+        # Verify the titles are different
+        titles = Enum.map(body["data"], & &1["attributes"]["title"]) |> Enum.sort()
+
+        assert titles == [
+                 "User 1 Draft - Updated Note",
+                 "User 2 Draft - Different Changes",
+                 "User 3 Draft - Third Option"
+               ]
+      end
+    end
   end
 end

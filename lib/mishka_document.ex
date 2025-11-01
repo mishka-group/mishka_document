@@ -140,6 +140,54 @@ defmodule MishkaDocument do
         delete :permanent_destroy, route: "/:id/permanent"
       end
 
+      base_route "/v1/master/admin/mishka-document/section-draft", MishkaDocument.SectionDraft do
+        index :master_read
+        get :master_get
+        index :master_archived, route: "/archived"
+        get :master_get_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/section-draft", MishkaDocument.SectionDraft do
+        index :read
+        get :read
+        index :archived, route: "/archived"
+        get :get_archived, route: "/archived/:id"
+        post :create
+        patch :update
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
+      base_route "/v1/master/admin/mishka-document/note-draft", MishkaDocument.NoteDraft do
+        index :master_read
+        get :master_get
+        index :master_archived, route: "/archived"
+        get :master_get_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/note-draft", MishkaDocument.NoteDraft do
+        index :read
+        get :read
+        index :archived, route: "/archived"
+        get :get_archived, route: "/archived/:id"
+        post :create
+        patch :update
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
       base_route "/v1/master/admin/mishka-document/tag", MishkaDocument.Tag do
         index :master_read
         get :master_get

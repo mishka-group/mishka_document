@@ -24,6 +24,7 @@ defmodule MishkaDocument.NoteDraft do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -130,6 +131,21 @@ defmodule MishkaDocument.NoteDraft do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "note_draft"
+
+    includes [
+      :workspace_version,
+      :section,
+      :section_draft,
+      :source_note,
+      :created_by_user
+    ]
+
+    paginated_includes []
   end
 
   # Event tracking configuration for activity logging
