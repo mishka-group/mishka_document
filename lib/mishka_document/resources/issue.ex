@@ -18,6 +18,7 @@ defmodule MishkaDocument.Issue do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -102,6 +103,23 @@ defmodule MishkaDocument.Issue do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "issue"
+
+    includes [
+      :note,
+      :section,
+      :reporter,
+      :comments,
+      :master_note,
+      :master_section,
+      :master_comments
+    ]
+
+    paginated_includes [:comments, :master_comments]
   end
 
   # Event tracking configuration for activity logging

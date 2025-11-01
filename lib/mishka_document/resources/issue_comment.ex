@@ -17,6 +17,7 @@ defmodule MishkaDocument.IssueComment do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -73,6 +74,13 @@ defmodule MishkaDocument.IssueComment do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "issue_comment"
+
+    includes [:issue, :contributor, :master_issue, :master_contributor]
   end
 
   # Event tracking configuration for activity logging

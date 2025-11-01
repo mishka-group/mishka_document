@@ -212,6 +212,60 @@ defmodule MishkaDocument do
         delete :permanent_destroy, route: "/:id/permanent"
       end
 
+      base_route "/v1/master/admin/mishka-document/issue", MishkaDocument.Issue do
+        index :master_read
+        get :master_get
+        index :master_archived, route: "/archived"
+        get :master_get_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/issue", MishkaDocument.Issue do
+        index :read
+        get :read
+        index :archived, route: "/archived"
+        get :get_archived, route: "/archived/:id"
+        post :create
+        patch :update
+        patch :mark_in_progress, route: "/:id/mark-in-progress"
+        patch :mark_resolved, route: "/:id/mark-resolved"
+        patch :mark_closed, route: "/:id/mark-closed"
+        patch :reopen, route: "/:id/reopen"
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
+      base_route "/v1/master/admin/mishka-document/issue-comment", MishkaDocument.IssueComment do
+        index :master_read
+        get :master_get
+        index :master_archived, route: "/archived"
+        get :master_get_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/issue-comment", MishkaDocument.IssueComment do
+        index :read
+        get :read
+        index :archived, route: "/archived"
+        get :get_archived, route: "/archived/:id"
+        index :by_issue, route: "/by-issue/:issue_id"
+        index :by_contributor, route: "/by-contributor/:contributor_id"
+        post :create
+        patch :update
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
       base_route "/v1/user/mishka-document/workspace", MishkaDocument.Workspace do
         index :public_list
         get :public_get, route: "/:id"
