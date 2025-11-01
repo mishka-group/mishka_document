@@ -92,6 +92,78 @@ defmodule MishkaDocument do
         delete :destroy
       end
 
+      base_route "/v1/master/admin/mishka-document/section", MishkaDocument.Section do
+        index :master_read
+        get :master_get
+        index :master_archived, route: "/archived"
+        get :master_get_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/section", MishkaDocument.Section do
+        index :read
+        get :read
+        index :archived, route: "/archived"
+        get :get_archived, route: "/archived/:id"
+        post :create
+        patch :update
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
+      base_route "/v1/master/admin/mishka-document/note", MishkaDocument.Note do
+        index :master_read
+        get :master_get
+        index :master_archived, route: "/archived"
+        get :master_get_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/note", MishkaDocument.Note do
+        index :read
+        get :read
+        index :archived, route: "/archived"
+        get :get_archived, route: "/archived/:id"
+        post :create
+        patch :update
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
+      base_route "/v1/master/admin/mishka-document/tag", MishkaDocument.Tag do
+        index :master_read
+        get :master_get
+        index :master_archived, route: "/archived"
+        get :master_get_archived, route: "/archived/:id"
+        post :master_create
+        patch :master_update, read_action: :master_get
+        patch :master_unarchive, route: "/:id/unarchive", read_action: :master_get_archived
+        delete :master_destroy, route: "/:id/archive", read_action: :master_get
+        delete :master_permanent_destroy, route: "/:id/permanent", read_action: :master_get
+      end
+
+      base_route "/v1/tenant/admin/mishka-document/tag", MishkaDocument.Tag do
+        index :read
+        get :read
+        index :archived, route: "/archived"
+        get :get_archived, route: "/archived/:id"
+        post :create
+        patch :update
+        patch :unarchive, route: "/:id/unarchive", read_action: :get_archived
+        delete :destroy, route: "/:id/archive"
+        delete :permanent_destroy, route: "/:id/permanent"
+      end
+
       base_route "/v1/user/mishka-document/workspace", MishkaDocument.Workspace do
         index :public_list
         get :public_get, route: "/:id"
@@ -108,6 +180,19 @@ defmodule MishkaDocument do
         index :public_by_new_version, route: "/new-version/:new_version_id"
         index :public_by_source_version, route: "/source-version/:source_version_id"
         index :public_recent_clones, route: "/recent"
+      end
+
+      base_route "/v1/user/mishka-document/section", MishkaDocument.Section do
+        index :public_list
+        get :public_get, route: "/:id"
+
+        index :public_list_at_workspace_version,
+          route: "/workspace/:workspace_version_id/version/:version_number"
+      end
+
+      base_route "/v1/user/mishka-document/tag", MishkaDocument.Tag do
+        index :public_list
+        get :public_get, route: "/:id"
       end
     end
   end

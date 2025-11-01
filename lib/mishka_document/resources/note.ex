@@ -18,6 +18,7 @@ defmodule MishkaDocument.Note do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -87,6 +88,13 @@ defmodule MishkaDocument.Note do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "note"
+
+    includes [:section]
   end
 
   # Event tracking configuration for activity logging

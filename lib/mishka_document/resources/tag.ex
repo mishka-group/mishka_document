@@ -17,6 +17,7 @@ defmodule MishkaDocument.Tag do
     extensions: [
       AshArchival.Resource,
       AshSlug,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -113,6 +114,29 @@ defmodule MishkaDocument.Tag do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "tag"
+
+    includes [
+      :sections,
+      :master_sections,
+      :tenant_sections,
+      :language_variants,
+      :tenant_language_variants,
+      :master_language_variants
+    ]
+
+    paginated_includes [
+      :sections,
+      :master_sections,
+      :tenant_sections,
+      :language_variants,
+      :tenant_language_variants,
+      :master_language_variants
+    ]
   end
 
   # Event tracking configuration for activity logging

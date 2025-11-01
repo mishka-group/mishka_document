@@ -20,6 +20,7 @@ defmodule MishkaDocument.Section do
     extensions: [
       AshArchival.Resource,
       AshSlug,
+      AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
@@ -139,6 +140,41 @@ defmodule MishkaDocument.Section do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "section"
+
+    includes [
+      :workspace_version,
+      :parent_section,
+      :child_sections,
+      :language_variants,
+      :notes,
+      :tenant_notes,
+      :master_notes,
+      :tags,
+      :tenant_tags,
+      :master_tags,
+      :section_drafts,
+      :master_section_drafts,
+      workspace_version: [:workspace],
+      master_workspace_version: [:master_workspace]
+    ]
+
+    paginated_includes [
+      :child_sections,
+      :language_variants,
+      :notes,
+      :tenant_notes,
+      :master_notes,
+      :tags,
+      :tenant_tags,
+      :master_tags,
+      :section_drafts,
+      :master_section_drafts
+    ]
   end
 
   # Event tracking configuration for activity logging
