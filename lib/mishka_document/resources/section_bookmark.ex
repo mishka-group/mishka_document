@@ -13,6 +13,7 @@ defmodule MishkaDocument.SectionBookmark do
     otp_app: :mishka_document,
     domain: MishkaDocument,
     data_layer: AshPostgres.DataLayer,
+    extensions: [AshJsonApi.Resource],
     authorizers: [Ash.Policy.Authorizer],
     notifiers: [MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook]
 
@@ -35,6 +36,13 @@ defmodule MishkaDocument.SectionBookmark do
     end
 
     identity_index_names unique_user_section_bookmark: "doc_sec_bkm_uniq_idx"
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "section_bookmark"
+
+    includes [:section, :user]
   end
 
   actions do

@@ -19,7 +19,7 @@ defmodule MishkaDocument.WorkspaceFollower do
     otp_app: :mishka_document,
     domain: MishkaDocument,
     data_layer: AshPostgres.DataLayer,
-    extensions: [GuardedStruct.AshResource],
+    extensions: [AshJsonApi.Resource, GuardedStruct.AshResource],
     authorizers: [Ash.Policy.Authorizer],
     notifiers: [MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook]
 
@@ -44,6 +44,13 @@ defmodule MishkaDocument.WorkspaceFollower do
     end
 
     identity_index_names unique_follower_workspace: "doc_ws_fol_uniq_idx"
+  end
+
+  # JSON API configuration for REST endpoints
+  json_api do
+    type "workspace_follower"
+
+    includes [:workspace]
   end
 
   guardedstruct do

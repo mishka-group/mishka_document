@@ -271,6 +271,13 @@ defmodule MishkaDocument do
         get :public_get, route: "/:id"
       end
 
+      base_route "/v1/user/mishka-document/workspace-follow", MishkaDocument.WorkspaceFollower do
+        index :my_following, route: "/my-following"
+        post :create
+        patch :toggle_notifications
+        delete :unfollow
+      end
+
       base_route "/v1/user/mishka-document/workspace-version", MishkaDocument.WorkspaceVersion do
         index :public_list
         get :public_get, route: "/:id"
@@ -290,6 +297,12 @@ defmodule MishkaDocument do
 
         index :public_list_at_workspace_version,
           route: "/workspace/:workspace_version_id/version/:version_number"
+      end
+
+      base_route "/v1/user/mishka-document/section-bookmark", MishkaDocument.SectionBookmark do
+        index :my_bookmarks, route: "/my-bookmarks"
+        post :create
+        delete :remove
       end
 
       base_route "/v1/user/mishka-document/tag", MishkaDocument.Tag do
