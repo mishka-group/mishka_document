@@ -80,6 +80,14 @@ defmodule MishkaDocument.WorkspaceFollower do
                 message:
                   dgettext_noop("errors", "Workspace not found or does not belong to your site.")}
 
+      # A workspace its actor may not open takes nothing from them, as though it were not there.
+      validate {MishkaDocument.Resources.Validations.OpenToActor,
+                field: :workspace_id,
+                resource: MishkaDocument.Workspace,
+                lock: :permissions,
+                message:
+                  dgettext_noop("errors", "Workspace not found or does not belong to your site.")}
+
       change relate_actor(:follower_user, allow_nil?: true)
 
       change fn changeset, _context ->

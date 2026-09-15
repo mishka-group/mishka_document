@@ -740,12 +740,16 @@ defmodule MishkaDocument.WorkspaceVersion do
                  max_page_size: 100,
                  countable: true,
                  required?: false
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :version}
     end
 
     read :public_get do
       description "Public endpoint to get a single published version by ID - alpha, beta, rc, or stable (no authentication required)"
       get? true
       filter expr(status in [:alpha, :beta, :rc, :stable])
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :version}
     end
 
     read :read_any do
@@ -1094,6 +1098,11 @@ defmodule MishkaDocument.WorkspaceVersion do
 
       filter expr(not is_nil(type(^actor(:id), :uuid)) and is_nil(type(^actor(:site_id), :uuid)))
     end
+  end
+
+  calculations do
+    # Who may open the version: its document's permissions.
+    calculate :effective_permissions, {:array, :string}, expr(workspace.permissions)
   end
 
   identities do

@@ -1203,12 +1203,15 @@ defmodule MishkaDocument.Workspace do
                  max_page_size: 100,
                  countable: true,
                  required?: false
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :workspace}
     end
 
     read :public_get do
       description "Public endpoint to get a single active workspace by ID (no authentication required)"
       get? true
       filter expr(status == :active)
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :workspace}
     end
 
     read :archived do

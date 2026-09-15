@@ -64,6 +64,14 @@ defmodule MishkaDocument.SectionBookmark do
                 message:
                   dgettext_noop("errors", "Section not found or does not belong to your site.")}
 
+      # A section its actor may not open takes nothing from them, as though it were not there.
+      validate {MishkaDocument.Resources.Validations.OpenToActor,
+                field: :section_id,
+                resource: MishkaDocument.Section,
+                lock: :effective_permissions,
+                message:
+                  dgettext_noop("errors", "Section not found or does not belong to your site.")}
+
       change relate_actor(:user, allow_nil?: true)
     end
 

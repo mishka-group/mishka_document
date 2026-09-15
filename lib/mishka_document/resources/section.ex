@@ -1550,12 +1550,15 @@ defmodule MishkaDocument.Section do
                  max_page_size: 100,
                  countable: true,
                  required?: false
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :section}
     end
 
     read :public_get do
       description "Public endpoint to get a single approved section by ID (no authentication required)"
       get? true
       filter expr(content_review_status == :approved and technical_review_status == :approved)
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :section}
     end
 
     read :public_list_at_workspace_version do
@@ -1580,6 +1583,8 @@ defmodule MishkaDocument.Section do
                  max_page_size: 100,
                  countable: true,
                  required?: false
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :section}
     end
 
     read :read_any do
@@ -2196,6 +2201,11 @@ defmodule MishkaDocument.Section do
     calculate :rendered_content,
               :string,
               {MishkaCmsCore.Runtime.Resources.Calculations.RenderContent, source: :content}
+
+    # Who may open the section: its own permissions, else its nearest parent's, else its document's.
+    calculate :effective_permissions,
+              {:array, :string},
+              MishkaDocument.Resources.Calculations.EffectivePermissions
 
     calculate :contributors_count,
               :integer,

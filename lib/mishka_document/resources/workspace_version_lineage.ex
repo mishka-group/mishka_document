@@ -302,6 +302,8 @@ defmodule MishkaDocument.WorkspaceVersionLineage do
              )
 
       pagination offset?: true, default_limit: 20, max_page_size: 100, countable: true
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :lineage}
     end
 
     read :public_by_source_version do
@@ -315,6 +317,8 @@ defmodule MishkaDocument.WorkspaceVersionLineage do
              )
 
       pagination offset?: true, default_limit: 20, max_page_size: 100, countable: true
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :lineage}
     end
 
     read :public_recent_clones do
@@ -330,6 +334,8 @@ defmodule MishkaDocument.WorkspaceVersionLineage do
       end
 
       pagination offset?: true, default_limit: 20, max_page_size: 100, countable: true
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :lineage}
     end
 
     read :public_get do
@@ -340,6 +346,8 @@ defmodule MishkaDocument.WorkspaceVersionLineage do
                new_version.status in [:alpha, :beta, :rc, :stable] and
                  source_version.status in [:alpha, :beta, :rc, :stable]
              )
+
+      prepare {MishkaDocument.Resources.Preparations.OpenToActor, kind: :lineage}
     end
 
     destroy :destroy do
