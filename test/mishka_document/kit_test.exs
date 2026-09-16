@@ -1,0 +1,656 @@
+defmodule MishkaDocument.KitTest do
+  @moduledoc """
+  The bundle this extension ships, and the rows installing it writes.
+
+  ## Why the components are data and not code
+
+  Five live components arrive as `priv/cms_ui_kits/mishka_document.json` and are installed through
+  the CMS's own kit machinery — the same path Chelekom's 136 take. Everything a component is travels
+  in that file: its markup, its declarations, and its own code, including the Ash reads it runs.
+
+  That is what makes it a component rather than a library with a component-shaped wrapper. It can be
+  imported one at a time or in batches, edited in the admin like any other row, and carries no
+  dependency on an Elixir module a third-party importer would not have.
+
+  ## What is asserted here and what is not
+
+  This suite does not start the CMS's compilers — `test/test_helper.exs` says why. So what is pinned
+  here is the bundle's shape and the rows the installer writes from it. Compiling them, rendering
+  them on a page and clicking them is `MishkaDocument.LiveComponentsRenderTest`.
+  """
+  use MishkaDocument.DataCase, async: false
+
+  alias MishkaCmsCore.Runtime.Component
+
+  require Ash.Query
+
+  @moduletag :integration
+
+  # THE TWO KINDS, AND WHICH IS WHICH. A live component runs its own reads and holds what it read;
+  # a function component is markup the live ones hand their rows to. Splitting them here is what
+  # lets every assertion below ask the right question of each — a function component has no socket,
+  # so it has no `mount/1`, no `id={@id}` and nothing to aim an event at.
+  @live ~w(doc-workspace-list doc-section doc-sidebar doc-toc doc-switcher)
+
+  @functions ~w(doc-workspace-card doc-pager doc-notice)
+
+  @names @live ++ @functions
+
+  # The RESOURCES a component reads through Ash. Everything else under `MishkaDocument.` is this
+  # extension's Elixir, and a component that called one would stop being installable by anyone who
+  # does not also have that code.
+  @resources ~w(MishkaDocument.Workspace MishkaDocument.WorkspaceVersion MishkaDocument.Section
+                MishkaDocument.Note)
+
+  # The actions a visitor may run. Every other read on these resources is behind the admin policy,
+  # and a component that named one would answer a reader with a forbidden error.
+  @public_actions ~w(public_list public_get public_list_at_workspace_version)
+
+  # A read as the stored code writes it, in BOTH shapes it is written in: piped into `for_read/4`,
+  # and called with the resource as its first argument — which is what a helper does when it has to
+  # keep hold of the query to add a clause to it. Recognising only the first shape left
+  # `doc-switcher`'s `translated_slugs` unchecked by every test below that reads this.
+  @read_calls [
+    ~r/MishkaDocument\.(\w+)\s*\|>\s*Ash\.Query\.for_read\(\s*:(\w+)/,
+    ~r/Ash\.Query\.for_read\(\s*MishkaDocument\.(\w+),\s*:(\w+)/
+  ]
+
+  # The columns one read asks the database for.
+  @select_call ~r/Ash\.Query\.select\(\s*\[(.*?)\]\s*\)/s
+
+  setup do
+    site = create_site!(name: "docville", host: "docville.test", active: true)
+    {:ok, _installed} = MishkaDocument.Kit.install!(site.id)
+    {:ok, site: site}
+  end
+
+  defp bundle, do: MishkaDocument.Kit.bundle_path() |> File.read!() |> Jason.decode!()
+
+  # The components one component's markup draws, read off the template the way
+  # `MishkaCmsCore.Runtime.CssClosure` reads reachability: the literal name in the call, never a
+  # name built at runtime — `doc-workspace-list`'s `card` attribute is an author's choice and
+  # belongs to no bundle.
+  defp drawn_siblings(component) do
+    ~r/component_name="([^"]+)"/
+    |> Regex.scan(component["template"])
+    |> Enum.map(fn [_whole, name] -> name end)
+    |> Enum.uniq()
+  end
+
+  defp components, do: bundle()["components"]
+
+  defp row(name, site) do
+    Component
+    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+    |> Ash.Query.filter(name == ^name and site_id == ^site.id)
+    |> Ash.read_one!()
+  end
+
+  describe "the bundle" do
+    test "is a v3 kit bundle, which is what the installer reads" do
+      assert bundle()["$schema"] == "mishka.ui_kit.bundle.v3"
+      assert bundle()["name"] == "mishka_document"
+    end
+
+    test "ships exactly the eight components, each of the kind it is listed under" do
+      assert Enum.map(components(), & &1["name"]) |> Enum.sort() == Enum.sort(@names)
+
+      for component <- components() do
+        assert component["stateful"] == component["name"] in @live,
+               "#{component["name"]} is the other kind of component"
+      end
+    end
+
+    # THE POINT OF THE WHOLE SHAPE. A component's stored code may call the standard library, Ash and
+    # Phoenix, and its own helpers — and nothing of this extension's. The moment one reaches for a
+    # `MishkaDocument.*` function it stops being installable by anyone who does not also have this
+    # Elixir code, which is the coupling a bundle exists to remove.
+    #
+    # `@resources` are RESOURCES, not helpers: a component reads documents the way any caller does,
+    # through Ash.
+    test "and no component's code calls into this extension's own modules" do
+      for component <- components(), helper <- component["helpers"] do
+        offenders =
+          ~r/MishkaDocument\.[A-Za-z.]+/
+          |> Regex.scan(helper["code"])
+          |> List.flatten()
+          |> Enum.reject(&(&1 in @resources))
+
+        assert offenders == [],
+               "#{component["name"]}'s #{helper["name"]} calls #{inspect(offenders)}"
+      end
+    end
+
+    test "and neither does any template" do
+      for component <- components() do
+        offenders =
+          ~r/MishkaDocument\.[A-Za-z.]+/
+          |> Regex.scan(component["template"])
+          |> List.flatten()
+          |> Enum.reject(&(&1 in @resources))
+
+        assert offenders == [], "#{component["name"]}'s template calls #{inspect(offenders)}"
+      end
+    end
+
+    # A READER IS NOT AN ADMIN. Every read these components run has to be one of the actions whose
+    # policy lets anybody through — and those are the same actions that filter to approved pages of
+    # published versions of active documents, so naming them is also what keeps a draft out of a
+    # visitor's page.
+    test "and reads only through the actions a visitor is allowed to run" do
+      seen =
+        for component <- components(),
+            helper <- component["helpers"],
+            [_whole, resource, action] <- reads(helper["code"]) do
+          assert action in @public_actions,
+                 "#{component["name"]}'s #{helper["name"]} reads #{resource} through :#{action}, " <>
+                   "which a visitor may not run"
+
+          action
+        end
+
+      assert seen != [], "no read was recognised, so this asserts nothing"
+    end
+
+    # AND EVERY ONE OF THEM WAS LOOKED AT. The check above and the page cap below both work off a
+    # pattern, and a read written in a shape that pattern does not know is not a read that fails
+    # them — it is a read they never see. `assert seen != []` cannot notice, because every other
+    # read in the bundle keeps that list full.
+    test "and every read it runs is one of the reads those checks recognise" do
+      for component <- components(), helper <- component["helpers"] do
+        assert length(reads(helper["code"])) == for_reads(helper["code"]),
+               "#{component["name"]}'s #{helper["name"]} runs #{for_reads(helper["code"])} reads " <>
+                 "and only #{length(reads(helper["code"]))} of them are written in a shape the " <>
+                 "checks above recognise"
+      end
+    end
+
+    # A PAGE IS READ FOR THE READER IT IS DRAWN FOR. An action that keeps pages to what its reader
+    # may open (`MishkaDocument.Resources.Preparations.OpenToActor`, `kind: :section`) reads as the
+    # system, and hands over every locked page, when it is not told who is reading. A document and
+    # its versions are looked up as the system: a page whose own lock opens for the reader is
+    # reachable inside a document that does not.
+    test "and every read of a page names the visitor it reads for" do
+      kept =
+        for component <- components(),
+            helper <- component["helpers"],
+            {resource, action, given} <- read_calls(helper["code"]),
+            reads_a_page?(resource, action) do
+          assert given =~ "read_as(",
+                 "#{component["name"]}'s #{helper["name"]} reads #{resource} through :#{action} " <>
+                   "without naming the visitor"
+
+          action
+        end
+
+      assert kept != [], "no read of a page was recognised, so this asserts nothing"
+    end
+
+    # AND AS THIS SITE, ALWAYS. The tenant comes from the component's own compiled metadata, so a
+    # read that forgot it would either raise or — for a resource that tolerates it — answer with
+    # another site's documents.
+    test "and every read names the site the component was installed for" do
+      for component <- components(), helper <- component["helpers"] do
+        reads = length(Regex.scan(~r/Ash\.read\(/, helper["code"]))
+        tenanted = length(Regex.scan(~r/tenant: site_id\(\)/, helper["code"]))
+
+        assert reads == tenanted,
+               "#{component["name"]}'s #{helper["name"]} runs #{reads} reads and names the site " <>
+                 "#{tenanted} times"
+      end
+    end
+
+    # EVERY ASSIGN THE MARKUP READS IS DECLARED, or the component raises inside a visitor's LiveView
+    # the first time a page leaves that attribute out.
+    test "declares every assign its own markup reads" do
+      # `streams` IS LIVEVIEW'S OWN. `Phoenix.LiveView.stream/4` puts it on the socket and there is
+      # no attribute to declare it with — a block that streams its rows reads `@streams.documents`
+      # and declares `documents` nowhere.
+      injected = ~w(id rest myself socket flash inner_block streams)
+
+      for component <- components() do
+        declared = MapSet.new(component["attrs"], & &1["name"])
+        slots = MapSet.new(component["slots"] || [], & &1["name"])
+        local = MapSet.new(read_assigns(component["template"]))
+
+        missing =
+          local
+          |> MapSet.difference(declared)
+          |> MapSet.difference(slots)
+          |> MapSet.difference(MapSet.new(injected))
+          |> MapSet.difference(MapSet.new(lifecycle_assigns(component)))
+
+        assert MapSet.size(missing) == 0,
+               "#{component["name"]} reads #{inspect(MapSet.to_list(missing))} and declares none of it"
+      end
+    end
+
+    # AND HOLDS NO STATE UNDER THE NAME OF ONE OF ITS OWN ATTRIBUTES. `update_many/1` puts the
+    # parent's assigns on the socket before `update/2` runs, so an attribute and a lifecycle assign
+    # sharing a name are ONE key — and an event, which does not go through `update_many/1`, then
+    # reads back whatever `load/1` last wrote there instead of what the page set.
+    #
+    # Measured: `doc-sidebar` held the resolved workspace under `workspace`, its own slug attribute.
+    # The first render was right, and the first letter a reader typed into its filter handed a
+    # `%Workspace{}` to the code expecting that slug and took the whole page down with it.
+    test "and holds no piece of state under the name of one of its own attributes" do
+      for component <- components() do
+        declared = MapSet.new(component["attrs"], & &1["name"])
+
+        clashing = Enum.filter(lifecycle_assigns(component), &MapSet.member?(declared, &1))
+
+        assert clashing == [],
+               "#{component["name"]} keeps #{inspect(clashing)} on the socket and declares the " <>
+                 "same name as an attribute, so its first event overwrites the page's value"
+      end
+    end
+
+    # PLAIN HTML AND TAILWIND, AND NOBODY ELSE'S COMPONENTS. A site may install this extension and
+    # skip Chelekom — the installer's component step offers it and nothing forces it — and a
+    # documentation page drawn with `chelekom-card` and friends would be a column of the runtime's
+    # red "failed to render" boxes on every such site.
+    test "and draws itself without another kit, which a production site may not have installed" do
+      for component <- components() do
+        refute component["template"] =~ "chelekom-",
+               "#{component["name"]} calls Chelekom, and a site that skipped it renders a red box"
+
+        for called <- drawn_siblings(component) do
+          assert called in @names,
+                 "#{component["name"]} draws #{called}, which this bundle does not ship"
+        end
+      end
+    end
+
+    # A SIBLING IT DRAWS IS A SIBLING IT NEEDS. The split gave the live blocks function components
+    # to draw their rows and their states with, and `<.component component_name="doc-notice"/>`
+    # against a site with no such row is the runtime's red "failed to render" box — so the row says
+    # what it needs, in the field the admin's component list already shows and
+    # `MishkaCmsCore.Runtime.Handlers.UiKitUpgrade` reads when it carries an update onto a site that
+    # was installed before the split.
+    test "and every component it draws is a dependency it declares, and the reverse" do
+      for component <- components() do
+        called = drawn_siblings(component)
+
+        for name <- called do
+          assert name in component["dependencies"],
+                 "#{component["name"]} draws #{name} and declares no dependency on it"
+        end
+
+        for declared <- component["dependencies"] do
+          assert declared in called,
+                 "#{component["name"]} declares #{declared} and its template never draws it"
+        end
+      end
+    end
+
+    # NOTHING IS SHIPPED FOR NOBODY. A function component exists to be drawn by another component;
+    # one no other row names is a row a site compiles, an admin reads and the palette offers, and
+    # nothing draws.
+    test "and every function component is drawn by another" do
+      needed =
+        components()
+        |> Enum.flat_map(& &1["dependencies"])
+        |> Enum.uniq()
+
+      for name <- @functions do
+        assert name in needed, "#{name} is drawn by nothing this bundle ships"
+      end
+    end
+
+    # THE ONE COMPONENT THAT CALLS ANOTHER NAMES NONE OF ITS OWN. `doc-workspace-list` draws each
+    # document through whatever component an author puts in its `card` attribute, which is the whole
+    # of that feature: a name this bundle wrote down instead would be a dependency on a kit, and
+    # `dependencies: []` above would be a lie.
+    test "and the only component it calls through an assign is one an author chose" do
+      called =
+        for component <- components(),
+            [_whole, name] <-
+              Regex.scan(
+                ~r/<\.component\b[^>]*?component_name=\{([^}]+)\}/s,
+                component["template"]
+              ) do
+          assert Regex.match?(~r/^@\w+$/, String.trim(name)),
+                 "#{component["name"]} calls a component named #{name}, which no author chose"
+
+          component["name"]
+        end
+
+      assert called == ["doc-workspace-list"],
+             "the set of components that call another one by assign has changed: #{inspect(called)}"
+    end
+
+    # EDITOR HINTS ARE PART OF THE COMPONENT, not documentation kept somewhere else. The inspector
+    # reads `opts.doc` for the line under a control and `opts.values` for a dropdown in place of a
+    # text box — see `MishkaCmsCore.Runtime.PageBuilder.Inspector` — so an attribute shipping
+    # neither is a blank field an author has to guess the accepted words for.
+    test "and every author-facing attribute explains itself to the inspector" do
+      for component <- components(),
+          attr <- component["attrs"],
+          attr["type"] != "global" do
+        assert attr["opts"]["doc"] not in [nil, ""],
+               "#{component["name"]}'s #{attr["name"]} has nothing to say for itself"
+
+        assert Map.has_key?(attr["opts"], "default"),
+               "#{component["name"]}'s #{attr["name"]} declares no default, so a page that leaves " <>
+                 "it out raises rather than falling back"
+      end
+    end
+
+    test "and the ones with a fixed set of answers offer that set" do
+      for component <- components(),
+          attr <- component["attrs"],
+          attr["name"] in ~w(sort show) do
+        values = attr["opts"]["values"]
+
+        assert is_list(values) and values != [],
+               "#{component["name"]}'s #{attr["name"]} is a dropdown with nothing in it"
+
+        assert attr["opts"]["default"] in values,
+               "#{component["name"]}'s #{attr["name"]} defaults to a word it does not offer"
+      end
+    end
+
+    # NOBODY MAY ASK FOR MORE ROWS THAN THEY WILL BE GIVEN. Every public read these components run
+    # caps a page, and Ash SHRINKS a larger ask down to that cap rather than refusing it — so an
+    # over-ask is silent, and a list that quietly stops short of what an author asked for is a
+    # document with pages missing from its contents. The ceiling is read off the actions the
+    # components name, not written down here.
+    test "and never asks a read for more rows than that read will hand back" do
+      caps =
+        for component <- components(),
+            helper <- component["helpers"],
+            [_whole, resource, action] <- reads(helper["code"]),
+            cap = page_cap(resource, action),
+            is_integer(cap),
+            do: cap
+
+      assert caps != [], "no read was recognised, so this asserts nothing"
+      ceiling = Enum.min(caps)
+
+      for component <- components(),
+          helper <- component["helpers"],
+          [_whole, asked] <- Regex.scan(~r/page: \[limit: (\d+)/, helper["code"]) do
+        assert String.to_integer(asked) <= ceiling,
+               "#{component["name"]}'s #{helper["name"]} asks for #{asked} rows and is given #{ceiling}"
+      end
+
+      for component <- components(),
+          attr <- component["attrs"],
+          is_integer(attr["opts"]["max"]) do
+        assert attr["opts"]["max"] <= ceiling,
+               "#{component["name"]}'s #{attr["name"]} lets an author ask for " <>
+                 "#{attr["opts"]["max"]}, and #{ceiling} is what one read returns"
+      end
+    end
+
+    # AND SELECTS NO COLUMN NOBODY READS, which is the same rule one level down. Every read here
+    # names the columns it wants, so a name left in that list after the code reading it went is a
+    # wider row fetched on every render for nobody — the five carry their own copies of these
+    # helpers precisely so they can ask for different columns, and a copy that differs only in dead
+    # ones is a copy that costs without paying.
+    #
+    # A column counts as read where the component's own code or markup reaches for it by name —
+    # `row.status`, `%{status: status}`, `sort(status: :asc)` — and a filter does not count: a
+    # `WHERE` clause is answered by the database whether the column comes back or not.
+    test "and selects no column its own template and code never read" do
+      for component <- components() do
+        code = Enum.map_join(component["helpers"], "\n", & &1["code"])
+
+        # A COLUMN THE CARD IT DRAWS READS IS A COLUMN IT HAS TO SELECT. The list reads the rows and
+        # hands each one to a function component, so `description` and `featured` are read in
+        # `doc-workspace-card`'s markup and nowhere in the block that selected them.
+        drawn =
+          for sibling <- components(),
+              sibling["name"] in component["dependencies"],
+              do: sibling["template"]
+
+        readable =
+          Enum.join(
+            [String.replace(code, @select_call, " "), component["template"] | drawn],
+            "\n"
+          )
+
+        dead =
+          for [_whole, listed] <- Regex.scan(@select_call, code),
+              [_field, name] <- Regex.scan(~r/:(\w+)/, listed),
+              not Regex.match?(~r/\.#{name}\b/, readable),
+              not Regex.match?(~r/\b#{name}:/, readable),
+              do: name
+
+        assert dead == [],
+               "#{component["name"]} selects #{inspect(Enum.uniq(dead))} and reads none of it"
+      end
+    end
+
+    # A HELPER NOBODY CALLS IS CODE A SITE STILL COMPILES AND AN ADMIN STILL READS. Five components
+    # share one set of small helpers, and each carries only its own copies, so a helper dropped from
+    # a template has to be dropped from the component too.
+    test "and ships no helper its own template and code never call" do
+      lifecycle = ~w(mount update update_many render handle_event handle_async site_id)
+
+      for component <- components(),
+          name <- Enum.uniq(Enum.map(component["helpers"], & &1["name"])),
+          name not in lifecycle do
+        callers =
+          [
+            component["template"]
+            | for(h <- component["helpers"], h["name"] != name, do: h["code"])
+          ]
+          |> Enum.join()
+
+        assert callers =~ ~r/\b#{Regex.escape(name)}\s*\(/,
+               "#{component["name"]} carries #{name}/n and calls it nowhere"
+      end
+    end
+
+    # AND IT HAS TO TRAVEL. `MishkaDocument.Kit.bundle_path/0` reads the file out of
+    # `:code.priv_dir/1`, and `priv` used to be left out of the package's `files` — so a hex install
+    # of this extension would point at a path that does not exist and give that site no document
+    # components at all. Nothing else in this suite could notice: a checkout has `priv` whether the
+    # package ships it or not.
+    test "and travels inside the hex package" do
+      files = Mix.Project.config()[:package][:files]
+
+      assert Enum.any?(files, &(&1 in ~w(priv priv/cms_ui_kits))),
+             "the bundle's directory is not in the package, so a hex install has nothing to read"
+    end
+
+    test "puts the id LiveView requires onto every live component's root element" do
+      for component <- components(), component["stateful"] do
+        assert component["template"] =~ "id={@id}",
+               "#{component["name"]} has no id on its root, and a live component cannot exist without one"
+      end
+    end
+
+    # A LIVE COMPONENT THAT NEITHER ANSWERS NOR LEADS ANYWHERE is a picture. `href=` counts because
+    # `doc-toc` links inside the page it is drawn on and has nowhere to navigate to.
+    test "carries a mount, and either answers its own controls or leads somewhere" do
+      for component <- components(), component["stateful"] do
+        names = Enum.map(component["helpers"], & &1["name"])
+
+        assert "mount" in names,
+               "#{component["name"]} has no mount/1, so it starts with no state"
+
+        assert component["template"] =~ "phx-target={@myself}" or
+                 component["template"] =~ "target={@myself}" or
+                 component["template"] =~ "patch=" or
+                 component["template"] =~ "navigate=" or
+                 component["template"] =~ "href=",
+               "#{component["name"]} neither answers its own events nor links anywhere"
+      end
+    end
+
+    # A FUNCTION COMPONENT HAS NOTHING TO HOLD STATE IN, and the compiler gives it a module shape
+    # with no socket in it: a `mount/1` there would never be called and a `phx-target={@myself}`
+    # would render `phx-target=""`. Whatever answers a click in one of them is aimed at the live
+    # block above it, which is handed over as `target`.
+    test "and no function component pretends to be live" do
+      for component <- components(), not component["stateful"] do
+        names = Enum.map(component["helpers"], & &1["name"])
+
+        for callback <- ~w(mount update handle_event handle_async) do
+          refute callback in names,
+                 "#{component["name"]} declares #{callback}, which nothing will ever call"
+        end
+
+        refute component["template"] =~ "@myself",
+               "#{component["name"]} aims an event at a socket it does not have"
+      end
+    end
+  end
+
+  describe "installing" do
+    test "writes a row per component, each of its own kind and scoped to the site", %{site: site} do
+      for name <- @names do
+        found = row(name, site)
+
+        assert found, "#{name} was not installed"
+        assert found.stateful == name in @live
+        assert found.site_id == site.id
+        assert found.template != "", "#{name} arrived with no markup"
+
+        assert found.helpers != [] or name in @functions,
+               "#{name} arrived with no code"
+      end
+    end
+
+    test "twice changes nothing and raises nothing", %{site: site} do
+      before = row("doc-section", site)
+
+      assert {:ok, _again} = MishkaDocument.Kit.install!(site.id)
+
+      after_second = row("doc-section", site)
+      assert after_second.id == before.id
+      assert length(after_second.helpers) == length(before.helpers)
+    end
+
+    # LAZY BY DEFAULT, like any other component. `precompile: true` is for a component a site cannot
+    # afford to compile on the first request; these are ordinary and compile when first called.
+    test "leaves them to compile on first use rather than at boot", %{site: site} do
+      for name <- @names do
+        assert row(name, site).precompile == false,
+               "#{name} asks to be compiled at boot, which it does not need"
+      end
+    end
+
+    # PER SITE, because a document belongs to a tenant. Installing for one site writes that site's
+    # rows and nobody else's.
+    test "writes rows for the site it was given and no other", %{site: site} do
+      elsewhere = create_site!(name: "elsewhere", host: "elsewhere.test", active: true)
+
+      for name <- @names do
+        assert row(name, site)
+
+        assert Component
+               |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+               |> Ash.Query.filter(name == ^name and site_id == ^elsewhere.id)
+               |> Ash.read_one!() == nil,
+               "#{name} was installed for a site nobody asked about"
+      end
+    end
+  end
+
+  # Every read in a piece of stored code, in whichever shape it was written.
+  defp reads(code), do: Enum.flat_map(@read_calls, &Regex.scan(&1, code))
+
+  # And how many reads are in there at all, so a shape nobody thought of is a failure rather than a
+  # read the checks above quietly never look at.
+  defp for_reads(code), do: length(Regex.scan(~r/Ash\.Query\.for_read\(/, code))
+
+  # Every read in `code`, piped or called with its resource first: the resource, the action, and
+  # everything `for_read` is handed.
+  defp read_calls(code) do
+    for [{at, length}] <- Regex.scan(~r/Ash\.Query\.for_read\(/, code, return: :index) do
+      given = code |> binary_part(at + length, byte_size(code) - at - length) |> call_body()
+
+      case Regex.run(~r/^\s*MishkaDocument\.(\w+),\s*:(\w+)/, given) do
+        [_whole, resource, action] ->
+          {resource, action, given}
+
+        nil ->
+          [_whole, resource] =
+            Regex.run(~r/MishkaDocument\.(\w+)\s*\|>\s*\z/, binary_part(code, 0, at))
+
+          [_whole, action] = Regex.run(~r/^\s*:(\w+)/, given)
+          {resource, action, given}
+      end
+    end
+  end
+
+  # What a call is handed, up to the parenthesis that closes it.
+  defp call_body(rest) do
+    rest
+    |> String.graphemes()
+    |> Enum.reduce_while({1, []}, fn
+      ")", {1, taken} -> {:halt, {0, taken}}
+      ")", {depth, taken} -> {:cont, {depth - 1, [")" | taken]}}
+      "(", {depth, taken} -> {:cont, {depth + 1, ["(" | taken]}}
+      char, {depth, taken} -> {:cont, {depth, [char | taken]}}
+    end)
+    |> elem(1)
+    |> Enum.reverse()
+    |> Enum.join()
+  end
+
+  defp reads_a_page?(resource, action) do
+    module = Module.concat(MishkaDocument, resource)
+    Code.ensure_loaded!(module)
+
+    module
+    |> Ash.Resource.Info.action(String.to_existing_atom(action))
+    |> Map.fetch!(:preparations)
+    |> Enum.any?(
+      &match?(
+        %Ash.Resource.Preparation{
+          preparation: {MishkaDocument.Resources.Preparations.OpenToActor, [kind: :section]}
+        },
+        &1
+      )
+    )
+  end
+
+  # How many rows one page of that action hands back, whatever a caller asks for.
+  defp page_cap(resource, action) do
+    module = Module.concat(MishkaDocument, resource)
+    Code.ensure_loaded!(module)
+
+    case Ash.Resource.Info.action(module, String.to_existing_atom(action)) do
+      %{pagination: %{max_page_size: most}} -> most
+      _unpaged -> nil
+    end
+  end
+
+  defp read_assigns(template) do
+    ~r/@([a-z_][a-zA-Z0-9_]*)/
+    |> Regex.scan(template)
+    |> Enum.map(fn [_whole, name] -> name end)
+    |> Enum.uniq()
+  end
+
+  # An assign a component's own lifecycle puts on the socket is not an attribute and is not
+  # declared. WHICH names those are is read out of the component rather than listed here: `mount/1`
+  # is where a live component states everything it holds, so its keyword list is the state, plus
+  # both single-key forms a helper writes with — `assign(socket, :one, value)` and the piped
+  # `socket |> assign(:one, value)`.
+  defp lifecycle_assigns(component) do
+    helpers = component["helpers"]
+
+    mounted =
+      helpers
+      |> Enum.filter(&(&1["name"] == "mount"))
+      |> Enum.flat_map(&Regex.scan(~r/([a-z_]+):\s/, &1["code"] || ""))
+      |> Enum.map(fn [_whole, name] -> name end)
+
+    single =
+      helpers
+      |> Enum.flat_map(&Regex.scan(~r/assign\(\s*[a-z_]+,\s*:([a-z_]+)/, &1["code"] || ""))
+      |> Enum.map(fn [_whole, name] -> name end)
+
+    piped =
+      helpers
+      |> Enum.flat_map(&Regex.scan(~r/assign\(\s*:([a-z_]+)/, &1["code"] || ""))
+      |> Enum.map(fn [_whole, name] -> name end)
+
+    Enum.uniq(mounted ++ single ++ piped)
+  end
+end
