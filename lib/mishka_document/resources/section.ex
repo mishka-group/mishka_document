@@ -27,7 +27,8 @@ defmodule MishkaDocument.Section do
     ],
     notifiers: [
       Ash.Notifier.PubSub,
-      MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook
+      MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook,
+      MishkaCmsCore.Runtime.Resources.Notifiers.SitemapRefresh
     ],
     authorizers: [Ash.Policy.Authorizer]
 

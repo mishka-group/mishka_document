@@ -12,10 +12,11 @@ defmodule MishkaDocument.Application do
     MishkaDocument.Plugins.Installer
   ]
 
-  # Names a document and a page of one as kinds of record a page can show (a
-  # `runtime:page:records` plugin), and gives each its own head on the page that shows it
-  # (a `runtime:page:seo` plugin).
+  # Lists this extension's documents in a site's sitemap (a `seo:sitemap:urls` plugin), names a
+  # document and a page of one as kinds of record a page can show (a `runtime:page:records` plugin),
+  # and gives each its own head on the page that shows it (a `runtime:page:seo` plugin).
   @seo_plugins [
+    MishkaDocument.Plugins.SitemapUrls,
     MishkaDocument.Plugins.PageRecords,
     MishkaDocument.Plugins.PageSeo
   ]
