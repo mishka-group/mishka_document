@@ -835,7 +835,13 @@ defmodule MishkaDocument.Section do
       end
 
       presentation do
+        template MishkaDocumentWeb.Templates.DocumentSection
         ui_adapter MishkaCmsCoreWeb.UIAdapters.Admin
+
+        switchable_templates [
+          MishkaGervaz.Table.Templates.Table,
+          MishkaDocumentWeb.Templates.DocumentSection
+        ]
       end
 
       empty_state message: dgettext_noop("mishka_gervaz", "No sections found"),

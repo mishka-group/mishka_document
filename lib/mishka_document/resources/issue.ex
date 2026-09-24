@@ -381,6 +381,7 @@ defmodule MishkaDocument.Issue do
       end
 
       presentation do
+        template MishkaDocumentWeb.Templates.IssueCard
         ui_adapter MishkaCmsCoreWeb.UIAdapters.Admin
         features [:filter, :select, :bulk_actions, :paginate, :expand]
       end

@@ -730,6 +730,7 @@ defmodule MishkaDocument.Workspace do
       end
 
       presentation do
+        template MishkaDocumentWeb.Templates.DocumentCard
         ui_adapter MishkaCmsCoreWeb.UIAdapters.Admin
       end
 
