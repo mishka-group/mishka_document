@@ -5,6 +5,11 @@ defmodule MishkaDocument.Application do
 
   use Application
 
+  # Contributes this extension's entry to the admin sidebar (a `sidebar:menus` plugin).
+  @sidebar_menus [
+    MishkaDocumentWeb.SidebarMenu
+  ]
+
   # Installs this extension onto a site when an admin asks for it — the `installer:extension:install`
   # event. Subscribing is also how the installer's own registry learns this extension exists, so
   # there is nothing else to register: see `MishkaCmsCore.Install.Extensions`.
@@ -26,7 +31,7 @@ defmodule MishkaDocument.Application do
   left out of it never registers, so the event it listens on never reaches it.
   """
   @spec plugins() :: [module()]
-  def plugins, do: @provision_plugins ++ @seo_plugins
+  def plugins, do: @sidebar_menus ++ @provision_plugins ++ @seo_plugins
 
   @impl true
   def start(_type, _args) do

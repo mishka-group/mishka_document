@@ -1,0 +1,410 @@
+<%!-- INSTEAD OF THE DASHBOARD, until this site has been set up. A dashboard for an extension a
+      site has never installed is a page of zeroes over pages that do not exist. --%>
+<ExtensionInstallerPanel.first_run_screen
+  :if={@showing_installer?}
+  setup={@extension_install}
+  id="document-provision"
+  sites={@provision_sites}
+  allowed?={@may_provision?}
+  title={gettext("The documentation")}
+  blurb={
+    gettext(
+      "Versioned documents and their sections, with the pages that read them. Setting it up adds the documentation's permission names, and installs the document components and the sample pages on this site."
+    )
+  }
+/>
+
+<div :if={!@showing_installer?}>
+  <div>
+    <%!-- Header --%>
+    <div class="mb-[22px] flex flex-wrap items-start justify-between gap-5">
+      <div>
+        <div class="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[#5b57d6]">
+          {gettext("Documents")}
+        </div>
+        <h1 class="m-0 font-['Newsreader'] text-[32px] font-medium leading-[1.05] tracking-[-0.01em] text-[#17161a]">
+          {gettext("Documentation Management")}
+        </h1>
+        <div class="mt-2 max-w-[600px] text-[13.5px] font-medium text-[#7c7a75]">
+          {gettext(
+            "Organize and manage software documentation with version control and collaboration."
+          )}
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2.5">
+        <%!-- SAYS SO WHERE THE ADMIN IS ALREADY LOOKING, for a site that was skipped past: the
+              dashboard is empty and nothing else on it explains why. --%>
+        <ExtensionInstallerPanel.badge
+          setup={@extension_install}
+          id="document-provision"
+          allowed?={@may_provision?}
+        />
+        <%!-- AND ON A SITE THAT IS SET UP, the other half: where it stands against this version,
+              and the way to put back anything it has lost. A modal, because a set-up site needs
+              neither until the day it does. --%>
+        <ExtensionInstallerPanel.doctor_button
+          setup={@extension_install}
+          id="document-kit-upgrade"
+          allowed?={@may_provision?}
+        />
+        <button
+          type="button"
+          id="document-settings-btn"
+          phx-click={JS.navigate("/admin/dashboard/settings?tab=document")}
+          class="flex h-10 items-center gap-2 rounded-[11px] border border-[#ecebe6] bg-white px-4 text-[13px] font-semibold text-[#5c5a54] transition-colors hover:bg-[#f7f6f3]"
+        >
+          <.icon name="hero-cog-6-tooth" class="size-[15px]" /> {gettext("Settings")}
+        </button>
+        <button
+          :if={@workspace_admin?}
+          type="button"
+          id="add-workspace-btn"
+          phx-click={show_modal("workspace-form-modal")}
+          class="flex h-10 items-center gap-2 rounded-[11px] bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-[18px] text-[13px] font-semibold text-white shadow-[0_5px_14px_rgba(79,75,204,0.3)] transition-opacity hover:opacity-95"
+        >
+          <.icon name="hero-plus" class="size-[15px]" /> {gettext("Add Workspace")}
+        </button>
+      </div>
+    </div>
+
+    <ExtensionInstallerPanel.doctor_modal
+      id="document-kit-upgrade"
+      install_id="document-provision"
+      setup={@extension_install}
+      kit={@kit_upgrade}
+      sites={@provision_sites}
+      site_name={@provision_site_name}
+      allowed?={@may_provision?}
+      title={gettext("The documentation on this site")}
+    />
+
+    <%!-- MishkaGervaz Form Modal. Writing a workspace is the workspace area's. --%>
+    <.modal :if={@workspace_admin?} id="workspace-form-modal">
+      <.live_component
+        module={MishkaGervaz.Form.Web.Live}
+        id="workspace_form"
+        resource={MishkaDocument.Workspace}
+        current_user={@current_user}
+      />
+    </.modal>
+
+    <%!-- Stat cards. Illustrative, exactly as the design has them — not wired to data yet. --%>
+    <div
+      data-role="kpis"
+      class="mb-4 grid grid-cols-5 gap-3 max-[980px]:mb-5 max-[980px]:grid-cols-2! max-[560px]:grid-cols-1!"
+    >
+      <div
+        :for={{label, icon, tone, value, delta, delta_tone} <- kpi_cards()}
+        class="rounded-[15px] border border-[#ecebe6] bg-white p-4 shadow-[0_1px_2px_rgba(30,28,24,0.04)]"
+      >
+        <div class="flex items-center gap-2">
+          <span class={["grid size-7 flex-none place-items-center rounded-lg", tone]}>
+            <.icon name={icon} class="size-[15px]" />
+          </span>
+          <span class="text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#a8a5a0]">
+            {label}
+          </span>
+        </div>
+        <div class="mt-[11px] font-['Space_Grotesk'] text-[28px] font-semibold tracking-[-0.03em] text-[#17161a]">
+          {value}
+        </div>
+        <div class={["mt-[3px] text-[11px] font-semibold", delta_tone]}>{delta}</div>
+      </div>
+    </div>
+
+    <%!-- The Issues toggle rides in the feed's own toggle row: the feed is full width so its panel is,
+          and putting this beside the feed instead would narrow that panel by this button. --%>
+    <ActivityFeed.feed setup={@activity_feed} on_toggle={close_issues()}>
+      <:toggles>
+        <button
+          :if={@section_admin?}
+          type="button"
+          id="toggle-issues-btn"
+          phx-click={toggle_issues(@activity_feed)}
+          aria-expanded={to_string(@show_issues)}
+          aria-controls="issues-panel"
+          class={[
+            "inline-flex h-9 items-center gap-2 rounded-[11px] border bg-white px-3.5 text-[12.5px] font-semibold text-[#3a382f] shadow-[0_1px_2px_rgba(30,28,24,0.04)] transition-colors hover:bg-[#f7f6f3]",
+            (@show_issues && "border-[#f0e2c4]") || "border-[#ecebe6]"
+          ]}
+        >
+          <.icon name="hero-exclamation-triangle" class="size-3.5 text-[#cf8a24]" />
+          {gettext("Reported Issues")}
+          <span class="rounded-[20px] bg-[#f4f3ef] px-2 py-0.5 font-['Space_Grotesk'] text-[10px] font-bold text-[#8a877f]">
+            {issues_shown(@issues_count, @issues_page)}
+          </span>
+          <.icon
+            name="hero-chevron-down"
+            class={"size-3.5 text-[#a8a5a0] transition-transform #{if @show_issues, do: "rotate-180"}"}
+          />
+        </button>
+      </:toggles>
+    </ActivityFeed.feed>
+
+    <%!-- Hidden client-side rather than by `:if`, like the feed's own panel: a panel the server has
+          already dropped from the render has nothing left to transition on the way out. The `:if` is
+          the section area's: nobody else is ever shown it. --%>
+    <div
+      :if={@section_admin?}
+      id="issues-panel"
+      class="mb-5 hidden rounded-[18px] border border-[#ecebe6] bg-white px-[22px] py-5 shadow-[0_1px_2px_rgba(30,28,24,0.04)]"
+    >
+      <div class="mb-[18px] flex flex-wrap items-start justify-between gap-4">
+        <div class="flex items-center gap-[11px]">
+          <span class="grid size-8 place-items-center rounded-[9px] bg-[#fbf1df] text-[#cf8a24]">
+            <.icon name="hero-exclamation-triangle" class="size-4" />
+          </span>
+          <div>
+            <div class="font-['Space_Grotesk'] text-[16px] font-bold text-[#17161a]">
+              {gettext("Reported Issues")}
+            </div>
+            <div class="mt-px text-[12px] font-medium text-[#8a877f]">
+              {gettext("Track and resolve documentation issues")}
+            </div>
+          </div>
+        </div>
+
+        <div class="flex rounded-[9px] border border-[#ecebe6] bg-[#f6f5f2] p-[3px]">
+          <button
+            :for={
+              {status, label} <- [
+                {"active", gettext("Active")},
+                {"archived", gettext("Archived")}
+              ]
+            }
+            type="button"
+            phx-click="toggle_issues_archive_filter"
+            phx-value-status={status}
+            class={[
+              "rounded-[7px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors",
+              (to_string(@issues_archive_status) == status &&
+                 "bg-white text-[#17161a] shadow-[0_1px_2px_rgba(30,28,24,0.06)]") ||
+                "text-[#8a877f] hover:text-[#3a382f]"
+            ]}
+          >
+            {label}
+          </button>
+        </div>
+      </div>
+
+      <div id="issues-list" phx-update="stream" class="flex flex-col gap-2.5">
+        <%!-- `only:flex` only fires while this is the sole child, so it is muted by class rather than
+              dropped by `:if`: a stream container keeps children the server stops rendering, and an
+              `:if` here would strand it on screen. Silent until loaded, or it would call a list it
+              has not read yet empty over the top of the skeleton. --%>
+        <div
+          id="issues-empty"
+          class={[
+            "flex-col items-center justify-center gap-3 py-11 text-center",
+            (@issues_loaded? && "hidden only:flex") || "hidden"
+          ]}
+        >
+          <span class="grid size-[52px] place-items-center rounded-[14px] bg-[#e6f6ee] text-[#1f9d6b]">
+            <.icon name="hero-check" class="size-6" />
+          </span>
+          <div>
+            <div class="font-['Space_Grotesk'] text-[14px] font-bold text-[#17161a]">
+              {(@issues_archive_status == :archived && gettext("Nothing archived")) ||
+                gettext("No open issues")}
+            </div>
+            <div class="mt-[3px] text-[12px] font-medium text-[#8a877f]">
+              {(@issues_archive_status == :archived &&
+                  gettext("Archived issues will appear here.")) ||
+                gettext("Reported issues will appear here.")}
+            </div>
+          </div>
+        </div>
+
+        <div
+          :for={{dom_id, issue} <- @streams.issues}
+          id={dom_id}
+          class="flex gap-3.5 rounded-[14px] border border-[#eef1ee] bg-[#fdfdfc] p-4 transition-colors hover:border-[#e4e2f7]"
+        >
+          <span class={[
+            "grid size-[34px] flex-none place-items-center rounded-[10px]",
+            issue_severity_color(issue.status)
+          ]}>
+            <.icon name="hero-exclamation-triangle" class="size-4" />
+          </span>
+
+          <div class="min-w-0 flex-1">
+            <div class="flex items-start justify-between gap-3">
+              <span class="text-[13.5px] font-bold text-[#17161a]">{issue.title}</span>
+              <span class="flex flex-none items-center gap-1.5">
+                <span class={[
+                  "rounded-md px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.04em]",
+                  issue_status_color(issue.status)
+                ]}>
+                  {MishkaDocumentWeb.Templates.IssueCard.status_label(issue)}
+                </span>
+                <span class={[
+                  "rounded-md px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.04em]",
+                  issue_type_color(issue.issue_type)
+                ]}>
+                  {MishkaDocumentWeb.Templates.IssueCard.type_label(issue)}
+                </span>
+              </span>
+            </div>
+
+            <div class="mt-1.5 line-clamp-2 text-[12.5px] font-medium text-[#8a877f]">
+              {issue.description}
+            </div>
+
+            <div class="mt-[11px] flex flex-wrap items-center gap-[9px]">
+              <span
+                class="inline-flex items-center gap-[5px] text-[11px] font-medium text-[#8a877f]"
+                title={gettext("Reporter")}
+              >
+                <.icon name="hero-user-circle" class="size-3 text-[#a8a5a0]" />
+                <span id={"home-issue-reporter-#{issue.id}"}>
+                  {MishkaDocumentWeb.Templates.IssueCard.reporter(issue)}
+                </span>
+              </span>
+
+              <.link
+                navigate={
+                  path(@socket, "/admin/dashboard/document/issues?issues_filter_id=#{issue.id}")
+                }
+                class="inline-flex items-center gap-[5px] text-[11px] font-medium text-[#8a877f] transition-colors hover:text-[#cf8a24]"
+                title={gettext("View issue details")}
+              >
+                <.icon name="hero-chat-bubble-left" class="size-3 text-[#a8a5a0]" />
+                {issue.comments_count || 0}
+              </.link>
+
+              <% note = if @master_user?, do: issue.master_note, else: issue.note %>
+              <% section = if @master_user?, do: issue.master_section, else: issue.section %>
+
+              <span
+                :if={section && !match?(%Ash.NotLoaded{}, section)}
+                class="inline-flex items-center gap-[5px] rounded-[20px] bg-[#e6f6ee] px-[9px] py-[3px] text-[10.5px] font-semibold text-[#177a53]"
+              >
+                <.icon name="hero-document" class="size-[11px]" />
+                {section.title}
+              </span>
+
+              <span
+                :if={note && !match?(%Ash.NotLoaded{}, note)}
+                class="inline-flex items-center gap-[5px] rounded-[20px] bg-[#eeedfb] px-[9px] py-[3px] text-[10.5px] font-semibold text-[#4f4bcc]"
+              >
+                <.icon name="hero-document-text" class="size-[11px]" />
+                {note.title}
+              </span>
+
+              <span
+                :if={@master_user? && issue.site && !match?(%Ash.NotLoaded{}, issue.site)}
+                class="inline-flex items-center gap-[5px] rounded-[20px] bg-[#eeedfb] px-[9px] py-[3px] text-[10.5px] font-semibold text-[#4f4bcc]"
+              >
+                <.icon name="hero-globe-alt" class="size-[11px]" />
+                {issue.site.name || gettext("Unknown Site")}
+              </span>
+
+              <span class="flex-1"></span>
+
+              <span class="text-[10.5px] font-medium text-[#a8a5a0]">
+                {Calendar.strftime(issue.inserted_at, "%Y-%m-%d")}
+              </span>
+
+              <span :if={@issues_archive_status == :archived} class="flex items-center gap-1">
+                <button
+                  type="button"
+                  phx-click="unarchive_issue"
+                  phx-value-id={issue.id}
+                  class="rounded-md p-1.5 text-[#1f9d6b] transition-colors hover:bg-[#e6f6ee]"
+                  title={gettext("Restore")}
+                >
+                  <.icon name="hero-arrow-uturn-left" class="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  phx-click="permanent_delete_issue"
+                  phx-value-id={issue.id}
+                  data-confirm={
+                    gettext(
+                      "Are you sure you want to PERMANENTLY delete this issue? This action cannot be undone!"
+                    )
+                  }
+                  class="rounded-md p-1.5 text-[#d5544b] transition-colors hover:bg-[#fbeceb]"
+                  title={gettext("Permanent Delete")}
+                >
+                  <.icon name="hero-trash" class="size-3.5" />
+                </button>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <%!-- `@issues_loaded?` gates this, not `loading`: the panel opens client-side a round trip
+            before the fetch is even asked for, so a skeleton waiting on `loading` paints nothing on
+            the way in. Rendering it until the first result lands means it is already there when the
+            panel opens. A sibling of the stream container, never a child — `#issues-empty` claims
+            `:only-child` in there. --%>
+      <div :if={!@issues_loaded?} id="issues-skeleton" class="flex animate-pulse flex-col gap-2.5">
+        <div
+          :for={row <- 1..5}
+          id={"issues-skeleton-#{row}"}
+          class="flex gap-3.5 rounded-[14px] border border-[#eef1ee] bg-[#fdfdfc] p-4"
+        >
+          <span class="size-[34px] flex-none rounded-[10px] bg-[#e8e7e2]" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-start justify-between gap-3">
+              <span class="h-3.5 w-[46%] rounded bg-[#eeedea]" />
+              <span class="flex flex-none items-center gap-1.5">
+                <span class="h-3 w-[52px] rounded bg-[#f0efeb]" />
+                <span class="h-3 w-[64px] rounded bg-[#f0efeb]" />
+              </span>
+            </div>
+            <div class="mt-[7px] h-3 w-[72%] rounded bg-[#f2f1ee]" />
+            <div class="mt-[11px] flex flex-wrap items-center gap-[9px]">
+              <span class="h-3 w-[86px] rounded bg-[#f0efeb]" />
+              <span class="h-3 w-[38px] rounded bg-[#f2f1ee]" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <%!-- The skeleton covers the first load, so this is what the later ones get: paging and the
+            archive filter, which redraw a list already on screen. --%>
+      <div
+        :if={@issues_loading.loading && @issues_loaded?}
+        class="flex items-center justify-center gap-3 py-4"
+      >
+        <span class="size-4 animate-spin rounded-full border-2 border-[#fbf1df] border-t-[#cf8a24]"></span>
+        <span class="text-[12px] font-medium text-[#8a877f]">{gettext("Loading…")}</span>
+      </div>
+
+      <%!-- One way out of the panel, as the logs panel has: the full issues page. --%>
+      <div class="mt-3.5 text-end">
+        <.link
+          navigate={path(@socket, "/admin/dashboard/document/issues")}
+          class="text-[12px] font-semibold text-[#cf8a24] transition-opacity hover:opacity-70"
+        >
+          {gettext("View all issues →")}
+        </.link>
+      </div>
+    </div>
+
+    <div class="mt-[18px] mb-5 rounded-[18px] border border-[#ecebe6] bg-white px-[22px] py-5 shadow-[0_1px_2px_rgba(30,28,24,0.04)] max-[980px]:mt-4">
+      <%!-- The title rides in the table's own control row (`:before_table`) so it sits on one line
+            with Status/search/Filter, as the design has it. --%>
+      <.live_component
+        module={MishkaGervaz.Table.Web.Live}
+        id="workspaces-table"
+        resource={MishkaDocument.Workspace}
+        current_user={@current_user}
+        url_state={@url_state}
+      >
+        <:before_table>
+          <div class="font-['Space_Grotesk'] text-[16px] font-bold text-[#17161a]">
+            {gettext("Workspaces")}
+          </div>
+          <div class="mt-0.5 text-[12.5px] font-medium text-[#8a877f]">
+            {gettext("Manage your document workspaces")}
+          </div>
+        </:before_table>
+      </.live_component>
+    </div>
+  </div>
+</div>

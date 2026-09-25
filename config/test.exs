@@ -97,6 +97,9 @@ config :mishka_installer, MishkaInstaller.MnesiaRepo,
   mnesia_dir: Path.expand(".mnesia/test"),
   essential: [MishkaInstaller.Event.Event, MishkaInstaller.Installer.Installer]
 
+# Whose admin routes `extension_routes(:admin)` mounts — on its own, this extension's.
+config :mishka_cms_core, extensions: [MishkaDocumentWeb]
+
 # The profile `TailwindCompiler` runs; the host names its own (the CMS calls it `mishka_cms_css`).
 config :tailwind,
   version: "4.3.3",
