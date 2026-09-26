@@ -50,6 +50,15 @@ defmodule MishkaDocumentWeb.SidebarMenu do
                permissions: @either,
                credit_name: "Mishka Document",
                credit_url: "https://mishka.tools/cms/extensions/documentation"
+             },
+             %{
+               extension: :mishka_document,
+               key: "document.workspace_version",
+               label: gettext_noop("Workspace Versions"),
+               path: "/admin/dashboard/document/workspace-version/:id",
+               module: MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index,
+               nav: false,
+               permissions: @workspace
              }
            ],
            &Item.new!/1

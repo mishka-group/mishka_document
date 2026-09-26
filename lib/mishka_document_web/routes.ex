@@ -8,7 +8,9 @@ defmodule MishkaDocumentWeb.Routes do
   @impl true
   def routes(:admin) do
     [
-      {:live, "/document", MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index, :index}
+      {:live, "/document", MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index, :index},
+      {:live, "/document/workspace-version/:id",
+       MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index, :index}
     ]
   end
 
