@@ -59,6 +59,24 @@ defmodule MishkaDocumentWeb.SidebarMenu do
                module: MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index,
                nav: false,
                permissions: @workspace
+             },
+             %{
+               extension: :mishka_document,
+               key: "document.sections_by_workspace",
+               label: gettext_noop("Sections"),
+               path: "/admin/dashboard/document/sections/workspace/:workspace_id",
+               module: MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index,
+               nav: false,
+               permissions: @section
+             },
+             %{
+               extension: :mishka_document,
+               key: "document.sections",
+               label: gettext_noop("Sections"),
+               path: "/admin/dashboard/document/sections/:workspace_version_id",
+               module: MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index,
+               nav: false,
+               permissions: @section
              }
            ],
            &Item.new!/1
