@@ -77,6 +77,15 @@ defmodule MishkaDocumentWeb.SidebarMenu do
                module: MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index,
                nav: false,
                permissions: @section
+             },
+             %{
+               extension: :mishka_document,
+               key: "document.tags",
+               label: gettext_noop("Tags"),
+               path: "/admin/dashboard/document/tags",
+               module: MishkaDocumentWeb.Live.Admin.Dashboard.Tag.Index,
+               nav: false,
+               permissions: @section
              }
            ],
            &Item.new!/1
