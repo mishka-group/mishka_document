@@ -15,7 +15,8 @@ defmodule MishkaDocumentWeb.Routes do
        MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index, :workspace_redirect},
       {:live, "/document/sections/:workspace_version_id",
        MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index, :index},
-      {:live, "/document/tags", MishkaDocumentWeb.Live.Admin.Dashboard.Tag.Index, :index}
+      {:live, "/document/tags", MishkaDocumentWeb.Live.Admin.Dashboard.Tag.Index, :index},
+      {:live, "/document/issues", MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index, :index}
     ]
   end
 
