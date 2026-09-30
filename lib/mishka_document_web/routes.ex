@@ -16,7 +16,11 @@ defmodule MishkaDocumentWeb.Routes do
       {:live, "/document/sections/:workspace_version_id",
        MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index, :index},
       {:live, "/document/tags", MishkaDocumentWeb.Live.Admin.Dashboard.Tag.Index, :index},
-      {:live, "/document/issues", MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index, :index}
+      {:live, "/document/issues", MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index, :index},
+      {:live, "/document/section-drafts",
+       MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index, :index},
+      {:live, "/document/note-drafts", MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index,
+       :index}
     ]
   end
 
