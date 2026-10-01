@@ -113,6 +113,15 @@ defmodule MishkaDocumentWeb.SidebarMenu do
                module: MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index,
                nav: false,
                permissions: @section
+             },
+             %{
+               extension: :mishka_document,
+               key: "document.event_logs",
+               label: gettext_noop("Event Logs"),
+               path: "/admin/dashboard/document/event-logs",
+               module: MishkaDocumentWeb.Live.Admin.Dashboard.EventLog.Index,
+               nav: false,
+               permissions: @either
              }
            ],
            &Item.new!/1

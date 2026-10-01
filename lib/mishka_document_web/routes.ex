@@ -20,6 +20,8 @@ defmodule MishkaDocumentWeb.Routes do
       {:live, "/document/section-drafts",
        MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index, :index},
       {:live, "/document/note-drafts", MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index,
+       :index},
+      {:live, "/document/event-logs", MishkaDocumentWeb.Live.Admin.Dashboard.EventLog.Index,
        :index}
     ]
   end
