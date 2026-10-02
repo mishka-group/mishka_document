@@ -5,6 +5,27 @@ defmodule MishkaDocument.Application do
 
   use Application
 
+  @dashboard_widgets [
+    MishkaDocument.Dashboard.Widgets.RecentDocuments,
+    MishkaDocument.Dashboard.Widgets.VersionActivity,
+    MishkaDocument.Dashboard.Widgets.OpenIssues,
+    MishkaDocument.Dashboard.Widgets.WorkspacesSummary
+  ]
+
+  @doc """
+  The document extension's dashboard widget plugins. Each self-registers on the `dashboard:widgets`
+  event, and `MishkaDocument.Dashboard.WidgetSettings` walks this same list to register each
+  widget's own settings under the Documents tab — so the two can never disagree about which widgets
+  exist.
+  """
+  @spec dashboard_widgets() :: [module()]
+  def dashboard_widgets, do: @dashboard_widgets
+
+  # Registers the document widgets' settings under the Documents tab (a `settings:register` plugin).
+  @settings_plugins [
+    MishkaDocument.Dashboard.WidgetSettings
+  ]
+
   # Contributes this extension's entry to the admin sidebar (a `sidebar:menus` plugin).
   @sidebar_menus [
     MishkaDocumentWeb.SidebarMenu
@@ -31,7 +52,10 @@ defmodule MishkaDocument.Application do
   left out of it never registers, so the event it listens on never reaches it.
   """
   @spec plugins() :: [module()]
-  def plugins, do: @sidebar_menus ++ @provision_plugins ++ @seo_plugins
+  def plugins,
+    do:
+      @dashboard_widgets ++
+        @settings_plugins ++ @sidebar_menus ++ @provision_plugins ++ @seo_plugins
 
   @impl true
   def start(_type, _args) do
