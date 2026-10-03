@@ -18,6 +18,68 @@ defmodule MishkaDocument.Dev.Generator do
   """
   use Ash.Generator
 
+  @workspace_names [
+    "Product Documentation",
+    "API Reference",
+    "User Guide",
+    "Developer Handbook",
+    "Architecture Overview",
+    "Operations Runbook",
+    "Security Guidelines",
+    "Onboarding Guide",
+    "Style Guide",
+    "Release Notes"
+  ]
+
+  @section_titles [
+    "Introduction",
+    "Getting Started",
+    "Installation",
+    "Configuration",
+    "Core Concepts",
+    "Advanced Usage",
+    "Troubleshooting",
+    "FAQ",
+    "Best Practices",
+    "Migration Guide",
+    "Changelog",
+    "Contributing"
+  ]
+
+  @note_titles [
+    "Implementation Note",
+    "Performance Consideration",
+    "Security Warning",
+    "Deprecation Notice",
+    "Known Limitation",
+    "Design Decision",
+    "Open Question",
+    "TODO",
+    "Reference",
+    "Example"
+  ]
+
+  @issue_types [:typo, :broken_link, :incorrect_content, :suggestion, :review_feedback, :other]
+  @issue_statuses [:open, :in_progress, :resolved, :closed]
+
+  @tag_names [
+    "api",
+    "authentication",
+    "authorization",
+    "caching",
+    "configuration",
+    "deployment",
+    "error-handling",
+    "events",
+    "logging",
+    "migrations",
+    "performance",
+    "security",
+    "testing",
+    "webhooks",
+    "workers"
+  ]
+
   # ---------------------------------------------------------------------------
   # TEST generators
   # ---------------------------------------------------------------------------
@@ -353,6 +415,214 @@ defmodule MishkaDocument.Dev.Generator do
       ],
       overrides: opts,
       tenant: nil
+    )
+  end
+
+  # ---------------------------------------------------------------------------
+  # DEV generators (realistic data)
+  # ---------------------------------------------------------------------------
+
+  def dev_workspace(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Workspace,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        name:
+          sequence(:dev_workspace_name, fn i ->
+            "#{Enum.at(@workspace_names, rem(i, length(@workspace_names)))} v#{div(i, length(@workspace_names)) + 1}"
+          end),
+        slug:
+          sequence(:dev_workspace_slug, fn i ->
+            base = Enum.at(@workspace_names, rem(i, length(@workspace_names)))
+            slug = base |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
+            "#{slug}-#{i}"
+          end),
+        description:
+          StreamData.repeatedly(fn ->
+            name = Enum.random(@workspace_names)
+            "Comprehensive #{name} covering all aspects with examples and best practices."
+          end),
+        status: StreamData.member_of([:active, :draft]),
+        schema: [],
+        seo_tags: [],
+        permissions: [],
+        featured: StreamData.boolean(),
+        display_order: StreamData.integer(0..100),
+        language: "en",
+        language_group_id: nil,
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def dev_workspace_version(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.WorkspaceVersion,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        workspace_id: nil,
+        version_number:
+          sequence(:dev_version_number, fn i ->
+            major = div(i, 10)
+            minor = rem(i, 10)
+            "#{major}.#{minor}.0"
+          end),
+        version_name:
+          sequence(:dev_version_name, fn i ->
+            names = ["Initial Release", "Stable", "LTS", "RC1", "Beta", "Alpha", "Current"]
+            "#{Enum.at(names, rem(i, length(names)))} #{i}"
+          end),
+        description:
+          StreamData.repeatedly(fn ->
+            "This version includes major improvements, bug fixes, and new features."
+          end),
+        status: StreamData.member_of([:draft, :alpha, :beta]),
+        is_latest_for_version: false,
+        source_version_id: nil,
+        published_at:
+          StreamData.repeatedly(fn ->
+            days_ago = :rand.uniform(365)
+            DateTime.add(DateTime.utc_now(), -days_ago * 86400, :second)
+          end),
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def dev_section(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Section,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        title:
+          sequence(:dev_section_title, fn i ->
+            "#{Enum.at(@section_titles, rem(i, length(@section_titles)))} #{div(i, length(@section_titles)) + 1}"
+          end),
+        slug:
+          sequence(:dev_section_slug, fn i ->
+            base = Enum.at(@section_titles, rem(i, length(@section_titles)))
+            slug = base |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
+            "#{slug}-#{i}"
+          end),
+        content:
+          StreamData.repeatedly(fn ->
+            title = Enum.random(@section_titles)
+
+            "<h2>#{title}</h2>\n<p>This section covers #{String.downcase(title)} in detail with practical examples and step-by-step instructions.</p>\n<p>Follow these guidelines to ensure correct implementation and avoid common pitfalls.</p>"
+          end),
+        order_position: StreamData.integer(0..100),
+        change_version: "1.0.0",
+        content_review_status: StreamData.member_of([:pending, :approved, :rejected]),
+        technical_review_status: StreamData.member_of([:pending, :approved, :rejected]),
+        schema: [],
+        seo_tags: [],
+        permissions: [],
+        language: "en",
+        language_group_id: nil,
+        workspace_version_id: nil,
+        parent_section_id: nil,
+        section_lineage_id: nil,
+        source_section_id: nil,
+        site_id: nil,
+        tag_ids: []
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def dev_note(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Note,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        section_id: nil,
+        title:
+          sequence(:dev_note_title, fn i ->
+            "#{Enum.at(@note_titles, rem(i, length(@note_titles)))} #{div(i, length(@note_titles)) + 1}"
+          end),
+        content:
+          StreamData.repeatedly(fn ->
+            type = Enum.random(@note_titles)
+
+            "**#{type}:** This note provides additional context and important information about this section. Pay attention to these details when implementing the described functionality."
+          end),
+        order_position: StreamData.integer(0..50),
+        change_version: "1.0.0",
+        content_review_status: StreamData.member_of([:pending, :approved]),
+        technical_review_status: StreamData.member_of([:pending, :approved]),
+        schema: [],
+        seo_tags: [],
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def dev_issue(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Issue,
+      :master_create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        note_id: nil,
+        section_id: nil,
+        reporter_id: nil,
+        title:
+          sequence(:dev_issue_title, fn i ->
+            type = Enum.at(@issue_types, rem(i, length(@issue_types)))
+            "#{String.capitalize(to_string(type))}: Section needs attention #{i}"
+          end),
+        description:
+          StreamData.repeatedly(fn ->
+            issue_type = Enum.random(@issue_types)
+
+            "Found a #{issue_type} issue in this section. The content needs to be reviewed and updated to reflect current best practices."
+          end),
+        issue_type: StreamData.member_of(@issue_types),
+        status: StreamData.member_of(@issue_statuses),
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
+    )
+  end
+
+  def dev_document_tag(opts \\ [], tenant \\ nil, actor \\ nil) do
+    changeset_generator(
+      MishkaDocument.Tag,
+      :create,
+      authorize?: false,
+      actor: actor,
+      defaults: [
+        name:
+          sequence(:dev_doc_tag_name, fn i ->
+            Enum.at(@tag_names, rem(i, length(@tag_names)))
+          end),
+        slug:
+          sequence(:dev_doc_tag_slug, fn i ->
+            "#{Enum.at(@tag_names, rem(i, length(@tag_names)))}-#{i}"
+          end),
+        language: "en",
+        language_group_id: nil,
+        site_id: nil
+      ],
+      overrides: opts,
+      tenant: tenant
     )
   end
 end
