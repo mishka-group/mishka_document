@@ -1,0 +1,50 @@
+<div>
+  <.link
+    navigate={path(@socket, "/admin/dashboard/document")}
+    class="mb-[18px] inline-flex items-center gap-[7px] text-[12.5px] font-semibold text-[#8a877f] transition-colors hover:text-[#1b1a18]"
+  >
+    <.icon name="hero-chevron-left" class="size-[15px] rtl:rotate-180" /> {gettext(
+      "Back to Dashboard"
+    )}
+  </.link>
+
+  <.header>
+    {gettext("Workspace Versions")}
+    <:subtitle>
+      <%= if @workspace do %>
+        {gettext("Versions for workspace")} <span class="font-semibold text-[#3a382f]">{@workspace.name}</span>.
+      <% else %>
+        {gettext("Manage workspace versions.")}
+      <% end %>
+    </:subtitle>
+  </.header>
+
+  <.modal id="workspace-version-form-modal">
+    <.live_component
+      module={MishkaGervaz.Form.Web.Live}
+      id="workspace_version_form"
+      resource={MishkaDocument.WorkspaceVersion}
+      current_user={@current_user}
+      defaults={%{workspace_id: @workspace_id, site_id: @workspace && @workspace.site_id}}
+    />
+  </.modal>
+
+  <.live_component
+    :if={@url_state}
+    module={MishkaGervaz.Table.Web.Live}
+    id="workspace-versions-table"
+    resource={MishkaDocument.WorkspaceVersion}
+    current_user={@current_user}
+    url_state={@url_state}
+  >
+    <:filter_actions>
+      <button
+        type="button"
+        phx-click={show_modal("workspace-version-form-modal")}
+        class="inline-flex h-[42px] items-center gap-2 rounded-xl bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-4 text-[12.5px] font-bold text-white shadow-[0_5px_14px_rgba(79,75,204,0.28)] transition-opacity hover:opacity-95"
+      >
+        <.icon name="hero-plus" class="size-4" /> {gettext("Add Version")}
+      </button>
+    </:filter_actions>
+  </.live_component>
+</div>

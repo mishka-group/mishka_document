@@ -1,0 +1,786 @@
+defmodule MishkaDocument.ProvisionTest do
+  @moduledoc """
+  What a site is given when it is provisioned, and — the half that matters more — what it is never
+  given twice.
+
+  `MishkaDocument.Provision.ensure!/2` is reached from two screens that can both run at any moment: the install
+  wizard, for the extensions an operator ticked, and a button an admin can press as often as they
+  like — both through `installer:extension:install`. So
+  every case here is written around the second run: the components, pages and snippet a site already
+  has must come through it untouched, including the ones an admin edited, archived or replaced.
+
+  The templates are not rendered here. `Page :master_create` compiles every one of them through
+  `Validations.PageCodeCompiles` before it writes the row, so a sample page that does not compile
+  fails these tests at the moment it is created; what the components then draw is
+  `MishkaDocument.LiveComponentsRenderTest`, and what a reader sees at these URLs is
+  `MishkaCmsWeb.DocumentProvisionPagesTest` in the application that has a router.
+  """
+  use MishkaDocument.DataCase, async: false
+
+  alias MishkaCmsCore.Runtime.Component
+  alias MishkaCmsCore.Runtime.Languages
+  alias MishkaCmsCore.Runtime.Page
+  alias MishkaCmsCore.Runtime.PageProvision
+  alias MishkaCmsCore.Runtime.Snippet
+  alias MishkaCmsCore.Install.Extensions
+  alias MishkaDocument.Plugins.Installer
+  alias MishkaDocument.Provision
+  alias MishkaInstaller.Event.EventHandler
+
+  require Ash.Query
+
+  @moduletag :integration
+
+  # THE EVENT THE PLUGIN ITSELF DECLARES, not one spelled out again here. Registering it under a name
+  # this file chose would test the notifier and the event compiler and leave the one thing that can
+  # silently drift — whether this plugin is listening where the installer fires — asserted by
+  # nothing.
+  @event Installer.config(:__event__)
+
+  setup do
+    name = "provisiondocs#{System.unique_integer([:positive])}"
+    {:ok, site: create_site!(name: name, host: "#{name}.test", active: true)}
+  end
+
+  defp components(site), do: rows(Component, :read_any, site)
+  defp archived_components(site), do: rows(Component, :master_archived, site)
+  defp pages(site), do: rows(Page, :read_any, site)
+
+  defp rows(resource, action, site) do
+    resource
+    |> Ash.Query.for_read(action, %{}, authorize?: false)
+    |> Ash.Query.filter(site_id == ^site.id)
+    |> Ash.read!(page: [limit: 100])
+    |> then(& &1.results)
+  end
+
+  defp component(site, name), do: Enum.find(components(site), &(&1.name == name))
+  defp page(site, path), do: Enum.find(pages(site), &(&1.path == path))
+
+  defp snippets(site) do
+    Snippet
+    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+    |> Ash.Query.filter(site_id == ^site.id)
+    |> Ash.read!(page: [limit: 100])
+    |> then(& &1.results)
+  end
+
+  # THE CALLS A STORED TEMPLATE MAKES, as the templates are written: `<.component …/>` with one
+  # attribute per line, which is what lets a key be taken from the start of a line and never out of
+  # the middle of somebody's `empty_text`. The dispatch's own keys are not the component's
+  # attributes — `LiveViewHelpers.component/1` reads `component_name` and `site` and drops them, and
+  # `id` is LiveView's.
+  defp component_calls(source) do
+    ~r|<\.component\b(.*?)/>|s
+    |> Regex.scan(source)
+    |> Enum.map(fn [_whole, call] ->
+      [_all, name] = Regex.run(~r/component_name="([^"]+)"/, call)
+
+      given =
+        ~r/^\s*([a-z_][a-z0-9_]*)=(.*)$/m
+        |> Regex.scan(call)
+        |> Enum.map(fn [_whole, key, value] -> {key, written_as(value)} end)
+        |> Enum.reject(fn {key, _value} -> key in ~w(component_name site id) end)
+
+      {name, given}
+    end)
+  end
+
+  defp component_keys(source),
+    do:
+      Enum.map(component_calls(source), fn {name, given} ->
+        {name, Enum.map(given, &elem(&1, 0))}
+      end)
+
+  # How a value is written, which for a base is half of what it means: a `"literal"` is stored in the
+  # page and reaches the block as it stands, while an `{expression}` is HEEx and is evaluated per
+  # request against that request's assigns. Anything else is neither, and is handed back as it was so
+  # the rule refusing it can say what it found.
+  defp written_as(~s(") <> rest), do: {:literal, String.trim_trailing(rest, ~s("))}
+  defp written_as("{" <> rest), do: {:expression, String.trim_trailing(rest, "}")}
+  defp written_as(other), do: {:neither, other}
+
+  # Every page this module writes, and the snippet, by the name to put in a failure message.
+  defp templates(site) do
+    Enum.map(pages(site), &{&1.path, &1.template}) ++
+      Enum.map(snippets(site), &{&1.name, &1.source})
+  end
+
+  # Both spellings, for the reason `ComponentCompiler.declared_keys/1` takes both: a declaration is a
+  # map that has been through JSON and through Ash's own casting.
+  defp attr_name(attr), do: to_string(attr["name"] || attr[:name])
+
+  defp bundle_components do
+    MishkaDocument.Kit.bundle_path()
+    |> File.read!()
+    |> Jason.decode!()
+    |> Map.fetch!("components")
+  end
+
+  describe "the first run" do
+    # THE DOCUMENT'S OWN PERMISSION NAMES ARRIVE WITH IT, as its components do, and not with
+    # the core install: the first site's run creates them, and every later site finds them.
+    test "creates the document's permission names, and another site's run creates none", %{
+      site: site
+    } do
+      names = Enum.map(Provision.manifest().permissions, &elem(&1, 0))
+
+      assert names != []
+      assert stored_permissions(names) == []
+
+      assert Provision.ensure!(site).permissions == names
+      assert Enum.sort(stored_permissions(names)) == Enum.sort(names)
+
+      assert Provision.ensure!(create_site!()).permissions == []
+    end
+
+    test "installs every component the bundle ships, scoped to this site", %{site: site} do
+      report = Provision.ensure!(site)
+
+      assert Enum.sort(report.components) == Enum.sort(Provision.component_names())
+
+      for name <- Provision.component_names() do
+        found = component(site, name)
+
+        assert found, "#{name} was not installed"
+        assert found.site_id == site.id
+      end
+    end
+
+    # THE PAGE SAYS WHAT IT SHOWS, so its SEO is the record's whatever path it is later given.
+    test "marks each page that shows a record with the kind it shows", %{site: site} do
+      Provision.ensure!(site)
+      paths = Provision.item_paths()
+      by_path = Map.new(pages(site), &{&1.path, &1})
+
+      assert by_path[paths.workspace].extra["record"] == "docs:document"
+      assert by_path[paths.section].extra["record"] == "docs:page"
+      refute Map.has_key?(by_path["/:lang/docs"].extra || %{}, "record")
+    end
+
+    test "creates the sample pages, every one of them in the document section", %{site: site} do
+      report = Provision.ensure!(site)
+
+      assert report.pages == Provision.page_paths()
+
+      for path <- Provision.page_paths() do
+        found = page(site, path)
+
+        assert found, "#{path} was not created"
+        assert found.section == "document"
+        assert found.site_id == site.id
+        assert found.active == true
+      end
+    end
+
+    # A PAGE IS ONE ROW FOR EVERY LANGUAGE. `:lang` is a capture the resolver fills from the URL and
+    # `MishkaCmsCore.Runtime.Languages` admits only the site's own languages into — so three rows
+    # serve a site publishing in five languages, and each block is told which one it was asked for.
+    test "as pattern pages, so one row answers every language the site publishes in", %{
+      site: site
+    } do
+      Provision.ensure!(site)
+
+      for path <- Provision.page_paths() do
+        assert String.starts_with?(path, "/:lang/"),
+               "#{path} pins a language, so the site's other languages have no documentation"
+      end
+
+      assert page(site, "/:lang/docs").template =~ "@page.language"
+    end
+
+    # THE ADDRESS A DOCUMENT HAS, AND THE ADDRESS ITS PAGES HAVE, are two rows rather than one
+    # `*rest`: a rest capture must match at least one segment (see `WebRunTimeMetaDataState`), so a
+    # single `/:lang/docs/*rest` page would leave a document's own front page with no URL at all.
+    test "gives a document a front page as well as a page for each of its pages", %{site: site} do
+      Provision.ensure!(site)
+
+      assert Provision.page_paths() == [
+               "/:lang/docs",
+               "/:lang/docs/:workspace",
+               "/:lang/docs/:workspace/:section"
+             ]
+    end
+
+    # THE LANGUAGE IS THE PAGE'S OWN, wherever the page came from, so every block is told it and no
+    # block is left to find it in the query keys a visitor also writes. A block handed neither takes
+    # the edition the slug names, whatever language the reader asked for — which is the English
+    # document inside a Persian shell. `MishkaCmsWeb.DocumentProvisionPagesTest` is where that is
+    # driven; this is what makes it true of all of them rather than of the one a case happens to
+    # look at.
+    #
+    # THE SNIPPET IS HELD TO IT TOO, though it lands on a page this module has never seen: its path
+    # may capture `lang` or may capture nothing at all, and `PageEditions.language/2` answers both —
+    # the captured code, else the page row's own language — so there is no page on which a block
+    # would have to fall back to what a visitor appended.
+    test "pins every block to the language the page is being read in", %{site: site} do
+      Provision.ensure!(site)
+
+      for {where, source} <- templates(site),
+          {name, given} <- component_keys(source) do
+        assert "lang" in given, "#{name} on #{where} reads a language from nowhere"
+
+        refute "lang_param" in given,
+               "#{name} on #{where} names a key nothing reads off a base that carries the language"
+      end
+    end
+
+    # AND HANDS IT NO `params` TO FIND ANOTHER IN. `RuntimeLive` merges the captured `lang` over the
+    # query string, so passing the map whole would be right on a pattern page by that precedence
+    # rather than by anything the page says — and on the snippet's page, which captures no language
+    # to merge, it would not be right at all. Every other key a block needs (`:workspace`,
+    # `:section`, `?v=`) still has to reach it.
+    test "and hands it the rest of the URL with the language taken out", %{site: site} do
+      Provision.ensure!(site)
+
+      for {where, source} <- templates(site) do
+        assert source =~ ~S|params={Map.drop(@query_params, ["lang"])}|,
+               "#{where} hands a block the language in its params after all"
+      end
+    end
+
+    # A BASE WITH THE CAPTURE STILL IN IT, held to for every call rather than for the ones somebody
+    # remembered. A `*_base` is a path a block appends a row's slug to and fills the `lang` segment
+    # of from THAT ROW's language, which is the language the reader will be reading in when they
+    # arrive — a base with the page's own language baked in would offer every translation under the
+    # language the reader is leaving, and one with no language in it at all is a path this site has
+    # no page at. `base` is the opposite and has to be this page's real URL, because it is what the
+    # index's pager writes to the address bar: a capture left in one is `?page=2` on a path nobody
+    # can type.
+    #
+    # Which names those are is read off the components, so a base added to the bundle is covered here
+    # the day it arrives rather than the day somebody remembers this test. The capture is looked for
+    # as the literal `:lang` segment rather than through `Languages.captures?/1`, which is a question
+    # about a page's PATH and admits `*lang` as well: `lang_base/2` in the bundle fills the one
+    # spelling, so a base written the other way is a base nothing fills.
+    test "builds every link base from the language capture and every URL from the page", %{
+      site: site
+    } do
+      Provision.ensure!(site)
+      capture = ":" <> Languages.capture()
+
+      bases =
+        for component <- components(site),
+            attr <- component.attrs,
+            name = attr_name(attr),
+            name == "base" or String.ends_with?(name, "_base"),
+            into: MapSet.new(),
+            do: name
+
+      checked =
+        for {where, source} <- templates(site),
+            {name, given} <- component_calls(source),
+            {key, value} <- given,
+            MapSet.member?(bases, key) do
+          case key do
+            "base" ->
+              assert {:expression, expression} = value,
+                     "#{where} writes #{name}'s base as #{inspect(value)}, and a pager's URL is this page's own"
+
+              assert expression =~ "@page.language",
+                     "#{where} writes #{name} a base holding no language of its own: #{expression}"
+
+              refute expression =~ capture,
+                     "#{where} writes #{name} a pager URL a reader cannot type: #{expression}"
+
+            _link_base ->
+              assert {:literal, literal} = value,
+                     "#{where} writes #{name}'s #{key} as #{inspect(value)}, and a link base is the same path on every request"
+
+              assert capture in String.split(literal, "/"),
+                     "#{where} hands #{name} a #{key} of #{literal}, which cannot lead to another language's edition"
+          end
+
+          key
+        end
+
+      assert checked != [],
+             "no base was read out of the sample pages, so this asserts nothing of them"
+    end
+
+    # AND EVERY URL WRITTEN OUT BY HAND IS ONE OF THE PAGES THIS MODULE CREATES. A base names a row's
+    # address and the rule above holds it to the capture; the index's pager and the header's link are
+    # the other kind — they name a PAGE — so one that has drifted from the path it was copied from is
+    # a link to the 404 with nothing in this suite to notice it. Read back as the address with the
+    # capture put in again, which is the form the page definitions themselves are in.
+    test "writes no URL of its own that it does not also create a page at", %{site: site} do
+      Provision.ensure!(site)
+      paths = Enum.map(Provision.page_paths(), &String.split(&1, "/", trim: true))
+
+      written =
+        for {where, source} <- templates(site),
+            [_whole, before_it, after_it] <-
+              Regex.scan(~r/"([^"]*)" <> @page\.language <> "([^"]*)"/, source) do
+          address = before_it <> ":" <> Languages.capture() <> after_it
+
+          assert Enum.any?(paths, &List.starts_with?(&1, String.split(address, "/", trim: true))),
+                 "#{where} links #{address}, which is no page this module creates"
+
+          address
+        end
+
+      assert written != [],
+             "no URL was read out of the sample pages, so this asserts nothing of them"
+    end
+
+    # AN ATTRIBUTE A COMPONENT DOES NOT DECLARE IS AN ERROR NOWHERE. `ComponentCompiler` splits what
+    # a page passes by the component's own declarations and sweeps everything else into its global
+    # attr, which the template renders onto its root element — so `lang={@page.language}` handed to a
+    # component declaring no `lang` becomes `lang="fa"` in the public HTML, the helper reading it is
+    # given nil, and the page still draws. A rename in the bundle, or a typo here, is therefore
+    # silent in every other test: a page renders, and does the older thing.
+    #
+    # This is the one place the two halves are held together, and it can only hold the halves in this
+    # checkout — a site that already has the components keeps the ones it has (see the moduledoc of
+    # `MishkaDocument.Provision`).
+    test "hands each component only attributes that component declares", %{site: site} do
+      Provision.ensure!(site)
+
+      declared =
+        Map.new(components(site), fn component ->
+          {component.name, MapSet.new(component.attrs, &attr_name/1)}
+        end)
+
+      for {where, source} <- templates(site) do
+        calls = component_keys(source)
+
+        assert calls != [],
+               "no component call was read out of #{where}, so nothing is asserted of it"
+
+        for {name, given} <- calls, key <- given do
+          assert Map.has_key?(declared, name),
+                 "#{where} draws #{name}, which the bundle does not ship"
+
+          assert MapSet.member?(declared[name], key),
+                 "#{where} hands #{name} an undeclared #{key}, which nothing reads"
+        end
+      end
+    end
+
+    # EVERY COMPONENT THE BUNDLE SHIPS IS REACHABLE FROM A PAGE. A component nobody was given
+    # anywhere to put is a palette entry an author has to discover, which is the state this whole
+    # step exists to end — and a function component is met through the block that draws it, which
+    # is the only place it can be met: it has no query of its own and nothing to say without one.
+    test "puts every component the bundle ships somewhere a reader can meet it", %{site: site} do
+      Provision.ensure!(site)
+
+      on_a_page =
+        for {_where, source} <- templates(site),
+            {name, _given} <- component_calls(source),
+            uniq: true,
+            do: name
+
+      drawn_by_a_block =
+        for component <- bundle_components(),
+            piece <- component["dependencies"],
+            uniq: true,
+            do: piece
+
+      assert Enum.sort(Enum.uniq(on_a_page ++ drawn_by_a_block)) ==
+               Enum.sort(Provision.component_names())
+    end
+
+    test "saves the latest-documents block as a snippet the page editor can offer", %{site: site} do
+      report = Provision.ensure!(site)
+
+      assert report.snippets == [Provision.snippet_name()]
+
+      assert [snippet] = snippets(site)
+      assert snippet.name == Provision.snippet_name()
+      assert snippet.section == :page
+      assert snippet.scope == :shared
+      assert snippet.source =~ "doc-workspace-list"
+    end
+
+    test "takes a site id as well as the record", %{site: site} do
+      report = Provision.ensure!(site.id)
+
+      assert length(report.pages) == length(Provision.page_paths())
+      assert length(components(site)) == length(Provision.component_names())
+    end
+
+    test "says so rather than half-provisioning a site that is not there" do
+      assert_raise ArgumentError, ~r/no site/, fn ->
+        Provision.ensure!(Ash.UUID.generate())
+      end
+    end
+  end
+
+  describe "running it again" do
+    setup %{site: site} do
+      Provision.ensure!(site)
+      :ok
+    end
+
+    test "creates nothing at all, and says every page is already there", %{site: site} do
+      report = Provision.ensure!(site)
+
+      assert %{components: [], pages: [], snippets: []} = report
+      assert Enum.map(report.skipped_pages, & &1.path) == Provision.page_paths()
+
+      assert length(components(site)) == length(Provision.component_names())
+      assert length(pages(site)) == length(Provision.page_paths())
+      assert length(snippets(site)) == 1
+    end
+
+    # THE REASON THE WHOLE MODULE IS WRITTEN THE WAY IT IS. `UiKitHandler.install_kit!/2` upserts, so
+    # a second install of a name the site already has would overwrite the admin's work with the
+    # bundle's copy and say nothing about it.
+    test "keeps an edit an admin made to a component", %{site: site} do
+      before = component(site, "doc-workspace-list")
+
+      {:ok, edited} =
+        Ash.update(before, %{template: ~S(<div id={@id}>mine</div>)},
+          action: :master_update,
+          authorize?: false,
+          tenant: site.id
+        )
+
+      assert Provision.ensure!(site).components == []
+
+      after_second = component(site, "doc-workspace-list")
+      assert after_second.id == edited.id
+      assert after_second.template == ~S(<div id={@id}>mine</div>)
+    end
+
+    test "keeps a page an admin rewrote", %{site: site} do
+      before = page(site, "/:lang/docs")
+
+      {:ok, edited} =
+        Ash.update(before, %{template: ~S(<div>my own documentation index</div>)},
+          action: :master_update,
+          authorize?: false,
+          tenant: site.id
+        )
+
+      assert Provision.ensure!(site).pages == []
+
+      after_second = page(site, "/:lang/docs")
+      assert after_second.id == edited.id
+      assert after_second.template == ~S(<div>my own documentation index</div>)
+    end
+
+    # AND THE ONE CASE WHERE THAT EDIT CAN ACTUALLY BE LOST. Every other case here runs the
+    # installer with nothing missing, where it is never called at all — so `selection:` decides
+    # nothing and could be deleted without a test noticing. A site missing ONE name is where it
+    # decides everything: `install_kit!/2` upserts every component of the bundle it is handed, so
+    # without the selection the four rows that are already there are written over on the way to the
+    # one that is not. A bundle that grows a component, or a row somebody deleted outright, is how a
+    # site gets here.
+    test "installs the one component that is missing and writes over none of the others", %{
+      site: site
+    } do
+      gone = component(site, "doc-toc")
+      mine = component(site, "doc-workspace-list")
+
+      :ok =
+        Ash.destroy!(gone, action: :master_permanent_destroy, authorize?: false, tenant: site.id)
+
+      {:ok, _edited} =
+        Ash.update(mine, %{template: ~S(<div id={@id}>mine</div>)},
+          action: :master_update,
+          authorize?: false,
+          tenant: site.id
+        )
+
+      assert Provision.ensure!(site).components == ["doc-toc"]
+
+      assert component(site, "doc-toc"), "the component that was gone was not installed"
+
+      assert component(site, "doc-workspace-list").template == ~S(<div id={@id}>mine</div>),
+             "the installer wrote the bundle's copy over an edit the admin made"
+    end
+
+    # ARCHIVING IS AN ANSWER, not an absence. The installer skips an archived row rather than
+    # reviving it, so re-offering the name would report an install that did not happen — and the
+    # admin who archived it would find it back in the palette.
+    test "leaves a component the admin archived where they put it", %{site: site} do
+      archived = component(site, "doc-toc")
+      :ok = Ash.destroy!(archived, action: :master_destroy, authorize?: false, tenant: site.id)
+
+      assert Provision.ensure!(site).components == []
+
+      refute component(site, "doc-toc"), "an archived component came back as a new row"
+      assert Enum.any?(archived_components(site), &(&1.name == "doc-toc"))
+    end
+  end
+
+  describe "a path that is not free" do
+    test "is left to whoever holds it, and the rest are still created", %{site: site} do
+      taken = List.last(Provision.page_paths())
+
+      mine =
+        create_page!(
+          site_id: site.id,
+          path: taken,
+          template: ~S(<div>mine</div>)
+        )
+
+      report = Provision.ensure!(site)
+
+      refute taken in report.pages
+      assert length(report.pages) == length(Provision.page_paths()) - 1
+      assert page(site, taken).id == mine.id
+      assert page(site, taken).template == ~S(<div>mine</div>)
+
+      assert [held] = report.skipped_pages
+      assert held.path == taken
+      assert PageProvision.note(held) =~ ~s(its path "#{taken}" is taken)
+    end
+
+    # AN ARCHIVED PAGE COUNTS AS HOLDING ITS PATH, which is stricter than the index: that one is
+    # partial on `(archived_at IS NULL)` and would take the write. A site that took it would hold a
+    # second page at an address it has already used, and the archived one could never come back.
+    test "counts a page the admin archived as holding it", %{site: site} do
+      taken = hd(Provision.page_paths())
+
+      mine = create_page!(site_id: site.id, path: taken, template: ~S(<div>mine</div>))
+      :ok = Ash.destroy!(mine, action: :master_destroy, authorize?: false, tenant: site.id)
+
+      report = Provision.ensure!(site)
+
+      refute taken in report.pages
+      refute page(site, taken)
+    end
+  end
+
+  # THE OTHER IDENTITY A PAGE ROW HAS, and the one no reading of paths can see. Left as a skip, it
+  # cost the site the page a reader starts at: a site holding a page called "Documentation" at an
+  # address of its own never got `/:lang/docs`, and no later run was going to write it while that
+  # name was held. A held name is now answered with the next free one.
+  describe "a name that is not free" do
+    test "is answered with another name, at the address the docs are read at", %{site: site} do
+      mine =
+        create_page!(
+          site_id: site.id,
+          name: "Documentation",
+          path: "/handbook",
+          template: ~S(<div>mine</div>)
+        )
+
+      report = Provision.ensure!(site)
+
+      assert report.pages == Provision.page_paths(),
+             "the definition whose name was taken was left out"
+
+      assert report.snippets == [Provision.snippet_name()],
+             "the run stopped before the snippet"
+
+      assert report.skipped_pages == []
+
+      index = page(site, hd(Provision.page_paths()))
+
+      assert index, "the documentation's index was not created"
+      assert index.name == "documentation-2"
+
+      assert [renamed] = report.renamed_pages
+
+      assert PageProvision.note(renamed) =~ ~s(its name "documentation" is taken),
+             "the admin is not told why their page is called something else"
+
+      assert PageProvision.note(renamed) =~ ~s(so it was created as "documentation-2")
+
+      assert page(site, "/handbook").id == mine.id
+      assert page(site, "/handbook").template == ~S(<div>mine</div>)
+    end
+
+    # THE NAME AS THE ROW CARRIES IT, which is not the name anybody typed: `master_create` slugifies
+    # it, so "DOCUMENTATION" and "Document Page" are these definitions' names too and a comparison of
+    # the literals would miss every one of them.
+    test "counts one the site spelled its own way, and a second run still adds nothing", %{
+      site: site
+    } do
+      create_page!(
+        site_id: site.id,
+        name: "DOCUMENTATION",
+        path: "/handbook",
+        template: ~S(<div>mine</div>)
+      )
+
+      assert Provision.ensure!(site).pages == Provision.page_paths()
+
+      assert %{components: [], pages: [], snippets: [], renamed_pages: []} =
+               Provision.ensure!(site)
+    end
+
+    # AND A RERUN IS NOT A SECOND RENAME. The page is at its own address now, so the PATH is what
+    # holds it — a run reading only the name would write a third copy of the index at an address
+    # that already answers.
+    test "does not write it again under yet another name on the next run", %{site: site} do
+      create_page!(
+        site_id: site.id,
+        name: "Documentation",
+        path: "/handbook",
+        template: ~S(<div>mine</div>)
+      )
+
+      Provision.ensure!(site)
+      report = Provision.ensure!(site)
+
+      assert report.pages == []
+      assert report.renamed_pages == []
+      assert Enum.map(report.skipped_pages, & &1.path) == Provision.page_paths()
+      assert length(pages(site)) == length(Provision.page_paths()) + 1
+    end
+  end
+
+  # REGISTERED HERE RATHER THAN RELIED ON FROM BOOT: `MishkaDocument.Application` starts its plugins
+  # while this suite's Mnesia registry is not up yet — `test/test_helper.exs` starts that after the
+  # applications — so nothing this extension ships is registered by the time a test runs. In
+  # production the registry is up first and boot does this.
+  # `register/0` IS THE PLUGIN'S OWN, and it is an upsert keyed on the plugin name — so this is safe
+  # whether or not the extension's supervisor already registered it at boot. `Event.write/1` is not:
+  # it would leave two rows answering to one key, which is exactly what `Extensions.install/3`
+  # refuses to pretend is one install.
+  defp listening! do
+    {:ok, _registered} = Installer.register()
+    :ok = EventHandler.do_compile(@event, :start, false)
+    :ok
+  end
+
+  describe "the snippet" do
+    # `Snippet`'s `unique_name_per_scope` is `[:name, :site_id, :section, :document_id]` with
+    # `nils_distinct? false`, so a snippet an author saved out of ONE page's editor under this name
+    # holds a different key entirely — the shared one this block needs is still free. Counting it
+    # would leave the site with nothing to drop into a page and report `snippets: []` as though it
+    # had it.
+    test "is still created beside one an author saved under the same name on a page", %{
+      site: site
+    } do
+      page = create_page!(site_id: site.id, path: "/keeper", template: ~S(<div>mine</div>))
+
+      Snippet
+      |> Ash.Changeset.for_create(
+        :master_create,
+        %{
+          name: Provision.snippet_name(),
+          source: ~S(<div>mine</div>),
+          section: :page,
+          scope: :page,
+          document_id: page.id,
+          site_id: site.id
+        },
+        authorize?: false
+      )
+      |> Ash.create!()
+
+      assert Provision.ensure!(site).snippets == [Provision.snippet_name()]
+
+      assert [shared] = Enum.filter(snippets(site), &is_nil(&1.document_id))
+      assert shared.scope == :shared
+      assert shared.source =~ "doc-workspace-list"
+    end
+  end
+
+  # A PLUGIN THE SUPERVISOR DOES NOT START NEVER REGISTERS, so the event it declares reaches it
+  # nowhere and a created site is given nothing. Every case below registers it by hand, for the
+  # reason `listening!/1` gives — which leaves this as the only assertion that the boot path names it
+  # at all.
+  describe "the plugin" do
+    test "is one of the plugins this extension's supervisor starts" do
+      assert Installer in MishkaDocument.Application.plugins()
+    end
+  end
+
+  describe "installing on request" do
+    setup do: listening!()
+
+    # THE EVENT IS THE ONLY DOOR. Core never names this module; it fires the event and whichever
+    # plugin answers to the key does the work — which is what makes a second extension nothing more
+    # than a second plugin.
+    test "gives the site everything when the installer names this extension", %{site: site} do
+      assert {:ok, report} = Extensions.install(site.id, "mishka_document")
+
+      assert length(components(site)) == length(Provision.component_names())
+      assert Enum.sort(Enum.map(pages(site), & &1.path)) == Enum.sort(Provision.page_paths())
+      assert length(snippets(site)) == 1
+      assert report.pages != []
+    end
+
+    # EVERY PLUGIN ON THE EVENT SEES EVERY CALL, so answering to somebody else's key would install
+    # the documentation when the operator asked for the shop.
+    test "does nothing at all when the installer names another extension", %{site: site} do
+      assert {:error, :no_plugin_answered} = Extensions.install(site.id, "mishka_shop")
+
+      assert components(site) == []
+      assert pages(site) == []
+      assert snippets(site) == []
+    end
+
+    test "is offered by the installer's own registry, with the label it declared" do
+      assert entry = Enum.find(Extensions.offered(), &(&1.key == "mishka_document"))
+
+      assert entry.label == "Documentation"
+      assert entry.app == :mishka_document
+      assert entry.plugin == Installer
+      assert entry.fields == []
+    end
+
+    # A SITE IS NEVER SET UP BEHIND SOMEBODY'S BACK. Creating one used to queue this work; it does
+    # not any more, and a site added to a running CMS waits to be asked.
+    test "is not what creating a site does" do
+      name = "untoucheddocs#{System.unique_integer([:positive])}"
+      site = create_site!(name: name, host: "#{name}.test", active: true)
+
+      assert components(site) == []
+      assert pages(site) == []
+      assert snippets(site) == []
+    end
+  end
+
+  describe "the mark its pages carry" do
+    test "says this extension gave the site the page, at the bundle's version", %{site: site} do
+      MishkaDocument.Provision.ensure!(site.id)
+
+      pages = provisioned_pages(site.id)
+
+      assert pages != [], "the run wrote no pages to check"
+
+      for page <- pages do
+        assert MishkaCmsCore.Runtime.PageProvision.ours?(page, :mishka_document),
+               "#{page.path} carries no mark saying who gave it to the site"
+
+        assert MishkaCmsCore.Runtime.PageProvision.provisioned_version(page) ==
+                 MishkaDocument.Provision.bundle_version()
+      end
+    end
+  end
+
+  defp provisioned_pages(site_id) do
+    paths = MishkaDocument.Provision.page_paths()
+
+    MishkaCmsCore.Runtime.Page
+    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+    |> Ash.Query.filter(site_id == ^site_id)
+    |> Ash.read!(authorize?: false, page: [limit: 100])
+    |> Map.fetch!(:results)
+    |> Enum.filter(&(&1.path in paths))
+  end
+
+  # A SITE FOUND ALREADY SET UP is recorded without a run, so the names a run would have created
+  # come from the answer to "is it already here?".
+  describe "a site found already set up" do
+    test "gets the documentation's permission names it is missing", %{site: site} do
+      assert {:ok, _report} = Extensions.install(site.id, "mishka_document")
+      names = Enum.map(Provision.manifest().permissions, &elem(&1, 0))
+
+      MishkaCmsCore.Accounts.Permission
+      |> Ash.Query.filter(name in ^names)
+      |> Ash.read!(authorize?: false, page: false)
+      |> Enum.each(&Ash.destroy!(&1, authorize?: false))
+
+      {:ok, _} = MishkaCmsCore.Settings.put("mishka_document.installed", "", site_id: site.id)
+      assert stored_permissions(names) == []
+
+      assert Extensions.installed?(site.id, :mishka_document)
+      assert Enum.sort(stored_permissions(names)) == Enum.sort(names)
+    end
+  end
+
+  defp stored_permissions(names) do
+    MishkaCmsCore.Accounts.Permission
+    |> Ash.Query.filter(name in ^names)
+    |> Ash.read!(authorize?: false, page: false)
+    |> Enum.map(& &1.name)
+  end
+end

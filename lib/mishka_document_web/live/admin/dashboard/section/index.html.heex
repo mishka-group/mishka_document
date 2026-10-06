@@ -1,0 +1,526 @@
+<div>
+  <div>
+    <.link
+      navigate={path(@socket, "/admin/dashboard/document")}
+      class="inline-flex items-center gap-[7px] mb-[18px] text-[12.5px] font-semibold text-[#8a877f] transition-colors hover:text-[#1b1a18]"
+    >
+      <.icon name="hero-chevron-left" class="size-[15px] rtl:rotate-180" /> {gettext(
+        "Back to Dashboard"
+      )}
+    </.link>
+
+    <div
+      data-role="wshead"
+      class="mb-[22px] flex items-start justify-between gap-7 rounded-[20px] border border-[#ecebe6] bg-white px-[26px] py-6 shadow-[0_1px_2px_rgba(30,28,24,0.04)] max-[560px]:flex-col! max-[560px]:items-start! max-[560px]:gap-[18px]!"
+    >
+      <%= cond do %>
+        <% @workspace_loading.loading -> %>
+          <div class="w-full animate-pulse">
+            <div class="flex items-start justify-between gap-7 max-[560px]:flex-col!">
+              <div class="min-w-0 flex-1">
+                <div class="h-7 w-[42%] rounded bg-[#eeedea]"></div>
+                <div class="mt-3 h-3 w-[26%] rounded bg-[#f2f1ee]"></div>
+                <div class="mt-4 h-3 w-[72%] rounded bg-[#f2f1ee]"></div>
+                <div class="mt-2 h-3 w-[54%] rounded bg-[#f2f1ee]"></div>
+                <div class="mt-4 flex gap-2">
+                  <div class="h-6 w-[120px] rounded-lg bg-[#f2f1ee]"></div>
+                  <div class="h-6 w-[130px] rounded-lg bg-[#f2f1ee]"></div>
+                </div>
+              </div>
+              <div class="h-[86px] w-[300px] flex-none rounded-2xl bg-[#eeedea] max-[560px]:w-full!">
+              </div>
+            </div>
+          </div>
+        <% @workspace_loading.failed -> %>
+          <div class="w-full py-6 text-center">
+            <.icon name="hero-exclamation-triangle" class="mx-auto size-9 text-[#d5544b]" />
+            <p class="mt-3 text-[13px] font-semibold text-[#b3433a]">
+              {gettext("Failed to load workspace information.")}
+            </p>
+          </div>
+        <% @workspace == nil -> %>
+          <div class="w-full py-6 text-center">
+            <.icon name="hero-folder-open" class="mx-auto size-9 text-[#c3c0b8]" />
+            <p class="mt-3 text-[13px] font-semibold text-[#8a877f]">
+              {gettext("Workspace not found.")}
+            </p>
+          </div>
+        <% true -> %>
+          <% {status_pill, status_dot} =
+            case status_color(@workspace.status) do
+              "bg-green" <> _ -> {"bg-[#e6f6ee] text-[#177a53]", "bg-[#1f9d6b]"}
+              "bg-yellow" <> _ -> {"bg-[#fbf1df] text-[#a5691a]", "bg-[#cf8a24]"}
+              _ -> {"bg-[#f2f1ec] text-[#6d6a63]", "bg-[#a8a5a0]"}
+            end %>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-[11px]">
+              <h1 class="m-0 font-['Newsreader'] text-[27px] font-medium leading-[1.05] tracking-[-0.01em] text-[#17161a]">
+                {@workspace.name}
+              </h1>
+              <span class={[
+                "inline-flex items-center gap-1.5 rounded-[20px] px-[11px] py-1 text-[10.5px] font-bold",
+                status_pill
+              ]}>
+                <span class={["size-1.5 animate-pulse rounded-full", status_dot]}></span>
+                {DocumentCard.status_label(@workspace)}
+              </span>
+            </div>
+
+            <div
+              dir="ltr"
+              class="mt-1.5 font-['Space_Grotesk'] text-[12.5px] font-semibold text-[#a8a5a0] rtl:text-right"
+            >
+              /{@workspace.slug}
+            </div>
+
+            <p
+              :if={@workspace.description}
+              class="mt-3 max-w-[560px] text-[13.5px] font-medium leading-[1.55] text-[#6d6a63]"
+            >
+              {@workspace.description}
+            </p>
+
+            <div class="mt-3.5 flex flex-wrap items-center gap-2">
+              <span
+                :if={@master_user? && present?(@workspace.site)}
+                class="inline-flex items-center gap-1.5 rounded-lg border border-[#e4e2f7] bg-[#f2f1fc] px-2.5 py-[5px] text-[11.5px] font-semibold text-[#4f4bcc]"
+              >
+                <.icon name="hero-globe-alt" class="size-[13px]" />
+                {@workspace.site.name || gettext("Unknown Site")}
+              </span>
+              <span class="inline-flex items-center gap-1.5 rounded-lg border border-[#eceae4] bg-[#f6f5f2] px-2.5 py-[5px] text-[11.5px] font-semibold text-[#8a877f]">
+                <.icon name="hero-clock" class="size-[13px]" />
+                {gettext("Updated %{date}",
+                  date:
+                    Calendar.strftime(@workspace.updated_at, "%b %d, %Y",
+                      abbreviated_month_names: &DocumentSection.short_month_name/1
+                    )
+                )}
+              </span>
+            </div>
+          </div>
+
+          <div
+            data-role="wshealth"
+            data-accent-panel
+            class="flex flex-none rounded-2xl bg-[linear-gradient(135deg,#1f1e22,#17161a)] px-1 py-1.5 [[data-theme=dark]_&]:[filter:invert(1)_hue-rotate(180deg)] max-[560px]:w-full!"
+          >
+            <div class="px-[22px] py-3.5 text-center max-[560px]:flex-1!">
+              <div class="font-['Space_Grotesk'] text-[26px] font-semibold leading-none tracking-[-0.03em] text-white">
+                {@workspace.health_metrics[:sections_count] || 0}
+              </div>
+              <div class="mt-1.5 text-[10.5px] font-medium text-[#9795a0]">
+                {gettext("Sections")}
+              </div>
+            </div>
+            <div class="border-s border-white/10 px-[22px] py-3.5 text-center max-[560px]:flex-1!">
+              <div class="font-['Space_Grotesk'] text-[26px] font-semibold leading-none tracking-[-0.03em] text-white">
+                {@workspace.maintainers_info["count"] || 0}
+              </div>
+              <div class="mt-1.5 text-[10.5px] font-medium text-[#9795a0]">
+                {gettext("Maintainers")}
+              </div>
+            </div>
+            <div class="border-s border-white/10 px-[22px] py-3.5 text-center max-[560px]:flex-1!">
+              <div class="flex items-baseline justify-center gap-0.5">
+                <span class="font-['Space_Grotesk'] text-[26px] font-semibold leading-none tracking-[-0.03em] text-[#e6c477]">
+                  {@workspace.health_metrics[:completion] || 0}
+                </span>
+                <span class="font-['Space_Grotesk'] text-[13px] font-semibold text-[#e6c477]">
+                  %
+                </span>
+              </div>
+              <div class="mt-1.5 text-[10.5px] font-medium text-[#9795a0]">
+                {gettext("Complete")}
+              </div>
+            </div>
+          </div>
+      <% end %>
+    </div>
+
+    <.modal :if={@selected_version_id} id="section-form-modal">
+      <.live_component
+        module={MishkaGervaz.Form.Web.Live}
+        id={MishkaGervaz.Resource.Info.Form.component_id(MishkaDocument.Section)}
+        resource={MishkaDocument.Section}
+        current_user={@current_user}
+        defaults={
+          %{
+            workspace_version_id: @selected_version_id,
+            workspace: @workspace_id,
+            site_id: @workspace && @workspace.site_id
+          }
+        }
+      />
+    </.modal>
+
+    <.modal
+      :if={@show_note_form && @note_section_id}
+      id="note-form-modal"
+      show
+      on_cancel={JS.push("cancel_note_form")}
+    >
+      <h3 class="mb-3 text-[15px] font-bold text-[#17161a]">
+        {if @editing_note_id, do: gettext("Edit Note"), else: gettext("New Note")}
+      </h3>
+
+      <.live_component
+        module={MishkaGervaz.Form.Web.Live}
+        id={MishkaGervaz.Resource.Info.Form.component_id(MishkaDocument.Note)}
+        resource={MishkaDocument.Note}
+        current_user={@current_user}
+        record_id={@editing_note_id}
+        defaults={%{section_id: @note_section_id, site_id: @workspace && @workspace.site_id}}
+      />
+    </.modal>
+
+    <div
+      :if={is_nil(@selected_version) && !@workspace_loading.loading && @workspace}
+      class="mb-[22px] rounded-[14px] border border-[#f0e2c4] bg-[#fbf1df] px-4 py-3.5 text-[12.5px] font-medium text-[#a5691a]"
+    >
+      <div class="flex items-start gap-2.5">
+        <.icon name="hero-exclamation-triangle" class="mt-px size-[15px] flex-none" />
+        <div>
+          <span class="font-bold">{gettext("No versions found")}</span>
+          <%= if @workspace_admin? do %>
+            {gettext("— Create a workspace version first before adding sections.")}
+            <.link
+              id="section-no-version-link"
+              navigate={
+                path(@socket, "/admin/dashboard/document/workspace-version/#{@workspace.id}")
+              }
+              class="font-semibold underline hover:no-underline"
+            >
+              {gettext("Go to versions page")}
+            </.link>
+          <% else %>
+            {gettext(
+              "— A workspace admin has to add a version before sections can be written here."
+            )}
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <.live_component
+      :if={@selected_version_id && @url_state}
+      module={MishkaGervaz.Table.Web.Live}
+      id="sections-table"
+      resource={MishkaDocument.Section}
+      current_user={@current_user}
+      url_state={@url_state}
+    >
+      <%!-- The card template draws this button itself through its own `:leading` slot; the plain
+            table has no such notion, so the page hands it over as a filter action and gervaz seats
+            it at the head of the toolbar row. --%>
+      <:filter_actions>
+        <button
+          type="button"
+          phx-click={MishkaCmsCore.CoreComponents.show_modal("section-form-modal")}
+          class="inline-flex h-[42px] items-center gap-2 rounded-xl bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-4 text-[12.5px] font-bold text-white shadow-[0_5px_14px_rgba(79,75,204,0.28)] transition-opacity hover:opacity-95"
+        >
+          <.icon name="hero-plus" class="size-4" />
+          {dgettext("mishka_gervaz", "Add Section")}
+        </button>
+      </:filter_actions>
+
+      <:rail>
+        <div class="rounded-2xl border border-[#ecebe6] bg-white p-[18px] shadow-[0_1px_2px_rgba(30,28,24,0.04)]">
+          <div class="mb-3.5 flex items-center gap-2">
+            <.icon name="hero-shield-check" class="size-[15px] text-[#5b57d6]" />
+            <span class="text-[13px] font-bold text-[#1b1a18]">{gettext("Software Info")}</span>
+          </div>
+
+          <%= if @workspace do %>
+            <% versions = get_versions(@workspace, @master_user?) %>
+            <div :if={versions != []} class="mb-4">
+              <label class="block text-[10px] font-bold uppercase tracking-[0.05em] text-[#a8a5a0]">
+                {gettext("Current version")}
+              </label>
+              <form id="section-version-form" phx-change="change_version">
+                <select
+                  name="version_id"
+                  class="mt-[7px] h-10 w-full cursor-pointer rounded-[10px] border border-[#ecebe6] bg-[#faf9f6] px-3 text-[12.5px] font-semibold text-[#3a382f] outline-none"
+                >
+                  <option
+                    :for={version <- versions}
+                    value={version.id}
+                    selected={version.id == @selected_version_id}
+                  >
+                    v{version.version_number}
+                    <%= if version.version_name do %>
+                      - {version.version_name}
+                    <% end %>
+                    <%= cond do %>
+                      <% version.is_latest_for_version -> %>
+                        {gettext("(latest)")}
+                      <% version.status == :stable -> %>
+                        {gettext("(stable)")}
+                      <% true -> %>
+                        ({version_status_label(version.status)})
+                    <% end %>
+                  </option>
+                </select>
+              </form>
+            </div>
+
+            <div class="mb-4">
+              <label class="block text-[10px] font-bold uppercase tracking-[0.05em] text-[#a8a5a0]">
+                {gettext("All versions")}
+              </label>
+              <p
+                :if={versions == []}
+                class="mt-[7px] text-[11.5px] font-medium text-[#a8a5a0]"
+              >
+                {gettext("No versions yet")}
+              </p>
+              <%!-- The versions page is the workspace area's: for anyone else the chips name the
+                    versions without leading there. --%>
+              <div :if={versions != []} class="mt-[9px] flex flex-wrap items-center gap-[7px]">
+                <%= for version <- Enum.take(versions, 5) do %>
+                  <.link
+                    :if={@workspace_admin?}
+                    navigate={
+                      path(
+                        @socket,
+                        "/admin/dashboard/document/workspace-version/#{@workspace.id}"
+                      )
+                    }
+                    title={gettext("ID: %{id}", id: version.id)}
+                    class={[
+                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-[5px] font-['Space_Grotesk'] text-[11px] font-bold transition-colors",
+                      (version.id == @selected_version_id &&
+                         "border-[#e4e2f7] bg-[#f2f1fc] text-[#4f4bcc]") ||
+                        "border-[#eceae4] bg-[#f6f5f2] text-[#6d6a63] hover:border-[#e4e2f7]"
+                    ]}
+                  >
+                    {version.version_number}
+                    <span :if={version.is_latest_for_version} class="text-[9px] text-[#177a53]">
+                      {gettext("latest")}
+                    </span>
+                  </.link>
+                  <span
+                    :if={!@workspace_admin?}
+                    title={gettext("ID: %{id}", id: version.id)}
+                    class={[
+                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-[5px] font-['Space_Grotesk'] text-[11px] font-bold",
+                      (version.id == @selected_version_id &&
+                         "border-[#e4e2f7] bg-[#f2f1fc] text-[#4f4bcc]") ||
+                        "border-[#eceae4] bg-[#f6f5f2] text-[#6d6a63]"
+                    ]}
+                  >
+                    {version.version_number}
+                    <span :if={version.is_latest_for_version} class="text-[9px] text-[#177a53]">
+                      {gettext("latest")}
+                    </span>
+                  </span>
+                <% end %>
+                <.link
+                  :if={@workspace_admin? && length(versions) > 5}
+                  navigate={
+                    path(@socket, "/admin/dashboard/document/workspace-version/#{@workspace.id}")
+                  }
+                  class="px-1 py-[5px] text-[11px] font-semibold text-[#a8a5a0] transition-colors hover:text-[#4f4bcc]"
+                >
+                  {gettext("+%{count} more", count: length(versions) - 5)}
+                </.link>
+                <span
+                  :if={!@workspace_admin? && length(versions) > 5}
+                  class="px-1 py-[5px] text-[11px] font-semibold text-[#a8a5a0]"
+                >
+                  {gettext("+%{count} more", count: length(versions) - 5)}
+                </span>
+              </div>
+            </div>
+          <% end %>
+
+          <div class="flex flex-col gap-2">
+            <.link
+              :if={@selected_version_id}
+              navigate={
+                path(
+                  @socket,
+                  "/admin/dashboard/document/section-drafts?section_drafts_filter_workspace_version_id=#{@selected_version_id}&return_to=#{@selected_version_id}"
+                )
+              }
+              class="flex h-10 items-center justify-center gap-2 rounded-[11px] border border-[#dcdbf5] bg-[#f2f1fc] text-[12px] font-bold text-[#4f4bcc] transition-colors hover:bg-[#e9e7fb]"
+            >
+              <.icon name="hero-document-duplicate" class="size-3.5" /> {gettext("Section Drafts")}
+            </.link>
+
+            <.link
+              :if={@selected_version_id}
+              navigate={
+                path(
+                  @socket,
+                  "/admin/dashboard/document/note-drafts?note_drafts_filter_workspace_version_id=#{@selected_version_id}&return_to=#{@selected_version_id}"
+                )
+              }
+              class="flex h-10 items-center justify-center gap-2 rounded-[11px] border border-[#f0e3c9] bg-[#fdf7ea] text-[12px] font-bold text-[#a5691a] transition-colors hover:bg-[#faf0d9]"
+            >
+              <.icon name="hero-document-text" class="size-3.5" /> {gettext("Note Drafts")}
+            </.link>
+          </div>
+        </div>
+
+        <div
+          :if={@workspace && @master_user? && present?(@workspace.site)}
+          class="rounded-2xl border border-[#ecebe6] bg-white p-[18px] shadow-[0_1px_2px_rgba(30,28,24,0.04)]"
+        >
+          <div class="mb-3.5 flex items-center gap-2">
+            <.icon name="hero-building-office-2" class="size-[15px] text-[#5b57d6]" />
+            <span class="text-[13px] font-bold text-[#1b1a18]">{gettext("Site Information")}</span>
+          </div>
+
+          <% {site_status_pill, site_status_dot} =
+            case status_color(@workspace.status) do
+              "bg-green" <> _ -> {"bg-[#e6f6ee] text-[#177a53]", "bg-[#1f9d6b]"}
+              "bg-yellow" <> _ -> {"bg-[#fbf1df] text-[#a5691a]", "bg-[#cf8a24]"}
+              _ -> {"bg-[#f2f1ec] text-[#6d6a63]", "bg-[#a8a5a0]"}
+            end %>
+
+          <div class="flex flex-col gap-3">
+            <div>
+              <div class="text-[10px] font-bold uppercase tracking-[0.05em] text-[#a8a5a0]">
+                {gettext("Site name")}
+              </div>
+              <div class="mt-[3px] font-['Space_Grotesk'] text-[12.5px] font-semibold text-[#1b1a18]">
+                {@workspace.site.name || gettext("Unknown")}
+              </div>
+            </div>
+            <div>
+              <div class="text-[10px] font-bold uppercase tracking-[0.05em] text-[#a8a5a0]">
+                {gettext("Workspace slug")}
+              </div>
+              <div
+                dir="ltr"
+                class="mt-[3px] font-['Space_Grotesk'] text-[12.5px] font-semibold text-[#1b1a18] rtl:text-right"
+              >
+                /{@workspace.slug}
+              </div>
+            </div>
+            <div>
+              <div class="text-[10px] font-bold uppercase tracking-[0.05em] text-[#a8a5a0]">
+                {gettext("Status")}
+              </div>
+              <div class="mt-[5px]">
+                <span class={[
+                  "inline-flex items-center gap-1.5 rounded-[20px] px-[11px] py-1 text-[10.5px] font-bold",
+                  site_status_pill
+                ]}>
+                  <span class={["size-1.5 rounded-full", site_status_dot]}></span>
+                  {DocumentCard.status_label(@workspace)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          :if={@workspace}
+          class="rounded-2xl border border-[#ecebe6] bg-white p-[18px] shadow-[0_1px_2px_rgba(30,28,24,0.04)]"
+        >
+          <div class="mb-3.5 flex items-center gap-2">
+            <.icon name="hero-user-group" class="size-[15px] text-[#5b57d6]" />
+            <span class="text-[13px] font-bold text-[#1b1a18]">{gettext("Maintainers")}</span>
+          </div>
+
+          <% maintainers = get_maintainers(@workspace) %>
+
+          <div
+            :if={maintainers == []}
+            class="flex flex-col items-center pb-1.5 pt-3.5 text-center"
+          >
+            <span class="mb-2.5 grid size-10 place-items-center rounded-xl bg-[#f4f3ee] text-[#c3c0b8]">
+              <.icon name="hero-user-group" class="size-5" />
+            </span>
+            <span class="text-[12px] font-semibold text-[#a8a5a0]">
+              {gettext("No maintainers assigned")}
+            </span>
+          </div>
+
+          <div :if={maintainers != []} class="flex flex-col gap-2">
+            <div
+              :for={maintainer <- Enum.take(maintainers, 8)}
+              class="flex items-center gap-2.5 rounded-[10px] border border-[#f0efea] bg-white px-2.5 py-2"
+            >
+              <span class="grid size-8 flex-none place-items-center rounded-[9px] bg-[#f2f1fc] text-[#8985d8]">
+                <.icon name="hero-envelope" class="size-[15px]" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <div
+                  id={"maintainer-#{maintainer["user_id"]}"}
+                  class="truncate text-[12px] font-semibold text-[#1b1a18]"
+                >
+                  {maintainer["name"]}
+                </div>
+                <div
+                  :if={maintainer["role"]}
+                  class="mt-0.5 text-[10.5px] font-medium text-[#a8a5a0]"
+                >
+                  {maintainer["role"]}
+                </div>
+              </div>
+            </div>
+            <p
+              :if={length(maintainers) > 8}
+              class="pt-0.5 text-[11px] font-semibold text-[#a8a5a0]"
+            >
+              {gettext("+%{count} more", count: length(maintainers) - 8)}
+            </p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-[#ecebe6] bg-white p-[18px] shadow-[0_1px_2px_rgba(30,28,24,0.04)]">
+          <div class="mb-3.5 flex items-center gap-2">
+            <.icon name="hero-clock" class="size-[15px] text-[#5b57d6]" />
+            <span class="text-[13px] font-bold text-[#1b1a18]">{gettext("Recent Activity")}</span>
+          </div>
+
+          <%= cond do %>
+            <% @activity_logs_loading.loading -> %>
+              <div class="flex items-center justify-center gap-2 py-3">
+                <span class="size-4 animate-spin rounded-full border-2 border-[#eeedfb] border-t-[#5b57d6]"></span>
+                <span class="text-[11.5px] font-medium text-[#a8a5a0]">
+                  {gettext("Loading activity...")}
+                </span>
+              </div>
+            <% @activity_logs_loading.failed -> %>
+              <p class="py-2 text-[11.5px] font-medium text-[#b3433a]">
+                {gettext("Failed to load activity logs")}
+              </p>
+            <% @activity_logs == [] -> %>
+              <p class="py-2 text-[11.5px] font-medium text-[#a8a5a0]">
+                {gettext("No recent activity")}
+              </p>
+            <% true -> %>
+              <div class="flex flex-col gap-2">
+                <div
+                  :for={event <- @activity_logs}
+                  class="flex items-center gap-2.5 rounded-[10px] border border-[#f0efea] bg-white px-3 py-2.5"
+                >
+                  <span class={[
+                    "flex-none rounded-md px-2 py-[3px] text-[9.5px] font-bold uppercase tracking-[0.03em]",
+                    action_type_color(event.action_type)
+                  ]}>
+                    {action_type_label(event.action_type)}
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate text-[12px] font-bold text-[#1b1a18]">
+                      {get_event_title(event)}
+                    </div>
+                    <div class="mt-0.5 text-[10.5px] font-medium text-[#a8a5a0]">
+                      <span id={"workspace-activity-actor-#{event.id}"}>
+                        {MishkaDocument.EventLog.actor_label(event)}
+                      </span>
+                      · {Calendar.strftime(event.occurred_at, "%m/%d %H:%M")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+          <% end %>
+        </div>
+      </:rail>
+    </.live_component>
+  </div>
+</div>

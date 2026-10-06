@@ -1,0 +1,76 @@
+<div>
+  <div>
+    <.link
+      navigate={path(@socket, "/admin/dashboard/document")}
+      class="mb-[18px] inline-flex items-center gap-[7px] text-[12.5px] font-semibold text-[#8a877f] transition-colors hover:text-[#1b1a18]"
+    >
+      <.icon name="hero-chevron-left" class="size-[15px] rtl:rotate-180" /> {gettext(
+        "Back to Document Dashboard"
+      )}
+    </.link>
+
+    <div
+      data-role="iss-head"
+      class="mb-[22px] flex flex-wrap items-start justify-between gap-6 max-[560px]:flex-col! max-[560px]:items-start!"
+    >
+      <div>
+        <div class="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[#5b57d6]">
+          {gettext("Documentation")}
+        </div>
+        <h1 class="m-0 font-['Newsreader'] text-[32px] font-medium leading-[1.05] tracking-[-0.01em] text-[#17161a]">
+          {gettext("Issues")}
+        </h1>
+        <div class="mt-2 text-[13.5px] font-medium text-[#7c7a75]">
+          {gettext("Track and manage documentation issues.")}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        id="add-issue-btn"
+        phx-click={show_modal("issue-form-modal")}
+        class="inline-flex h-[42px] items-center gap-2 rounded-xl bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-[17px] text-[12.5px] font-bold text-white shadow-[0_5px_14px_rgba(79,75,204,0.28)] transition-opacity hover:opacity-95"
+      >
+        <.icon name="hero-plus" class="size-4" /> {gettext("Add Issue")}
+      </button>
+    </div>
+
+    <.live_component
+      :if={@url_state}
+      module={MishkaGervaz.Table.Web.Live}
+      id="issues-table"
+      resource={MishkaDocument.Issue}
+      current_user={@current_user}
+      url_state={@url_state}
+    />
+
+    <.modal id="issue-form-modal">
+      <.live_component
+        module={MishkaGervaz.Form.Web.Live}
+        id="issue_form"
+        resource={MishkaDocument.Issue}
+        current_user={@current_user}
+      />
+    </.modal>
+
+    <.modal
+      :if={@show_comment_form && @comment_form_issue}
+      id="issue-comment-form-modal"
+      show
+      on_cancel={JS.push("cancel_comment_form")}
+    >
+      <h3 class="mb-3 text-[15px] font-bold text-[#17161a]">
+        {if @editing_comment_id, do: gettext("Edit Comment"), else: gettext("Add Comment")}
+      </h3>
+
+      <.live_component
+        module={MishkaGervaz.Form.Web.Live}
+        id={MishkaGervaz.Resource.Info.Form.component_id(MishkaDocument.IssueComment)}
+        resource={MishkaDocument.IssueComment}
+        current_user={@current_user}
+        record_id={@editing_comment_id}
+        defaults={%{issue_id: @comment_form_issue.id, site_id: @comment_form_issue.site_id}}
+      />
+    </.modal>
+  </div>
+</div>
