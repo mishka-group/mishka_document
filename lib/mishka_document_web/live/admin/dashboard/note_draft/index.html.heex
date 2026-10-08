@@ -40,7 +40,8 @@
     <:filter_actions>
       <button
         type="button"
-        phx-click={show_modal("note-draft-form-modal")}
+        id="add-note-draft-btn"
+        phx-click={show_form_modal("note-draft-form-modal", MishkaDocument.NoteDraft)}
         class="inline-flex h-[42px] items-center gap-2 rounded-xl bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-4 text-[12.5px] font-bold text-white shadow-[0_5px_14px_rgba(79,75,204,0.28)] transition-opacity hover:opacity-95"
       >
         <.icon name="hero-plus" class="size-4" /> {gettext("Add Note Draft")}

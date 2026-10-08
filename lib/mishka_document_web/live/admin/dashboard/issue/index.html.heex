@@ -28,7 +28,7 @@
       <button
         type="button"
         id="add-issue-btn"
-        phx-click={show_modal("issue-form-modal")}
+        phx-click={show_form_modal("issue-form-modal", MishkaDocument.Issue)}
         class="inline-flex h-[42px] items-center gap-2 rounded-xl bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-[17px] text-[12.5px] font-bold text-white shadow-[0_5px_14px_rgba(79,75,204,0.28)] transition-opacity hover:opacity-95"
       >
         <.icon name="hero-plus" class="size-4" /> {gettext("Add Issue")}
