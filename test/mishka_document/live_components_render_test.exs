@@ -1315,6 +1315,61 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
                ["note-#{first.id}", "note-#{second.id}"]
     end
 
+    # WHAT THE CONTENT EDITOR STORES: a placed component's marker in a paragraph of its own. The page
+    # draws it as the component, in the body and in a note, and the marker itself never shows.
+    test "draws a component placed in the page's body or in a note as that component", %{
+      site: site
+    } do
+      callout =
+        create_component!(
+          name: "doc-callout-#{System.unique_integer([:positive])}",
+          site_id: site.id,
+          active: true,
+          precompile: false,
+          template:
+            ~S|<aside data-role="probe-callout" data-title={@title}>{render_slot(@inner_block)}</aside>|,
+          attrs: [
+            %{"name" => "title", "type" => "string", "opts" => %{"default" => nil}},
+            %{"name" => "rest", "type" => "global", "opts" => %{}}
+          ],
+          slots: [%{"name" => "inner_block", "opts" => %{}}]
+        )
+
+      :ok = SiteState.put_component(site.id, callout.name)
+
+      %{version: version} = manual!(site)
+
+      page =
+        page!(site, version,
+          title: "Widgets",
+          slug: "widgets",
+          order_position: 4,
+          content:
+            ~s(<h2>Widgets</h2><p>[[component #{callout.name} title="In the body"]]Body inner[[/component]]</p>)
+        )
+
+      note!(site, page,
+        title: "A note",
+        content:
+          ~s(<p>Before</p><p>[[component #{callout.name} title="In a note"]]Note inner[[/component]]</p>)
+      )
+
+      {:ok, view, html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "widgets"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-section-body"] [data-role="probe-callout"])) ==
+               ["Body inner"]
+
+      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="probe-callout"])) ==
+               ["Note inner"]
+
+      assert text_of(view, ~s([data-role="doc-note-body"] p)) == ["Before"]
+      refute html =~ "[[component"
+    end
+
     test "and leaves them out when the author turned them off", %{site: site} do
       %{pages: pages} = manual!(site)
       note!(site, Enum.find(pages, &(&1.slug == "installation")), title: "A note")

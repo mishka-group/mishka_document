@@ -880,6 +880,10 @@ defmodule MishkaDocument.SectionDraft do
             label fn -> dgettext("mishka_gervaz", "Content") end
             placeholder fn -> dgettext("mishka_gervaz", "Section content...") end
             rows 4
+
+            # The rich-text editor, with components placed as blocks; their markers are what is
+            # stored. `MishkaCmsCoreWeb.UIAdapters.Admin.textarea/1` is what reads this.
+            extra %{content_editor: true}
           end
         end
 
@@ -1045,6 +1049,12 @@ defmodule MishkaDocument.SectionDraft do
             columns 1
           end
         end
+      end
+
+      # For `textarea/1` only — the adapter falls back to Tailwind for everything else. It is what
+      # turns the `content` field's `extra %{content_editor: true}` into the editor.
+      presentation do
+        ui_adapter MishkaCmsCoreWeb.UIAdapters.Admin
       end
 
       hooks do

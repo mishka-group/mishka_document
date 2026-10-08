@@ -657,6 +657,62 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
     end
   end
 
+  # THE CONTENT EDITOR (`extra %{content_editor: true}`, drawn by
+  # `MishkaCmsCoreWeb.UIAdapters.Admin.textarea/1`): a note's and a page's text, and their drafts', is
+  # HTML written in it, with components placed as markers the document kit draws.
+  describe "the content editor" do
+    test "is the content field of a note, a section and their drafts", ctx do
+      forms = [
+        {Note, "#{@dashboard}/sections/#{ctx.version.id}", &add_note(&1, ctx.section)},
+        {Section, "#{@dashboard}/sections/#{ctx.version.id}", & &1},
+        {NoteDraft, "#{@dashboard}/note-drafts", & &1},
+        {SectionDraft, "#{@dashboard}/section-drafts", & &1}
+      ]
+
+      for {resource, path, reach} <- forms do
+        form = FormInfo.component_id(resource)
+        view = ctx.master_conn |> open(path) |> reach.()
+        editor = "#{form}-form_content-editor"
+
+        assert has_element?(
+                 view,
+                 "##{editor}-surface[phx-hook=ContentEditor][phx-update=ignore][data-format=html]"
+               ),
+               "#{inspect(resource)}'s content is not written in the content editor"
+
+        assert has_element?(view, "##{form}-form textarea##{editor}-value[name='form[content]']")
+        assert has_element?(view, "##{editor}-components")
+      end
+    end
+
+    test "and a note saved from it keeps its markers, scrubbed like any note", ctx do
+      form = FormInfo.component_id(Note)
+      view = open(ctx.master_conn, "#{@dashboard}/sections/#{ctx.version.id}")
+      marker = ~s([[component doc-callout title="Heads up"]]Read <b>this</b>[[/component]])
+
+      add_note(view, ctx.section)
+
+      view
+      |> form("##{form}-form", form: %{title: "With a component"})
+      |> render_submit(%{
+        "form" => %{
+          "content" =>
+            ~s|<p dir="auto">Intro</p><p>#{marker}</p><script>alert(1)</script><p onclick="x()">End</p>|
+        }
+      })
+
+      assert [%{content: content}] =
+               Note
+               |> Ash.Query.filter(title == "With a component")
+               |> Ash.read!(tenant: ctx.site.id, authorize?: false)
+
+      assert content =~ "<p>#{marker}</p>"
+      assert content =~ "<p>Intro</p>"
+      refute content =~ "script"
+      refute content =~ "onclick"
+    end
+  end
+
   describe "who may open a document or a page of it" do
     test "is picked by name on a workspace's and a section's form, beside the SEO tags", ctx do
       permission = create_permission!(name: "docs:members")
