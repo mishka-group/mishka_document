@@ -46,7 +46,7 @@ defmodule MishkaDocument.Test.NoteDraftGuardedStructTest do
                 ]} = NoteDraft.__guarded_change__(%{version_increment_type: :bogus})
       end
 
-      test "title strip_tags+trim; content basic_html" do
+      test "title as plain text, trimmed; content basic_html" do
         assert {:ok,
                 %{
                   title: "Draft Note",
