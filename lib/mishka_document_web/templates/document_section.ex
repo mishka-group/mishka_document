@@ -39,7 +39,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
 
   import MishkaGervaz.Helpers, only: [dynamic_component: 1]
-  import MishkaCmsCore.CoreComponents, only: [show_modal: 1]
+  import MishkaCmsCore.CoreComponents, only: [show_form_modal: 2]
 
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
@@ -99,7 +99,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
               <button
                 type="button"
                 id={"#{@static.stream_name}-add"}
-                phx-click={show_modal("section-form-modal")}
+                phx-click={show_form_modal("section-form-modal", MishkaDocument.Section)}
                 class="inline-flex h-[42px] items-center gap-2 rounded-xl bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-4 text-[12.5px] font-bold text-white shadow-[0_5px_14px_rgba(79,75,204,0.28)] transition-opacity hover:opacity-95"
               >
                 <.dynamic_component

@@ -60,7 +60,7 @@
           :if={@workspace_admin?}
           type="button"
           id="add-workspace-btn"
-          phx-click={show_modal("workspace-form-modal")}
+          phx-click={show_form_modal("workspace-form-modal", MishkaDocument.Workspace)}
           class="flex h-10 items-center gap-2 rounded-[11px] bg-[linear-gradient(140deg,#6d69e6,#4f4bcc)] px-[18px] text-[13px] font-semibold text-white shadow-[0_5px_14px_rgba(79,75,204,0.3)] transition-opacity hover:opacity-95"
         >
           <.icon name="hero-plus" class="size-[15px]" /> {gettext("Add Workspace")}

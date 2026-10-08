@@ -47,6 +47,10 @@ defmodule MishkaDocument.Kit do
   `doc-switcher` offers the document's other versions and its other languages, each leading back to
   the same page.
 
+  A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.basic_html/1` and drawn with
+  `rich_content/1`, so a component the author placed in them with the content editor is drawn there
+  as that component (`MishkaCmsCore.Runtime.ContentComponents`).
+
   Every one of them resolves a document the same way — slug to workspace, `?v=` to a version, version
   to its approved pages — and always through the public reads, never by a raw id. That is what keeps
   a draft version out of a URL somebody typed.
