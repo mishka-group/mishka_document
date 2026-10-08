@@ -30,6 +30,15 @@ defmodule MishkaDocument.Kit do
   carries no dependency on a module a third-party importer would not have. An extension that kept
   its components in compiled code would be asking the CMS to treat it specially.
 
+  ### Who they read as
+
+  Every read is the public action's, with the visitor the page hands down as `current_user` as its
+  actor — `nil` for a guest — so a document or a page of one locked to permissions the visitor does
+  not hold is left out by the same rules the record's own page keeps
+  (`MishkaDocument.Resources.Preparations.OpenToActor`). The document a page sits in and its
+  versions are read as the system: a page whose own lock opens for the reader is drawn inside a
+  document whose lock does not.
+
   ## What the five are
 
   `doc-workspace-list` lists the documents a site publishes. `doc-section` draws one page of one of

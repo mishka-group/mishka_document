@@ -159,8 +159,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       |> LazyHTML.query(~s([data-role="#{role}"]))
       |> Enum.count()
 
-  defp cold(site, name) do
-    %{component_name: name, site: site.name, id: "cold"}
+  defp cold(site, name, attrs \\ %{}) do
+    attrs
+    |> Map.merge(%{component_name: name, site: site.name, id: "cold"})
     |> LiveViewHelpers.static_component()
     |> Phoenix.HTML.Safe.to_iodata()
     |> IO.iodata_to_binary()
@@ -186,6 +187,23 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     write_helpers!(site, name, broken)
 
     kept
+  end
+
+  # A READ THAT FAILS WITHOUT RAISING: a component that names no site asks for documents of no
+  # tenant, which Ash refuses with `{:error, _}`.
+  defp unsited!(site, name) do
+    helpers =
+      site
+      |> component_row(name)
+      |> Map.fetch!(:helpers)
+      |> Enum.map(&helper_map/1)
+      |> Enum.map(fn
+        %{name: "site_id"} = helper -> %{helper | code: "nil"}
+        helper -> helper
+      end)
+
+    write_helpers!(site, name, helpers)
+    recompile!(site, name)
   end
 
   defp helper_map(helper),
@@ -649,6 +667,35 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert roles(html, "doc-list-item") == 1
       assert html =~ "Mishka CMS"
+    end
+
+    # A READ THAT FAILS IS THE BLOCK'S ERROR HERE TOO, reached through the read's own
+    # `{:error, _}` and nothing that catches.
+    test "and a read that fails draws the block's error", %{site: site} do
+      manual!(site)
+
+      asked = %{"workspace" => "mishka-cms", "params" => %{"section" => "installation"}}
+
+      failing =
+        for component <- bundle_components(),
+            component["stateful"],
+            [_whole, role] <- Regex.scan(~r/role="(doc-[a-z-]+-error)"/, component["template"]) do
+          name = component["name"]
+          unsited!(site, name)
+
+          attrs =
+            for %{"name" => attr} <- component["attrs"],
+                Map.has_key?(asked, attr),
+                into: %{},
+                do: {String.to_existing_atom(attr), asked[attr]}
+
+          assert roles(cold(site, name, attrs), role) == 1,
+                 "#{name} drew no error for a read that failed"
+
+          name
+        end
+
+      assert Enum.sort(failing) == ~w(doc-sidebar doc-switcher doc-toc doc-workspace-list)
     end
   end
 
