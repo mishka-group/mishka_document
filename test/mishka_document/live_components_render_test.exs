@@ -22,7 +22,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   alias MishkaCmsCore.Runtime.Compilers.Helpers, as: CompilerHelpers
   alias MishkaCmsCore.Runtime.Handlers.ModuleCompilerHandler
   alias MishkaCmsCore.Runtime.LiveViewHelpers
-  alias MishkaCmsCore.Runtime.States.SiteState
+  alias MishkaCmsCore.Runtime.States.{SettingsState, SiteState}
   alias MishkaCmsCore.Runtime.Translations
 
   require Ash.Query
@@ -857,12 +857,21 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert hrefs(view, ~s([data-role="doc-list-title"])) == ["/docs/mishka-cms?lang=en"]
     end
 
-    test "and leaves the language alone when the path already carries it", %{site: site} do
-      manual!(site)
+    # AT THE ADDRESS THE SITE'S URL MODE GIVES THE LANGUAGE: English, the first, unprefixed while
+    # the site leaves it so.
+    for mode <- ~w(prefix_others prefix_all) do
+      test "and leaves the language alone when the path already carries it, in #{mode}", %{
+        site: site
+      } do
+        url_mode!(site, unquote(mode))
+        manual!(site)
 
-      {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{doc_base: "/:lang/docs"})
+        {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{doc_base: "/:lang/docs"})
 
-      assert hrefs(view, ~s([data-role="doc-list-title"])) == ["/en/docs/mishka-cms"]
+        assert hrefs(view, ~s([data-role="doc-list-title"])) == [
+                 english(unquote(mode), "/docs/mishka-cms")
+               ]
+      end
     end
 
     # `:lang` IS NOT THE FIRST SEGMENT BY DECREE. A page may be stored at /docs/:lang and the link
@@ -971,16 +980,20 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert directions == ["rtl"]
     end
 
-    test "and the chips lead to the other editions", %{site: site} do
-      {:ok, view, _html} =
-        mount_page(site, "doc-workspace-list", %{
-          per_page: 10,
-          show_languages: true,
-          doc_base: "/:lang/docs"
-        })
+    for mode <- ~w(prefix_others prefix_all) do
+      test "and the chips lead to the other editions, in #{mode}", %{site: site} do
+        url_mode!(site, unquote(mode))
 
-      assert Enum.sort(hrefs(view, ~s([data-role="doc-list-language"]))) ==
-               ["/en/docs/mishka-cms", "/fa/docs/mishka-cms-fa"]
+        {:ok, view, _html} =
+          mount_page(site, "doc-workspace-list", %{
+            per_page: 10,
+            show_languages: true,
+            doc_base: "/:lang/docs"
+          })
+
+        assert Enum.sort(hrefs(view, ~s([data-role="doc-list-language"]))) ==
+                 Enum.sort([english(unquote(mode), "/docs/mishka-cms"), "/fa/docs/mishka-cms-fa"])
+      end
     end
 
     # AND SAYS SO AS A WORD where the site cannot serve that language. The translation was written
@@ -995,7 +1008,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           doc_base: "/:lang/docs"
         })
 
-      assert hrefs(view, ~s([data-role="doc-list-language"])) == ["/en/docs/mishka-cms"]
+      assert hrefs(view, ~s([data-role="doc-list-language"])) == ["/docs/mishka-cms"]
       assert Enum.sort(text_of(view, ~s([data-role="doc-list-language"]))) == ["en", "fa"]
     end
 
@@ -1944,6 +1957,78 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # A PAGE WITH NO ADDRESS IS A WORD, NOT A LINK TO NOTHING. A document in a language the site does
+  # not publish has no address under a base carrying `:lang`, and `<.link navigate={nil}>` draws
+  # `href="#"` — a link that scrolls the reader to the top of the page they are on. Every title,
+  # crumb, page and neighbour is drawn as the word it names instead; a control that only leads
+  # somewhere — a card's read link, a version menu — is not drawn at all.
+  describe "a document with no address on this site" do
+    setup %{site: site} do
+      {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["fa"], site_id: site.id)
+      %{version: version, pages: pages} = manual!(site)
+      parent = Enum.find(pages, &(&1.slug == "installation"))
+
+      page!(site, version,
+        title: "From source",
+        slug: "from-source",
+        order_position: 0,
+        parent_section_id: parent.id
+      )
+
+      :ok
+    end
+
+    test "is drawn in words, with no link to nothing", %{site: site} do
+      attrs = %{workspace: "mishka-cms", doc_base: "/:lang/docs", lang_param: ""}
+
+      for {name, given, roles} <- [
+            {"doc-workspace-list", %{per_page: 10, doc_base: "/:lang/docs", lang_param: ""},
+             ["doc-list-title"]},
+            {"doc-section", attrs, ["doc-landing-link"]},
+            {"doc-section", Map.put(attrs, :params, %{"section" => "from-source"}),
+             ["doc-section-crumb", "doc-section-prev", "doc-section-next"]},
+            {"doc-sidebar", Map.put(attrs, :expand_all, true), ["doc-sidebar-link"]},
+            {"doc-switcher", Map.put(attrs, :show, "version"), []}
+          ] do
+        {:ok, view, _html} = mount_page(site, name, given)
+
+        for role <- roles do
+          assert text_of(view, ~s([data-role="#{role}"])) != [], "#{name} drew no #{role}"
+
+          assert hrefs(view, ~s([data-role="#{role}"])) == [],
+                 "#{name} linked a #{role} to nothing"
+        end
+
+        assert hrefs(view, "a") |> Enum.filter(&(&1 == "#")) == [],
+               "#{name} drew a link to nothing"
+
+        assert text_of(view, "a:not([href])") == [], "#{name} drew a link with no address"
+      end
+    end
+
+    test "draws no read link on a card and no version menu", %{site: site} do
+      {:ok, list, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          doc_base: "/:lang/docs",
+          lang_param: ""
+        })
+
+      assert text_of(list, ~s([data-role="doc-list-title"])) == ["Mishka CMS"]
+      assert text_of(list, ~s([data-role="doc-list-read"])) == []
+
+      {:ok, switcher, _html} =
+        mount_page(site, "doc-switcher", %{
+          workspace: "mishka-cms",
+          doc_base: "/:lang/docs",
+          lang_param: "",
+          show: "version"
+        })
+
+      assert text_of(switcher, ~s([data-role="doc-switcher-version"])) == []
+    end
+  end
+
   describe "doc-switcher across languages" do
     setup %{site: site} do
       # See the note in "doc-workspace-list in one language": a switch can only offer a language the
@@ -1985,17 +2070,27 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     # THE TRANSLATION OF THE PAGE, not the front page of the other edition. Translations of one page
     # share a `language_group_id`, which is what makes the two the same page — and the Persian one is
     # filed under a different slug on purpose, so nothing here can be right by having the same name.
-    test "and each leads to the same page in that language", %{site: site} do
-      {:ok, view, _html} =
-        mount_page(site, "doc-switcher", %{
-          workspace: "mishka-cms",
-          show: "language",
-          doc_base: "/:lang/docs",
-          params: %{"section" => "installation"}
-        })
+    #
+    # Read in the background, where the task knows no site of its own: each link is still the
+    # address this site's URL mode gives its language.
+    for mode <- ~w(prefix_others prefix_all) do
+      test "and each leads to the same page in that language, in #{mode}", %{site: site} do
+        url_mode!(site, unquote(mode))
 
-      assert Enum.sort(hrefs(view, ~s([data-role="doc-switcher-language"]))) ==
-               ["/en/docs/mishka-cms/installation", "/fa/docs/mishka-cms-fa/nasb"]
+        {:ok, view, _html} =
+          mount_page(site, "doc-switcher", %{
+            workspace: "mishka-cms",
+            show: "language",
+            doc_base: "/:lang/docs",
+            params: %{"section" => "installation"}
+          })
+
+        assert Enum.sort(hrefs(view, ~s([data-role="doc-switcher-language"]))) ==
+                 Enum.sort([
+                   english(unquote(mode), "/docs/mishka-cms/installation"),
+                   "/fa/docs/mishka-cms-fa/nasb"
+                 ])
+      end
     end
 
     # AND THE SLUG IS THE FALLBACK WHERE NOBODY LINKED THEM. An admin can write a translation without
@@ -2180,4 +2275,14 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     |> Ash.read!(tenant: site.id)
     |> List.first()
   end
+
+  # `site`'s addresses named in `mode`.
+  defp url_mode!(site, mode) do
+    on_exit(fn -> SettingsState.delete(site.id, "site.language_urls") end)
+    {:ok, _} = MishkaCmsCore.Settings.put("site.language_urls", mode, site_id: site.id)
+  end
+
+  # Where English, the site's first language, puts `path` in `mode`.
+  defp english("prefix_others", path), do: path
+  defp english("prefix_all", path), do: "/en" <> path
 end

@@ -56,7 +56,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   require Ash.Query
 
-  alias MishkaCmsCore.Runtime.{Languages, PageEditions, Seo}
+  alias MishkaCmsCore.Runtime.{Languages, Seo}
   alias MishkaCmsCore.Settings
   alias MishkaDocument.{Provision, Section, Workspace, WorkspaceVersion}
 
@@ -293,11 +293,12 @@ defmodule MishkaDocument.Plugins.PageSeo do
   defp robots(tags),
     do: tags |> Seo.stored_tags() |> Enum.filter(&match?(%{id: "robots"}, Seo.entry_of(&1)))
 
-  # `path` filled with this request's captures, on `base`.
-  defp address(path, %{params: params}, base),
+  # `path` filled with this request's captures, at the address the site's URL mode gives it, on
+  # `base`.
+  defp address(path, %{params: params, site_id: site_id}, base),
     do:
       path
-      |> PageEditions.path(Map.take(params, [Languages.capture(), "workspace"]))
+      |> Languages.url(Map.take(params, [Languages.capture(), "workspace"]), site_id)
       |> Seo.absolute(base)
 
   defp publisher(site_id, base) do

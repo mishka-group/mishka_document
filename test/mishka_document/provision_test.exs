@@ -210,7 +210,7 @@ defmodule MishkaDocument.ProvisionTest do
     # look at.
     #
     # THE SNIPPET IS HELD TO IT TOO, though it lands on a page this module has never seen: its path
-    # may capture `lang` or may capture nothing at all, and `PageEditions.language/2` answers both —
+    # may capture `lang` or may capture nothing at all, and `PageEditions.language/3` answers both —
     # the captured code, else the page row's own language — so there is no page on which a block
     # would have to fall back to what a visitor appended.
     test "pins every block to the language the page is being read in", %{site: site} do
@@ -245,14 +245,14 @@ defmodule MishkaDocument.ProvisionTest do
     # arrive — a base with the page's own language baked in would offer every translation under the
     # language the reader is leaving, and one with no language in it at all is a path this site has
     # no page at. `base` is the opposite and has to be this page's real URL, because it is what the
-    # index's pager writes to the address bar: a capture left in one is `?page=2` on a path nobody
-    # can type.
+    # index's pager writes to the address bar — so it is the address `site_path/2` builds from the
+    # page's own language, at the place the site's URL mode puts it.
     #
     # Which names those are is read off the components, so a base added to the bundle is covered here
     # the day it arrives rather than the day somebody remembers this test. The capture is looked for
     # as the literal `:lang` segment rather than through `Languages.captures?/1`, which is a question
-    # about a page's PATH and admits `*lang` as well: `lang_base/2` in the bundle fills the one
-    # spelling, so a base written the other way is a base nothing fills.
+    # about a page's PATH and admits `*lang` as well: `doc_href/5` in the bundle tells a base that
+    # carries the language in its path by that one spelling.
     test "builds every link base from the language capture and every URL from the page", %{
       site: site
     } do
@@ -277,11 +277,11 @@ defmodule MishkaDocument.ProvisionTest do
               assert {:expression, expression} = value,
                      "#{where} writes #{name}'s base as #{inspect(value)}, and a pager's URL is this page's own"
 
+              assert expression =~ ~r/^site_path\(/,
+                     "#{where} writes #{name} a pager URL the site's URL mode does not build: #{expression}"
+
               assert expression =~ "@page.language",
                      "#{where} writes #{name} a base holding no language of its own: #{expression}"
-
-              refute expression =~ capture,
-                     "#{where} writes #{name} a pager URL a reader cannot type: #{expression}"
 
             _link_base ->
               assert {:literal, literal} = value,
@@ -301,18 +301,15 @@ defmodule MishkaDocument.ProvisionTest do
     # AND EVERY URL WRITTEN OUT BY HAND IS ONE OF THE PAGES THIS MODULE CREATES. A base names a row's
     # address and the rule above holds it to the capture; the index's pager and the header's link are
     # the other kind — they name a PAGE — so one that has drifted from the path it was copied from is
-    # a link to the 404 with nothing in this suite to notice it. Read back as the address with the
-    # capture put in again, which is the form the page definitions themselves are in.
+    # a link to the 404 with nothing in this suite to notice it. Read as the pattern `site_path/2` is
+    # handed, which is the form the page definitions themselves are in.
     test "writes no URL of its own that it does not also create a page at", %{site: site} do
       Provision.ensure!(site)
       paths = Enum.map(Provision.page_paths(), &String.split(&1, "/", trim: true))
 
       written =
         for {where, source} <- templates(site),
-            [_whole, before_it, after_it] <-
-              Regex.scan(~r/"([^"]*)" <> @page\.language <> "([^"]*)"/, source) do
-          address = before_it <> ":" <> Languages.capture() <> after_it
-
+            [_whole, address] <- Regex.scan(~r/site_path\("([^"]*)"/, source) do
           assert Enum.any?(paths, &List.starts_with?(&1, String.split(address, "/", trim: true))),
                  "#{where} links #{address}, which is no page this module creates"
 

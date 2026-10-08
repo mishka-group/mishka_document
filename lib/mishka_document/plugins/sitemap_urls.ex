@@ -8,7 +8,8 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   `MishkaCmsCore.Runtime.Resources.Notifiers.SitemapRefresh`.
 
   Each document is listed at its front page and each page of it at its own, at the paths
-  `MishkaDocument.Provision.item_paths/0` names, filled with the document's own language and slugs.
+  `MishkaDocument.Provision.item_paths/0` names, filled with the document's own language and slugs
+  at the address the site's URL mode gives that language (`MishkaCmsCore.Runtime.Languages.url/3`).
   An address is listed only while the site serves its page: the page at that exact path is among
   `pages`, and it answers the document's language
   (`MishkaCmsCore.Runtime.PageEditions.served_languages/2`). A page moved to another path, taken
@@ -108,6 +109,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
         page = Map.put(front(workspace), "section", section.slug)
 
         {address(
+           site_id,
            served,
            :section,
            workspace.language,
@@ -129,6 +131,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
            {version_id, workspace} <- shown,
            url <-
              address(
+               site_id,
                served,
                :workspace,
                workspace.language,
@@ -146,13 +149,15 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   defp front(workspace),
     do: %{Languages.capture() => workspace.language, "workspace" => workspace.slug}
 
-  # The address `kind`'s path makes with these captures, while its page answers `language` and its
-  # record is `listed?`.
-  defp address(served, kind, language, captures, lastmod, listed?) do
+  # The address `kind`'s path makes with these captures in the site's URL mode, while its page
+  # answers `language` and its record is `listed?`.
+  defp address(site_id, served, kind, language, captures, lastmod, listed?) do
     for {path, languages} <- [served[kind]],
         listed?,
         language in languages,
-        do: %{path: PageEditions.path(path, captures), lastmod: lastmod}
+        address = Languages.url(path, captures, site_id),
+        is_binary(address),
+        do: %{path: address, lastmod: lastmod}
   end
 
   defp workspaces(site_id, languages) do

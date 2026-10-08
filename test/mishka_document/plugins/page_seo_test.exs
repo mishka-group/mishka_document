@@ -9,7 +9,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   """
   use MishkaDocument.DataCase, async: false
 
-  alias MishkaCmsCore.Runtime.{PageEditions, Seo}
+  alias MishkaCmsCore.Runtime.{Languages, Seo}
   alias MishkaCmsCore.Runtime.States.SettingsState
   alias MishkaCmsCore.Settings
   alias MishkaDocument.Plugins.PageSeo
@@ -27,6 +27,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
 
     on_exit(fn ->
       SettingsState.delete(site.id, "site.languages")
+      SettingsState.delete(site.id, "site.language_urls")
       SettingsState.delete(site.id, "site.title")
     end)
 
@@ -39,10 +40,18 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   # The site's address as core writes it in this environment.
   defp base, do: Seo.base(@host)
 
+  # Where English, the site's first language, puts `path` in `mode`: under no prefix while the first
+  # language goes without one, under its own once every language carries one.
+  defp english("prefix_others", path), do: path
+  defp english("prefix_all", path), do: "/en" <> path
+
+  defp url_mode!(site, mode),
+    do: {:ok, _} = Settings.put("site.language_urls", mode, site_id: site.id)
+
   # The map core hands the plugins for a request to the `kind` page, storing `schema`, with `params`.
   defp given(site, kind, params, schema \\ []) do
     path = Provision.item_paths()[kind]
-    filled = PageEditions.path(path, params)
+    filled = Languages.url(path, params, site.id)
 
     Seo.given(
       %{
@@ -146,53 +155,56 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   end
 
   describe "a document's front page" do
-    test "is the document's own head", %{site: site} do
-      document = document!(site, name: "Guide", slug: "guide", description: "How to use it.")
-      url = base() <> "/en/docs/guide"
+    for mode <- ~w(prefix_others prefix_all) do
+      test "is the document's own head, in #{mode}", %{site: site} do
+        url_mode!(site, unquote(mode))
+        document = document!(site, name: "Guide", slug: "guide", description: "How to use it.")
+        url = base() <> english(unquote(mode), "/docs/guide")
 
-      answered = answer(given(site, :workspace, %{"lang" => "en", "workspace" => "guide"}))
+        answered = answer(given(site, :workspace, %{"lang" => "en", "workspace" => "guide"}))
 
-      assert answered.title == "Guide"
-      assert answered.description == "How to use it."
-      assert answered.type == "article"
+        assert answered.title == "Guide"
+        assert answered.description == "How to use it."
+        assert answered.type == "article"
 
-      assert %{
-               "headline" => "Guide",
-               "description" => "How to use it.",
-               "inLanguage" => "en",
-               "mainEntityOfPage" => ^url,
-               "publisher" => %{"name" => "The Studio"}
-             } = schema_of(answered, "TechArticle")
+        assert %{
+                 "headline" => "Guide",
+                 "description" => "How to use it.",
+                 "inLanguage" => "en",
+                 "mainEntityOfPage" => ^url,
+                 "publisher" => %{"name" => "The Studio"}
+               } = schema_of(answered, "TechArticle")
 
-      assert crumbs(answered) == [
-               {1, "Documentation", base() <> "/en/docs"},
-               {2, "Guide", url}
-             ]
+        assert crumbs(answered) == [
+                 {1, "Documentation", base() <> english(unquote(mode), "/docs")},
+                 {2, "Guide", url}
+               ]
 
-      assert %{
-               "doc.title" => "Guide",
-               "doc.url" => ^url,
-               "workspace.name" => "Guide",
-               "workspace.description" => "How to use it.",
-               "workspace.url" => ^url
-             } = answered.vars
+        assert %{
+                 "doc.title" => "Guide",
+                 "doc.url" => ^url,
+                 "workspace.name" => "Guide",
+                 "workspace.description" => "How to use it.",
+                 "workspace.url" => ^url
+               } = answered.vars
 
-      refute Map.has_key?(answered.vars, "doc.version")
-      assert answered.vars["doc.modified_at"] == iso(document.updated_at)
+        refute Map.has_key?(answered.vars, "doc.version")
+        assert answered.vars["doc.modified_at"] == iso(document.updated_at)
 
-      assert keys(answered.var_docs) == [
-               "doc.title",
-               "doc.description",
-               "doc.url",
-               "doc.version",
-               "doc.published_at",
-               "doc.modified_at",
-               "workspace.name",
-               "workspace.description",
-               "workspace.url"
-             ]
+        assert keys(answered.var_docs) == [
+                 "doc.title",
+                 "doc.description",
+                 "doc.url",
+                 "doc.version",
+                 "doc.published_at",
+                 "doc.modified_at",
+                 "workspace.name",
+                 "workspace.description",
+                 "workspace.url"
+               ]
 
-      assert Enum.all?(answered.var_docs, &(is_binary(&1.label) and is_binary(&1.help)))
+        assert Enum.all?(answered.var_docs, &(is_binary(&1.label) and is_binary(&1.help)))
+      end
     end
 
     test "its own tags and schema come with it", %{site: site} do
@@ -233,37 +245,44 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       {:ok, document: document, latest: latest}
     end
 
-    test "is the page in the version marked latest", %{site: site} do
-      url = base() <> "/en/docs/guide/install"
+    for mode <- ~w(prefix_others prefix_all) do
+      test "is the page in the version marked latest, in #{mode}", %{site: site} do
+        url_mode!(site, unquote(mode))
+        url = base() <> english(unquote(mode), "/docs/guide/install")
 
-      answered =
-        answer(
-          given(site, :section, %{"lang" => "en", "workspace" => "guide", "section" => "install"})
-        )
+        answered =
+          answer(
+            given(site, :section, %{
+              "lang" => "en",
+              "workspace" => "guide",
+              "section" => "install"
+            })
+          )
 
-      assert answered.title == "Install"
-      assert answered.description == "Run mix setup & wait."
-      assert answered.type == "article"
+        assert answered.title == "Install"
+        assert answered.description == "Run mix setup & wait."
+        assert answered.type == "article"
 
-      assert %{
-               "headline" => "Install",
-               "version" => "2.0.0",
-               "datePublished" => "2026-03-01T00:00:00Z",
-               "mainEntityOfPage" => ^url
-             } = schema_of(answered, "TechArticle")
+        assert %{
+                 "headline" => "Install",
+                 "version" => "2.0.0",
+                 "datePublished" => "2026-03-01T00:00:00Z",
+                 "mainEntityOfPage" => ^url
+               } = schema_of(answered, "TechArticle")
 
-      assert crumbs(answered) == [
-               {1, "Documentation", base() <> "/en/docs"},
-               {2, "Guide", base() <> "/en/docs/guide"},
-               {3, "Install", url}
-             ]
+        assert crumbs(answered) == [
+                 {1, "Documentation", base() <> english(unquote(mode), "/docs")},
+                 {2, "Guide", base() <> english(unquote(mode), "/docs/guide")},
+                 {3, "Install", url}
+               ]
 
-      assert %{
-               "doc.title" => "Install",
-               "doc.version" => "2.0.0",
-               "doc.url" => ^url,
-               "workspace.name" => "Guide"
-             } = answered.vars
+        assert %{
+                 "doc.title" => "Install",
+                 "doc.version" => "2.0.0",
+                 "doc.url" => ^url,
+                 "workspace.name" => "Guide"
+               } = answered.vars
+      end
     end
 
     test "is the page in the version `?v=` names", %{site: site} do
