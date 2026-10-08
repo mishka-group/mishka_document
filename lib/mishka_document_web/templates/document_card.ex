@@ -930,6 +930,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
               value={Map.get(@state.filter_values, @search.name) || ""}
               dir="auto"
               placeholder={search_placeholder(@search)}
+              aria-label={filter_label(@search)}
               phx-debounce="300"
               class="h-[38px] w-[200px] max-w-full rounded-[10px] border border-[#ecebe6] bg-[#f7f6f3] ps-[34px] pe-3 text-[12.5px] font-medium text-[#1b1a18] outline-none focus:border-[#c3c1f0]"
             />
