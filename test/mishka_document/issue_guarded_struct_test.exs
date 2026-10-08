@@ -17,7 +17,7 @@ defmodule MishkaDocument.Test.IssueGuardedStructTest do
     end
 
     describe "direct __guarded_change__/1" do
-      test "title strip_tags+trim; description basic_html; enums accept" do
+      test "title as plain text, trimmed; description basic_html; enums accept" do
         assert {:ok,
                 %{
                   title: "Broken link",

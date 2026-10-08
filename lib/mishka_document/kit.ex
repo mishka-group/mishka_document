@@ -30,6 +30,15 @@ defmodule MishkaDocument.Kit do
   carries no dependency on a module a third-party importer would not have. An extension that kept
   its components in compiled code would be asking the CMS to treat it specially.
 
+  ### Who they read as
+
+  Every read is the public action's, with the visitor the page hands down as `current_user` as its
+  actor — `nil` for a guest — so a document or a page of one locked to permissions the visitor does
+  not hold is left out by the same rules the record's own page keeps
+  (`MishkaDocument.Resources.Preparations.OpenToActor`). The document a page sits in and its
+  versions are read as the system: a page whose own lock opens for the reader is drawn inside a
+  document whose lock does not.
+
   ## What the five are
 
   `doc-workspace-list` lists the documents a site publishes. `doc-section` draws one page of one of
@@ -54,6 +63,10 @@ defmodule MishkaDocument.Kit do
   loading a block draws a skeleton, and when a read fails it draws a line and a button to ask again
   rather than taking the page down. A documentation page carries four of these blocks at once, and
   reading in the background is what stops the slowest of them deciding when the page appears.
+
+  Each task is started through `MishkaGervaz.Messages.start_async/4`, which hands it the site and
+  the locale the page renders in (`MishkaCmsCore.Runtime.LiveViewHelpers.carry_into_tasks/0`), so a
+  link `doc-switcher` builds there with `site_path/2` is the one its template would build.
 
   `doc-workspace-list` streams its rows, and says `phx-update="stream"` only where there is a socket
   to stream from — `@myself` is nil in a cold render, and a stream container is one the client never

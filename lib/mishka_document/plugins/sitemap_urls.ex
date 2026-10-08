@@ -8,18 +8,22 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   `MishkaCmsCore.Runtime.Resources.Notifiers.SitemapRefresh`.
 
   Each document is listed at its front page and each page of it at its own, at the paths
-  `MishkaDocument.Provision.item_paths/0` names, filled with the document's own language and slugs.
+  `MishkaDocument.Provision.item_paths/0` names, filled with the document's own language and slugs
+  at the address the site's URL mode gives that language (`MishkaCmsCore.Runtime.Languages.url/3`).
   An address is listed only while the site serves its page: the page at that exact path is among
   `pages`, and it answers the document's language
   (`MishkaCmsCore.Runtime.PageEditions.served_languages/2`). A page moved to another path, taken
   down, closed to visitors or marked noindex lists nothing.
 
+  READ AS A VISITOR WHO IS NOT SIGNED IN, through the public actions, because a sitemap is for
+  anyone: a document that names a permission, and a page that opens with one — its own, or its
+  nearest parent page's (`MishkaDocument.Resources.Calculations.EffectivePermissions`) — is left out
+  of the reads themselves (`MishkaDocument.Resources.Preparations.OpenToActor`), so a locked
+  document's pages are never read and nothing locked is listed.
+
   And only while its record may be listed (`MishkaCmsCore.Runtime.PageEditions.listed?/2`): a
-  document that names a permission lists nothing, and is dropped before its pages are read; one whose
-  robots meta says `noindex` or `none` lists neither its front page nor a page of it that holds no
-  robots meta of its own; a page that opens with a permission — its own, or its nearest parent
-  page's (`MishkaDocument.Resources.Calculations.EffectivePermissions`) — or whose own robots meta
-  says so, is left out alone.
+  document whose robots meta says `noindex` or `none` lists neither its front page nor a page of it
+  that holds no robots meta of its own; a page whose own robots meta says so is left out alone.
 
   THE SAME ROWS THE PAGES DRAW. `doc-section` finds a document among the active ones, shows the
   version an editor marked latest among the published ones — the newest published one when none
@@ -80,7 +84,6 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   defp document_urls(site_id, languages, served) do
     site_id
     |> workspaces(languages)
-    |> Stream.filter(&(&1.permissions in [nil, []]))
     |> Stream.chunk_every(@batch)
     |> Stream.flat_map(&batch_urls(site_id, &1, served))
   end
@@ -108,6 +111,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
         page = Map.put(front(workspace), "section", section.slug)
 
         {address(
+           site_id,
            served,
            :section,
            workspace.language,
@@ -129,6 +133,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
            {version_id, workspace} <- shown,
            url <-
              address(
+               site_id,
                served,
                :workspace,
                workspace.language,
@@ -146,21 +151,24 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   defp front(workspace),
     do: %{Languages.capture() => workspace.language, "workspace" => workspace.slug}
 
-  # The address `kind`'s path makes with these captures, while its page answers `language` and its
-  # record is `listed?`.
-  defp address(served, kind, language, captures, lastmod, listed?) do
+  # The address `kind`'s path makes with these captures in the site's URL mode, while its page
+  # answers `language` and its record is `listed?`.
+  defp address(site_id, served, kind, language, captures, lastmod, listed?) do
     for {path, languages} <- [served[kind]],
         listed?,
         language in languages,
-        do: %{path: PageEditions.path(path, captures), lastmod: lastmod}
+        address = Languages.url(path, captures, site_id),
+        is_binary(address),
+        do: %{path: address, lastmod: lastmod}
   end
 
+  # The documents a visitor who is not signed in may open, in these languages.
   defp workspaces(site_id, languages) do
     Workspace
-    |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
+    |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
     |> Ash.Query.filter(language in ^languages)
     |> Ash.Query.select([:id, :slug, :language, :updated_at, :permissions, :seo_tags])
-    |> SitemapCompiler.stream_rows(tenant: site_id, authorize?: false)
+    |> SitemapCompiler.stream_rows(actor: nil, tenant: site_id)
   end
 
   # `doc-section`'s own rule for the version a reader is shown: the one marked latest among the
@@ -170,7 +178,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     workspace_ids = Enum.map(workspaces, & &1.id)
 
     WorkspaceVersion
-    |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
+    |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
     |> Ash.Query.filter(workspace_id in ^workspace_ids)
     |> Ash.Query.select([:id, :workspace_id])
     |> Ash.Query.sort(
@@ -181,19 +189,20 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       id: :desc
     )
     |> Ash.Query.distinct(:workspace_id)
-    |> Ash.read!(tenant: site_id, authorize?: false, page: false)
+    |> Ash.read!(actor: nil, tenant: site_id, page: false)
     |> Map.new(&{&1.workspace_id, &1.id})
   end
 
-  # The approved pages of these versions, the ones `doc-section` draws, in one stream.
+  # The approved pages of these versions a visitor who is not signed in may open, the ones
+  # `doc-section` draws for them, in one stream.
   defp sections(_site_id, []), do: []
 
   defp sections(site_id, version_ids) do
     Section
-    |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
+    |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
     |> Ash.Query.filter(workspace_version_id in ^version_ids)
     |> Ash.Query.select([:slug, :updated_at, :workspace_version_id, :permissions, :seo_tags])
     |> Ash.Query.load(:effective_permissions)
-    |> SitemapCompiler.stream_rows(tenant: site_id, authorize?: false)
+    |> SitemapCompiler.stream_rows(actor: nil, tenant: site_id)
   end
 end

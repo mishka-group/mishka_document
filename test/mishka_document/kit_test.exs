@@ -46,6 +46,11 @@ defmodule MishkaDocument.KitTest do
   # and a component that named one would answer a reader with a forbidden error.
   @public_actions ~w(public_list public_get public_list_at_workspace_version)
 
+  # The reads of the document a page sits in and of its versions, the only ones made as the system:
+  # a page whose own lock opens for the reader is drawn inside a document whose lock does not.
+  @frame_reads ~w(workspace_row versions_of)
+  @frame_resources ~w(Workspace WorkspaceVersion)
+
   # A read as the stored code writes it, in BOTH shapes it is written in: piped into `for_read/4`,
   # and called with the resource as its first argument — which is what a helper does when it has to
   # keep hold of the query to add a clause to it. Recognising only the first shape left
@@ -186,17 +191,95 @@ defmodule MishkaDocument.KitTest do
       assert kept != [], "no read of a page was recognised, so this asserts nothing"
     end
 
+    # AND READS AS THAT VISITOR, through the public action's own policies. `authorize?: false` skips
+    # every rule the action keeps, for every visitor at once, so only `@frame_reads` use it, and only
+    # of `@frame_resources`; every other read is handed `read_as/1`.
+    test "and reads as the visitor, never as the system, but for the document a page sits in" do
+      seen =
+        for component <- components(),
+            helper <- component["helpers"],
+            {resource, action, given} <- read_calls(helper["code"]) do
+          case given =~ "authorize?: false" do
+            true ->
+              assert helper["name"] in @frame_reads and resource in @frame_resources,
+                     "#{component["name"]}'s #{helper["name"]} reads #{resource} as the system"
+
+            false ->
+              assert given =~ "read_as(",
+                     "#{component["name"]}'s #{helper["name"]} reads #{resource} through " <>
+                       ":#{action} without naming the visitor"
+          end
+
+          helper["name"]
+        end
+
+      assert seen != [], "no read was recognised, so this asserts nothing"
+
+      for component <- components(),
+          helper <- component["helpers"],
+          helper["name"] not in @frame_reads do
+        refute helper["code"] =~ "authorize?: false",
+               "#{component["name"]}'s #{helper["name"]} reads as the system"
+      end
+
+      read_as =
+        for component <- components(),
+            helper <- component["helpers"],
+            helper["name"] == "read_as",
+            do: {component["name"], helper["code"]}
+
+      assert read_as != [], "no component carries read_as/1, so this asserts nothing"
+
+      for {name, code} <- read_as do
+        assert code =~ "actor: visitor", "#{name}'s read_as/1 does not read as the visitor"
+      end
+    end
+
     # AND AS THIS SITE, ALWAYS. The tenant comes from the component's own compiled metadata, so a
     # read that forgot it would either raise or — for a resource that tolerates it — answer with
     # another site's documents.
     test "and every read names the site the component was installed for" do
-      for component <- components(), helper <- component["helpers"] do
-        reads = length(Regex.scan(~r/Ash\.read\(/, helper["code"]))
-        tenanted = length(Regex.scan(~r/tenant: site_id\(\)/, helper["code"]))
+      seen =
+        for component <- components(),
+            helper <- component["helpers"],
+            given <- ash_reads(helper["code"]) do
+          assert given =~ "tenant: site_id()",
+                 "#{component["name"]}'s #{helper["name"]} runs a read that does not name the site"
+        end
 
-        assert reads == tenanted,
-               "#{component["name"]}'s #{helper["name"]} runs #{reads} reads and names the site " <>
-                 "#{tenanted} times"
+      assert seen != [], "no read was recognised, so this asserts nothing"
+    end
+
+    # A TASK READS IN THE PAGE'S SITE AND LOCALE ONLY WHEN IT IS HANDED THEM. Phoenix's own
+    # `start_async/3` and `assign_async/3` start one with neither, and `site_path/2` in it builds no
+    # link at all; the host's `MishkaCms.AsyncLocaleTest` holds Elixir code to the same rule, and
+    # does not read this bundle.
+    test "and every block that reads in the background starts its task through Gervaz" do
+      started =
+        for component <- components(),
+            helper <- component["helpers"],
+            helper["code"] =~ ~r/\b(start|assign)_async\(/ do
+          refute helper["code"] =~ ~r/Phoenix\.LiveView\.(start_async|assign_async)\(/,
+                 "#{component["name"]}'s #{helper["name"]} starts a task through Phoenix's own " <>
+                   "— use MishkaGervaz.Messages.start_async/4"
+
+          assert helper["code"] =~ "MishkaGervaz.Messages.start_async(",
+                 "#{component["name"]}'s #{helper["name"]} starts a task some other way"
+
+          component["name"]
+        end
+
+      assert Enum.sort(started) == ~w(doc-sidebar doc-switcher doc-toc doc-workspace-list)
+    end
+
+    # A READ THAT FAILS IS A TUPLE THE BLOCK DRAWS ITS ERROR FROM, on the builder's canvas as in a
+    # task; anything else is a bug, and is let crash.
+    test "and catches nothing: no rescue, catch or try" do
+      for component <- components(), helper <- component["helpers"] do
+        code = String.replace(helper["code"], ~r/^\s*#.*$/m, "")
+
+        refute code =~ ~r/\b(rescue|catch|try)\b/,
+               "#{component["name"]}'s #{helper["name"]} catches what it should let crash"
       end
     end
 
@@ -575,6 +658,12 @@ defmodule MishkaDocument.KitTest do
           {resource, action, given}
       end
     end
+  end
+
+  # What every `Ash.read/2` in `code` is handed.
+  defp ash_reads(code) do
+    for [{at, length}] <- Regex.scan(~r/Ash\.read\(/, code, return: :index),
+        do: code |> binary_part(at + length, byte_size(code) - at - length) |> call_body()
   end
 
   # What a call is handed, up to the parenthesis that closes it.

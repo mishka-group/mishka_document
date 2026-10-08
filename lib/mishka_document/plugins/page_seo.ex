@@ -13,11 +13,11 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   ## What is read
 
-  One read, through `:public_list` as `doc-section` reads it, on the page's site: the active
-  document the `workspace` capture names in the page's language. On `/:lang/docs/:workspace/:section`
-  it brings its published versions and, in each, the approved page the `section` capture names; the
-  page shown is the one in the version `?v=` names, else in the version marked latest, else in the
-  newest published one.
+  One read, through `:public_list` as `doc-section` reads it, on the page's site, as the system: the
+  active document the `workspace` capture names in the page's language. On
+  `/:lang/docs/:workspace/:section` it brings its published versions and, in each, the approved page
+  the `section` capture names; the page shown is the one in the version `?v=` names, else in the
+  version marked latest, else in the newest published one.
 
   ## What it returns
 
@@ -42,7 +42,8 @@ defmodule MishkaDocument.Plugins.PageSeo do
   own, else its nearest parent page's, else its document's
   (`MishkaDocument.Resources.Calculations.EffectivePermissions`). `MishkaCmsWeb.RuntimeLive` opens
   the address only for whoever holds one of them, after the page's own, and the head keeps it out
-  of an index.
+  of an index. That is why the read is the system's: a read as the visitor would leave a locked
+  record out for exactly the visitor the page has to refuse.
 
   A capture that names nothing a reader may open changes nothing else, and the page answers 404 as
   it does without this. A note is drawn inside its page and has no address of its own, so its own
@@ -56,7 +57,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   require Ash.Query
 
-  alias MishkaCmsCore.Runtime.{Languages, PageEditions, Seo}
+  alias MishkaCmsCore.Runtime.{Languages, Seo}
   alias MishkaCmsCore.Settings
   alias MishkaDocument.{Provision, Section, Workspace, WorkspaceVersion}
 
@@ -148,7 +149,11 @@ defmodule MishkaDocument.Plugins.PageSeo do
   end
 
   # The document the `workspace` capture names, in the page's language, on the page's site; `nil`
-  # when the request names none or none is shown.
+  # when the request names none or none is shown. Read as the system, because what it reads is the
+  # lock `MishkaCmsWeb.RuntimeLive` admits the visitor by: read as a visitor who may not open it, a
+  # locked document or page is no record at all, and the page is handed no permissions to refuse
+  # them with. The hook names no visitor either, and the head built here reaches only a visitor the
+  # page admitted.
   defp read(%{params: %{"workspace" => slug}, site_id: site_id} = seo, loads)
        when is_binary(slug) and slug != "" and is_binary(site_id) do
     Workspace
@@ -293,11 +298,12 @@ defmodule MishkaDocument.Plugins.PageSeo do
   defp robots(tags),
     do: tags |> Seo.stored_tags() |> Enum.filter(&match?(%{id: "robots"}, Seo.entry_of(&1)))
 
-  # `path` filled with this request's captures, on `base`.
-  defp address(path, %{params: params}, base),
+  # `path` filled with this request's captures, at the address the site's URL mode gives it, on
+  # `base`.
+  defp address(path, %{params: params, site_id: site_id}, base),
     do:
       path
-      |> PageEditions.path(Map.take(params, [Languages.capture(), "workspace"]))
+      |> Languages.url(Map.take(params, [Languages.capture(), "workspace"]), site_id)
       |> Seo.absolute(base)
 
   defp publisher(site_id, base) do

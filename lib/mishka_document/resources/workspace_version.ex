@@ -461,10 +461,12 @@ defmodule MishkaDocument.WorkspaceVersion do
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=50, semver)"
 
     field :version_name, :string,
-      derives: "sanitize(strip_tags, trim) validate(optional=[string, max_len=255])"
+      validator: {MishkaCmsCore.PlainText, :field},
+      derives: "sanitize(trim) validate(optional=[string, max_len=255])"
 
     field :description, :string,
-      derives: "sanitize(strip_tags, trim) validate(optional=[string, max_len=5000])"
+      validator: {MishkaCmsCore.PlainText, :field},
+      derives: "sanitize(trim) validate(optional=[string, max_len=5000])"
 
     field :status, :atom,
       derives: "validate(atom, enum=Atom[draft::alpha::beta::rc::stable::archived])"

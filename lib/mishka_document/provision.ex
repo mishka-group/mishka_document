@@ -86,7 +86,7 @@ defmodule MishkaDocument.Provision do
   Every block is given `lang={@page.language}` and a `params` map the language has been taken out
   of — the snippet included, on a page belonging to somebody else — which is one rule rather than
   two: a page's language is read off the page, and no block is left to find it in a query string.
-  `MishkaCmsCore.Runtime.PageEditions.language/2` is what makes that one rule enough for a page this
+  `MishkaCmsCore.Runtime.PageEditions.language/3` is what makes that one rule enough for a page this
   module has never seen: it is the `:lang` capture where the path has one and the page row's own
   language where it has none, so there is no page whose language a block has to guess at. A
   workspace slug belongs to ONE edition, so `/fa/docs/<an-english-slug>` draws "That page is not
@@ -101,9 +101,11 @@ defmodule MishkaDocument.Provision do
 
   The bases the blocks build links from keep the capture IN them — `doc_base="/:lang/docs"`, not
   `"/" <> @page.language <> "/docs"`. A component fills the `:lang` segment with the language of the
-  ROW it is linking to, which is the language the reader will be reading in when they arrive; a base
-  with the page's own language baked in would offer every translation under the language the reader
-  is leaving.
+  ROW it is linking to, which is the language the reader will be reading in when they arrive, and
+  builds the address the site's URL mode gives it (`site_path/2`,
+  `MishkaCmsCore.Runtime.LiveViewHelpers`): `/docs/<slug>` in a first language the site leaves
+  unprefixed, `/fa/docs/<slug>` in Persian. A base with the page's own language baked in would offer
+  every translation under the language the reader is leaving.
 
   `base`, which only the index's pager has, stays a real URL: nothing appends a slug to it, and its
   `?page=2` has to be somewhere a reader could have typed.
@@ -120,12 +122,11 @@ defmodule MishkaDocument.Provision do
 
   Every template stays inside what BOTH renderers assign: `@page`, `@query_params` and
   `@page_languages`. The admin's Preview tab assigns no visitor and no captures (see
-  `MishkaCmsCore.Runtime.RuntimePreview`), which is why nothing here reaches `<>` with a capture —
-  only with `@page.language`, which a preview does assign.
+  `MishkaCmsCore.Runtime.RuntimePreview`), which is why no URL here is built from a capture — only
+  from `@page.language`, which a preview does assign.
   """
 
   alias MishkaCmsCore.Runtime.ExtensionProvision
-  alias MishkaCmsCore.Runtime.Languages
   alias MishkaDocument.Kit
 
   @section "document"
@@ -229,7 +230,7 @@ defmodule MishkaDocument.Provision do
   @doc """
   The paths of the two sample pages that read one document: `:workspace` its front page, `:section`
   one page of it. Each is filled with a document's language and slugs by
-  `MishkaCmsCore.Runtime.PageEditions.path/2` — what `MishkaDocument.Plugins.SitemapUrls` lists.
+  `MishkaCmsCore.Runtime.Languages.url/3` — what `MishkaDocument.Plugins.SitemapUrls` lists.
   """
   @spec item_paths() :: %{workspace: String.t(), section: String.t()}
   def item_paths, do: %{workspace: @document, section: @document_page}
@@ -391,7 +392,7 @@ defmodule MishkaDocument.Provision do
   # language has been taken out of, which is the SAME rule the three pages above follow, and it holds
   # here for the reason it holds there: `@page.language` is the `:lang` capture where the author's
   # page has one and the page row's own language where it has none — see
-  # `MishkaCmsCore.Runtime.PageEditions.language/2` — so there is no page this block can land on
+  # `MishkaCmsCore.Runtime.PageEditions.language/3` — so there is no page this block can land on
   # whose language it has to guess at. A `?lang=` left to decide instead would list English documents
   # on a Persian page, whose shell is drawn `<html lang="fa" dir="rtl">` from that same row.
   # `doc_base` carries the capture, so every card still links under its own document's language.
@@ -479,14 +480,11 @@ defmodule MishkaDocument.Provision do
     """
   end
 
-  # ONE OF THE ADDRESSES ABOVE AS A URL A READER COULD HAVE TYPED: the `lang` capture filled in with
-  # the language this page is being read in, which is what the index's pager writes to the address
-  # bar and what the header links a page by. An address holding no capture raises here rather than
-  # turning into a link under no language at all.
-  defp live_url(address) do
-    [before_it, after_it] = String.split(address, ":" <> Languages.capture(), parts: 2)
-    ~s("#{before_it}" <> @page.language <> "#{after_it}")
-  end
+  # ONE OF THE ADDRESSES ABOVE AS A URL A READER COULD HAVE TYPED, written as the `site_path/2` the
+  # template calls: the `lang` capture filled in with the language this page is being read in, at
+  # the address the site's URL mode gives it, which is what the index's pager writes to the address
+  # bar and what the header links a page by.
+  defp live_url(address), do: ~s|site_path("#{address}", @page.language)|
 
   defp indent(markup, spaces) do
     pad = String.duplicate(" ", spaces)

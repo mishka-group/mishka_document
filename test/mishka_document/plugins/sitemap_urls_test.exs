@@ -14,11 +14,13 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
   start every page in review, and any one of them left to the generator decides whether an address
   is listed.
   """
-  use MishkaDocument.DataCase, async: false
+  use MishkaDocument.DataCase,
+    async: false,
+    parameterize: for(mode <- ~w(prefix_others prefix_all), do: %{mode: mode})
 
   alias MishkaCmsCore.Helpers
   alias MishkaCmsCore.Runtime.Compilers.SitemapCompiler
-  alias MishkaCmsCore.Runtime.PageEditions
+  alias MishkaCmsCore.Runtime.{Languages, PageEditions}
   alias MishkaCmsCore.Runtime.States.{AssetsState, SettingsState, SiteState}
   alias MishkaCmsCore.Settings
   alias MishkaDocument.Plugins.SitemapUrls
@@ -33,22 +35,36 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
   @february ~U[2026-02-01 00:00:00Z]
   @march ~U[2026-03-01 00:00:00Z]
 
-  setup do
+  setup %{mode: mode} do
     name = "sitemapdocs#{System.unique_integer([:positive])}"
     site = create_site!(name: name, host: "#{name}.test", active: true)
 
-    on_exit(fn -> SettingsState.delete(site.id, "site.languages") end)
+    on_exit(fn ->
+      SettingsState.delete(site.id, "site.languages")
+      SettingsState.delete(site.id, "site.language_urls")
+    end)
+
     {:ok, _} = Settings.put("site.languages", ["en", "fa"], site_id: site.id)
+    {:ok, _} = Settings.put("site.language_urls", mode, site_id: site.id)
 
     Provision.ensure!(site)
 
     {:ok, site: site}
   end
 
+  # Where English, the site's first language, puts `path` in `mode`: under no prefix while the first
+  # language goes without one, under its own once every language carries one.
+  defp english("prefix_others", path), do: path
+  defp english("prefix_all", path), do: "/en" <> path
+
   # What `MishkaCmsCore.Runtime.Compilers.SitemapCompiler` hands the plugins.
   defp handed(site) do
     {pages, _hidden} = PageEditions.indexable(site.id)
-    Enum.reject(pages, &(PageEditions.path(&1.path, %{}) || PageEditions.language_only?(&1.path)))
+
+    Enum.reject(
+      pages,
+      &(Languages.url(&1.path, %{}, site.id) || PageEditions.language_only?(&1.path))
+    )
   end
 
   defp listed(site, pages \\ nil, urls \\ []) do
@@ -62,6 +78,8 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
   defp stream(urls), do: Stream.map(urls, & &1)
 
   defp paths(urls), do: urls |> Enum.map(& &1.path) |> Enum.sort()
+
+  defp page_reads(reads), do: Enum.count(reads, &(&1 =~ ~s("mishka_document_sections")))
 
   # What `fun` returns, and the SQL of every query the repo ran meanwhile.
   defp reads_while(fun) do
@@ -133,7 +151,7 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
   describe "a published document" do
     test "is listed at its front page and each approved page of the version marked latest",
-         %{site: site} do
+         %{site: site, mode: mode} do
       document = document!(site, slug: "guide")
       older = version!(site, document, published_at: @january)
       current = version!(site, document, published_at: @february, is_latest_for_version: true)
@@ -148,15 +166,20 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       [first | urls] = listed(site, nil, [core])
 
       assert first == core
-      assert paths(urls) == ["/en/docs/guide", "/en/docs/guide/install"]
+      assert paths(urls) == [english(mode, "/docs/guide"), english(mode, "/docs/guide/install")]
 
       stored = Ash.get!(Workspace, document.id, tenant: site.id, authorize?: false)
-      front = Enum.find(urls, &(&1.path == "/en/docs/guide"))
+      front = Enum.find(urls, &(&1.path == english(mode, "/docs/guide")))
       assert front.lastmod == Enum.max([stored.updated_at, install.updated_at], DateTime)
-      assert Enum.find(urls, &(&1.path == "/en/docs/guide/install")).lastmod == install.updated_at
+
+      assert Enum.find(urls, &(&1.path == english(mode, "/docs/guide/install"))).lastmod ==
+               install.updated_at
     end
 
-    test "shows the version an editor marked latest over a newer published one", %{site: site} do
+    test "shows the version an editor marked latest over a newer published one", %{
+      site: site,
+      mode: mode
+    } do
       document = document!(site, slug: "guide")
       marked = version!(site, document, published_at: @january, is_latest_for_version: true)
       newer = version!(site, document, published_at: @february)
@@ -164,11 +187,14 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       page!(site, marked, "marked-page")
       page!(site, newer, "newer-page")
 
-      assert paths(listed(site)) == ["/en/docs/guide", "/en/docs/guide/marked-page"]
+      assert paths(listed(site)) == [
+               english(mode, "/docs/guide"),
+               english(mode, "/docs/guide/marked-page")
+             ]
     end
 
     test "falls back to the newest published version when the one marked latest is a draft",
-         %{site: site} do
+         %{site: site, mode: mode} do
       document = document!(site, slug: "guide")
       beta = version!(site, document, status: :beta, published_at: @january)
       stable = version!(site, document, status: :stable, published_at: @february)
@@ -182,7 +208,10 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
       page!(site, draft, "draft-page")
 
-      assert paths(listed(site)) == ["/en/docs/guide", "/en/docs/guide/stable-page"]
+      assert paths(listed(site)) == [
+               english(mode, "/docs/guide"),
+               english(mode, "/docs/guide/stable-page")
+             ]
     end
   end
 
@@ -212,7 +241,7 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       assert paths(listed(site)) == ["/fa/docs/rahnama", "/fa/docs/rahnama/rahnama-intro"]
     end
 
-    test "a document in a language its page does not answer", %{site: site} do
+    test "a document in a language its page does not answer", %{site: site, mode: mode} do
       published!(site, "guide")
       published!(site, "rahnama", language: "fa")
       %{section: inner} = Provision.item_paths()
@@ -221,31 +250,33 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       pages = Enum.map(handed(site), &if(&1.path == inner, do: %{&1 | extra: %{}}, else: &1))
 
       assert paths(listed(site, pages)) == [
-               "/en/docs/guide",
-               "/en/docs/guide/guide-intro",
+               english(mode, "/docs/guide"),
+               english(mode, "/docs/guide/guide-intro"),
                "/fa/docs/rahnama"
              ]
     end
 
-    test "an address whose page the site does not serve", %{site: site} do
+    test "an address whose page the site does not serve", %{site: site, mode: mode} do
       published!(site, "guide")
       %{workspace: front, section: inner} = Provision.item_paths()
 
       assert listed(site, []) == []
 
       assert paths(listed(site, Enum.reject(handed(site), &(&1.path == inner)))) == [
-               "/en/docs/guide"
+               english(mode, "/docs/guide")
              ]
 
       assert paths(listed(site, Enum.reject(handed(site), &(&1.path == front)))) == [
-               "/en/docs/guide/guide-intro"
+               english(mode, "/docs/guide/guide-intro")
              ]
     end
   end
 
+  # READ AS A VISITOR WHO IS NOT SIGNED IN: a locked document or page is left out of the read itself,
+  # whoever holds the lock.
   describe "a record kept out of an index" do
     test "a document that names a permission lists nothing, and its pages are never read",
-         %{site: site} do
+         %{site: site, mode: mode} do
       published!(site, "members", permissions: ["members:read"])
 
       {urls, reads} = reads_while(fn -> listed(site) end)
@@ -255,11 +286,14 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
       published!(site, "guide")
 
-      assert paths(listed(site)) == ["/en/docs/guide", "/en/docs/guide/guide-intro"]
+      assert paths(listed(site)) == [
+               english(mode, "/docs/guide"),
+               english(mode, "/docs/guide/guide-intro")
+             ]
     end
 
     test "a noindex document lists no page of it but one whose own robots meta allows it",
-         %{site: site} do
+         %{site: site, mode: mode} do
       for directive <- ["noindex", "none"] do
         document = document!(site, slug: directive, seo_tags: [robots_meta(directive)])
         version = version!(site, document, [])
@@ -268,11 +302,14 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
         page!(site, version, "#{directive}-own", seo_tags: [robots_meta("index, follow")])
       end
 
-      assert paths(listed(site)) == ["/en/docs/noindex/noindex-own", "/en/docs/none/none-own"]
+      assert paths(listed(site)) == [
+               english(mode, "/docs/noindex/noindex-own"),
+               english(mode, "/docs/none/none-own")
+             ]
     end
 
     test "a page that names a permission, or whose own robots meta says noindex, is left out alone",
-         %{site: site} do
+         %{site: site, mode: mode} do
       document = document!(site, slug: "guide")
       version = version!(site, document, [])
 
@@ -280,10 +317,16 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       page!(site, version, "locked", permissions: ["members:read"])
       page!(site, version, "hidden", seo_tags: [robots_meta("noindex, follow")])
 
-      assert paths(listed(site)) == ["/en/docs/guide", "/en/docs/guide/open"]
+      assert paths(listed(site)) == [
+               english(mode, "/docs/guide"),
+               english(mode, "/docs/guide/open")
+             ]
     end
 
-    test "a page under a locked page, however deep, is left out with it", %{site: site} do
+    test "a page under a locked page, however deep, is left out with it", %{
+      site: site,
+      mode: mode
+    } do
       version = version!(site, document!(site, slug: "guide"), [])
 
       open = page!(site, version, "open")
@@ -293,39 +336,53 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       page!(site, version, "locked-grandchild", parent_section_id: child.id)
 
       assert paths(listed(site)) ==
-               ["/en/docs/guide", "/en/docs/guide/open", "/en/docs/guide/open-child"]
+               [
+                 english(mode, "/docs/guide"),
+                 english(mode, "/docs/guide/open"),
+                 english(mode, "/docs/guide/open-child")
+               ]
     end
   end
 
   describe "read as the build reads it" do
-    test "reads nothing until what it returns is read", %{site: site} do
+    test "reads nothing until what it returns is read", %{site: site, mode: mode} do
       assert {:reply, %{urls: urls}} =
                SitemapUrls.call(%{site: site, pages: handed(site), urls: stream([])})
 
       published!(site, "guide")
 
-      assert paths(urls) == ["/en/docs/guide", "/en/docs/guide/guide-intro"]
+      assert paths(urls) == [
+               english(mode, "/docs/guide"),
+               english(mode, "/docs/guide/guide-intro")
+             ]
     end
 
-    test "lists every document, past the most one read returns", %{site: site} do
+    test "lists every document, past the most one read returns", %{site: site, mode: mode} do
       slugs = for n <- 1..101, do: "guide-#{String.pad_leading("#{n}", 3, "0")}"
 
       for slug <- slugs, do: version!(site, document!(site, slug: slug), [])
 
-      assert paths(listed(site)) == Enum.map(slugs, &"/en/docs/#{&1}")
+      assert paths(listed(site)) == Enum.map(slugs, &english(mode, "/docs/#{&1}"))
     end
 
-    # ONE READ OF THE PAGES FOR A BATCH OF DOCUMENTS, never one for each document.
+    # ONE READ OF THE PAGES FOR A BATCH OF DOCUMENTS, never one for each document — and the reads
+    # the public action makes to keep a locked page out are made once for the batch too.
     test "reads the pages of a batch of documents together", %{site: site} do
-      for slug <- ["alpha", "beta", "gamma"], do: published!(site, slug)
+      published!(site, "alpha")
+      {one, one_read} = reads_while(fn -> listed(site) end)
 
-      {urls, reads} = reads_while(fn -> listed(site) end)
+      for slug <- ["beta", "gamma"], do: published!(site, slug)
+      {three, three_read} = reads_while(fn -> listed(site) end)
 
-      assert length(urls) == 6
-      assert Enum.count(reads, &(&1 =~ ~s("mishka_document_sections"))) == 1
+      assert length(one) == 2
+      assert length(three) == 6
+      assert page_reads(three_read) == page_reads(one_read)
     end
 
-    test "lists every page of a document, past the most one read returns", %{site: site} do
+    test "lists every page of a document, past the most one read returns", %{
+      site: site,
+      mode: mode
+    } do
       document = document!(site, slug: "guide")
       version = version!(site, document, [])
 
@@ -335,12 +392,15 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       urls = listed(site)
 
       assert paths(urls) ==
-               Enum.sort(["/en/docs/guide" | Enum.map(pages, &"/en/docs/guide/#{&1.slug}")])
+               Enum.sort([
+                 english(mode, "/docs/guide")
+                 | Enum.map(pages, &english(mode, "/docs/guide/#{&1.slug}"))
+               ])
 
       stored = Ash.get!(Workspace, document.id, tenant: site.id, authorize?: false)
       changed = Enum.max([stored.updated_at | Enum.map(pages, & &1.updated_at)], DateTime)
 
-      assert Enum.find(urls, &(&1.path == "/en/docs/guide")).lastmod == changed
+      assert Enum.find(urls, &(&1.path == english(mode, "/docs/guide"))).lastmod == changed
     end
   end
 
@@ -351,7 +411,7 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
     # Registered by hand for the reason `MishkaDocument.ProvisionTest`'s `listening!/0` gives: this
     # suite's registry is not up when the extension's supervisor starts its plugins.
-    test "answers `seo:sitemap:urls`, the event core fires", %{site: site} do
+    test "answers `seo:sitemap:urls`, the event core fires", %{site: site, mode: mode} do
       {:ok, _registered} = SitemapUrls.register()
       :ok = EventHandler.do_compile("seo:sitemap:urls", :start, false)
 
@@ -360,12 +420,18 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       assert %{urls: urls} =
                Hook.call("seo:sitemap:urls", %{site: site, pages: handed(site), urls: stream([])})
 
-      assert paths(urls) == ["/en/docs/guide", "/en/docs/guide/guide-intro"]
+      assert paths(urls) == [
+               english(mode, "/docs/guide"),
+               english(mode, "/docs/guide/guide-intro")
+             ]
     end
 
     # THE CONTRACT AS CORE READS IT: the build of the site's sitemap reads the stream this returns
     # and writes each address on the site's own address.
-    test "is read by the build of the site's sitemap, on the site's own address", %{site: site} do
+    test "is read by the build of the site's sitemap, on the site's own address", %{
+      site: site,
+      mode: mode
+    } do
       {:ok, _registered} = SitemapUrls.register()
       :ok = EventHandler.do_compile("seo:sitemap:urls", :start, false)
 
@@ -392,8 +458,8 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       origin = Helpers.site_url(site.host, "")
       file = :zlib.gunzip(gz)
 
-      assert file =~ "<loc>#{origin}/en/docs/guide</loc>"
-      assert file =~ "<loc>#{origin}/en/docs/guide/guide-intro</loc>"
+      assert file =~ "<loc>#{origin}#{english(mode, "/docs/guide")}</loc>"
+      assert file =~ "<loc>#{origin}#{english(mode, "/docs/guide/guide-intro")}</loc>"
     end
 
     test "fills the addresses of two of the sample pages" do

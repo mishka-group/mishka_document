@@ -9,7 +9,10 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   """
   use MishkaDocument.DataCase, async: false
 
-  alias MishkaCmsCore.Runtime.{PageEditions, Seo}
+  import Phoenix.Component, only: [sigil_H: 2]
+  import Phoenix.LiveViewTest, only: [rendered_to_string: 1]
+
+  alias MishkaCmsCore.Runtime.{Languages, Seo}
   alias MishkaCmsCore.Runtime.States.SettingsState
   alias MishkaCmsCore.Settings
   alias MishkaDocument.Plugins.PageSeo
@@ -27,6 +30,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
 
     on_exit(fn ->
       SettingsState.delete(site.id, "site.languages")
+      SettingsState.delete(site.id, "site.language_urls")
       SettingsState.delete(site.id, "site.title")
     end)
 
@@ -39,10 +43,18 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   # The site's address as core writes it in this environment.
   defp base, do: Seo.base(@host)
 
+  # Where English, the site's first language, puts `path` in `mode`: under no prefix while the first
+  # language goes without one, under its own once every language carries one.
+  defp english("prefix_others", path), do: path
+  defp english("prefix_all", path), do: "/en" <> path
+
+  defp url_mode!(site, mode),
+    do: {:ok, _} = Settings.put("site.language_urls", mode, site_id: site.id)
+
   # The map core hands the plugins for a request to the `kind` page, storing `schema`, with `params`.
   defp given(site, kind, params, schema \\ []) do
     path = Provision.item_paths()[kind]
-    filled = PageEditions.path(path, params)
+    filled = Languages.url(path, params, site.id)
 
     Seo.given(
       %{
@@ -113,6 +125,33 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   # The head core builds from the answer, with the CMS page's own layers empty.
   defp head(given), do: given |> answer() |> Seo.accept(given) |> Seo.head(base: base())
 
+  # The head as `MishkaCmsWeb.RuntimeLive.page_head/1` writes it into the page.
+  defp rendered_head(head) do
+    assigns = %{seo: head}
+
+    rendered_to_string(~H"""
+    <meta :for={{"meta", attrs} <- @seo.tags} {attrs} />
+    <script :for={json <- @seo.schema} type="application/ld+json">
+      <%= Phoenix.HTML.raw(json) %>
+    </script>
+    """)
+  end
+
+  defp meta_content(html, selector),
+    do:
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.attribute("content")
+
+  defp json_ld(html, type) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s(script[type="application/ld+json"]))
+    |> Enum.map(&(&1 |> LazyHTML.text() |> Jason.decode!()))
+    |> Enum.find(&(&1["@type"] == type))
+  end
+
   defp robots(head) do
     for {"meta", attrs} <- head.tags,
         {"name", "robots"} in attrs,
@@ -146,53 +185,78 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   end
 
   describe "a document's front page" do
-    test "is the document's own head", %{site: site} do
-      document = document!(site, name: "Guide", slug: "guide", description: "How to use it.")
-      url = base() <> "/en/docs/guide"
+    for mode <- ~w(prefix_others prefix_all) do
+      test "is the document's own head, in #{mode}", %{site: site} do
+        url_mode!(site, unquote(mode))
+        document = document!(site, name: "Guide", slug: "guide", description: "How to use it.")
+        url = base() <> english(unquote(mode), "/docs/guide")
 
-      answered = answer(given(site, :workspace, %{"lang" => "en", "workspace" => "guide"}))
+        answered = answer(given(site, :workspace, %{"lang" => "en", "workspace" => "guide"}))
 
-      assert answered.title == "Guide"
-      assert answered.description == "How to use it."
-      assert answered.type == "article"
+        assert answered.title == "Guide"
+        assert answered.description == "How to use it."
+        assert answered.type == "article"
 
-      assert %{
-               "headline" => "Guide",
-               "description" => "How to use it.",
-               "inLanguage" => "en",
-               "mainEntityOfPage" => ^url,
-               "publisher" => %{"name" => "The Studio"}
-             } = schema_of(answered, "TechArticle")
+        assert %{
+                 "headline" => "Guide",
+                 "description" => "How to use it.",
+                 "inLanguage" => "en",
+                 "mainEntityOfPage" => ^url,
+                 "publisher" => %{"name" => "The Studio"}
+               } = schema_of(answered, "TechArticle")
 
-      assert crumbs(answered) == [
-               {1, "Documentation", base() <> "/en/docs"},
-               {2, "Guide", url}
-             ]
+        assert crumbs(answered) == [
+                 {1, "Documentation", base() <> english(unquote(mode), "/docs")},
+                 {2, "Guide", url}
+               ]
 
-      assert %{
-               "doc.title" => "Guide",
-               "doc.url" => ^url,
-               "workspace.name" => "Guide",
-               "workspace.description" => "How to use it.",
-               "workspace.url" => ^url
-             } = answered.vars
+        assert %{
+                 "doc.title" => "Guide",
+                 "doc.url" => ^url,
+                 "workspace.name" => "Guide",
+                 "workspace.description" => "How to use it.",
+                 "workspace.url" => ^url
+               } = answered.vars
 
-      refute Map.has_key?(answered.vars, "doc.version")
-      assert answered.vars["doc.modified_at"] == iso(document.updated_at)
+        refute Map.has_key?(answered.vars, "doc.version")
+        assert answered.vars["doc.modified_at"] == iso(document.updated_at)
 
-      assert keys(answered.var_docs) == [
-               "doc.title",
-               "doc.description",
-               "doc.url",
-               "doc.version",
-               "doc.published_at",
-               "doc.modified_at",
-               "workspace.name",
-               "workspace.description",
-               "workspace.url"
-             ]
+        assert keys(answered.var_docs) == [
+                 "doc.title",
+                 "doc.description",
+                 "doc.url",
+                 "doc.version",
+                 "doc.published_at",
+                 "doc.modified_at",
+                 "workspace.name",
+                 "workspace.description",
+                 "workspace.url"
+               ]
 
-      assert Enum.all?(answered.var_docs, &(is_binary(&1.label) and is_binary(&1.help)))
+        assert Enum.all?(answered.var_docs, &(is_binary(&1.label) and is_binary(&1.help)))
+      end
+    end
+
+    # A name is stored as typed (`MishkaCmsCore.PlainText`), so the head escapes it once: `&amp;`
+    # in the page's source, `&` to whoever reads it.
+    test "writes a name with an ampersand escaped once, in the tags and in the JSON-LD", %{
+      site: site
+    } do
+      document!(site, name: "Tips & Tricks", slug: "tips", description: "Read & run.")
+
+      html =
+        site
+        |> given(:workspace, %{"lang" => "en", "workspace" => "tips"})
+        |> head()
+        |> rendered_head()
+
+      assert html =~ ~s(content="Tips &amp; Tricks")
+      assert html =~ ~s(content="Read &amp; run.")
+      refute html =~ "&amp;amp;"
+      assert html =~ ~S("headline":"Tips \u0026 Tricks")
+      assert meta_content(html, ~s(meta[property="og:title"])) == ["Tips & Tricks"]
+      assert meta_content(html, ~s(meta[name="description"])) == ["Read & run."]
+      assert %{"headline" => "Tips & Tricks"} = json_ld(html, "TechArticle")
     end
 
     test "its own tags and schema come with it", %{site: site} do
@@ -233,37 +297,60 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       {:ok, document: document, latest: latest}
     end
 
-    test "is the page in the version marked latest", %{site: site} do
-      url = base() <> "/en/docs/guide/install"
+    for mode <- ~w(prefix_others prefix_all) do
+      test "is the page in the version marked latest, in #{mode}", %{site: site} do
+        url_mode!(site, unquote(mode))
+        url = base() <> english(unquote(mode), "/docs/guide/install")
 
-      answered =
-        answer(
-          given(site, :section, %{"lang" => "en", "workspace" => "guide", "section" => "install"})
-        )
+        answered =
+          answer(
+            given(site, :section, %{
+              "lang" => "en",
+              "workspace" => "guide",
+              "section" => "install"
+            })
+          )
 
-      assert answered.title == "Install"
-      assert answered.description == "Run mix setup & wait."
-      assert answered.type == "article"
+        assert answered.title == "Install"
+        assert answered.description == "Run mix setup & wait."
+        assert answered.type == "article"
 
-      assert %{
-               "headline" => "Install",
-               "version" => "2.0.0",
-               "datePublished" => "2026-03-01T00:00:00Z",
-               "mainEntityOfPage" => ^url
-             } = schema_of(answered, "TechArticle")
+        assert %{
+                 "headline" => "Install",
+                 "version" => "2.0.0",
+                 "datePublished" => "2026-03-01T00:00:00Z",
+                 "mainEntityOfPage" => ^url
+               } = schema_of(answered, "TechArticle")
 
-      assert crumbs(answered) == [
-               {1, "Documentation", base() <> "/en/docs"},
-               {2, "Guide", base() <> "/en/docs/guide"},
-               {3, "Install", url}
-             ]
+        assert crumbs(answered) == [
+                 {1, "Documentation", base() <> english(unquote(mode), "/docs")},
+                 {2, "Guide", base() <> english(unquote(mode), "/docs/guide")},
+                 {3, "Install", url}
+               ]
 
-      assert %{
-               "doc.title" => "Install",
-               "doc.version" => "2.0.0",
-               "doc.url" => ^url,
-               "workspace.name" => "Guide"
-             } = answered.vars
+        assert %{
+                 "doc.title" => "Install",
+                 "doc.version" => "2.0.0",
+                 "doc.url" => ^url,
+                 "workspace.name" => "Guide"
+               } = answered.vars
+      end
+    end
+
+    test "escapes a page's title with an ampersand once", %{site: site, document: document} do
+      version = version!(site, document, version_number: "3.0.0", is_latest_for_version: true)
+      page!(site, version, "run", title: "Install & <b>run</b>", content: "<p>Go.</p>")
+
+      html =
+        site
+        |> given(:section, %{"lang" => "en", "workspace" => "guide", "section" => "run"})
+        |> head()
+        |> rendered_head()
+
+      assert html =~ ~s(content="Install &amp; run")
+      refute html =~ "&amp;amp;"
+      assert meta_content(html, ~s(meta[property="og:title"])) == ["Install & run"]
+      assert %{"headline" => "Install & run"} = json_ld(html, "TechArticle")
     end
 
     test "is the page in the version `?v=` names", %{site: site} do
@@ -423,6 +510,53 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
 
       assert open.permissions == []
       assert robots(open) == ["index, follow, max-image-preview:large"]
+    end
+  end
+
+  # A LOCKED RECORD'S HEAD IS ITS OWN, AND ITS LOCK COMES WITH IT. `MishkaCmsWeb.RuntimeLive` opens
+  # the address only for a reader holding the lock, so the head built here reaches that reader and no
+  # other — which is why it is read as the system and not as the visitor.
+  describe "a document or a page locked to permissions" do
+    setup %{site: site} do
+      document =
+        document!(site,
+          name: "Members",
+          slug: "members",
+          description: "For members.",
+          permissions: ["members:read"]
+        )
+
+      page!(site, version!(site, document, is_latest_for_version: true), "install",
+        title: "Install"
+      )
+
+      open = version!(site, document!(site, slug: "open"), is_latest_for_version: true)
+      page!(site, open, "billing", title: "Billing", permissions: ["billing:read"])
+
+      :ok
+    end
+
+    test "is described by its own head, with the lock the page admits its reader by", %{
+      site: site
+    } do
+      front = answer(given(site, :workspace, %{"lang" => "en", "workspace" => "members"}))
+
+      assert front.title == "Members"
+      assert front.description == "For members."
+      assert front.permissions == ["members:read"]
+      assert %{"workspace.name" => "Members"} = front.vars
+      assert %{"headline" => "Members"} = schema_of(front, "TechArticle")
+
+      for {workspace, section, title, permissions} <- [
+            {"members", "install", "Install", ["members:read"]},
+            {"open", "billing", "Billing", ["billing:read"]}
+          ] do
+        params = %{"lang" => "en", "workspace" => workspace, "section" => section}
+        answered = answer(given(site, :section, params))
+
+        assert {section, answered.title, answered.permissions} == {section, title, permissions}
+        assert %{"doc.title" => ^title} = answered.vars
+      end
     end
   end
 

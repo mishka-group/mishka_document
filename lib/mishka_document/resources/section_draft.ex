@@ -1057,7 +1057,8 @@ defmodule MishkaDocument.SectionDraft do
     auto_wire true
 
     field :title, :string,
-      derives: "sanitize(strip_tags, trim) validate(string, not_empty, min_len=1, max_len=500)"
+      validator: {MishkaCmsCore.PlainText, :field},
+      derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=500)"
 
     field :slug, :string,
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=255)"
