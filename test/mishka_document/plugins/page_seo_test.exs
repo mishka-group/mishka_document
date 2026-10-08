@@ -445,6 +445,53 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
     end
   end
 
+  # A LOCKED RECORD'S HEAD IS ITS OWN, AND ITS LOCK COMES WITH IT. `MishkaCmsWeb.RuntimeLive` opens
+  # the address only for a reader holding the lock, so the head built here reaches that reader and no
+  # other — which is why it is read as the system and not as the visitor.
+  describe "a document or a page locked to permissions" do
+    setup %{site: site} do
+      document =
+        document!(site,
+          name: "Members",
+          slug: "members",
+          description: "For members.",
+          permissions: ["members:read"]
+        )
+
+      page!(site, version!(site, document, is_latest_for_version: true), "install",
+        title: "Install"
+      )
+
+      open = version!(site, document!(site, slug: "open"), is_latest_for_version: true)
+      page!(site, open, "billing", title: "Billing", permissions: ["billing:read"])
+
+      :ok
+    end
+
+    test "is described by its own head, with the lock the page admits its reader by", %{
+      site: site
+    } do
+      front = answer(given(site, :workspace, %{"lang" => "en", "workspace" => "members"}))
+
+      assert front.title == "Members"
+      assert front.description == "For members."
+      assert front.permissions == ["members:read"]
+      assert %{"workspace.name" => "Members"} = front.vars
+      assert %{"headline" => "Members"} = schema_of(front, "TechArticle")
+
+      for {workspace, section, title, permissions} <- [
+            {"members", "install", "Install", ["members:read"]},
+            {"open", "billing", "Billing", ["billing:read"]}
+          ] do
+        params = %{"lang" => "en", "workspace" => workspace, "section" => section}
+        answered = answer(given(site, :section, params))
+
+        assert {section, answered.title, answered.permissions} == {section, title, permissions}
+        assert %{"doc.title" => ^title} = answered.vars
+      end
+    end
+  end
+
   describe "a page's robots meta" do
     setup %{site: site} do
       document = document!(site, slug: "hidden", seo_tags: [robots_meta("noindex")])

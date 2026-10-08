@@ -2071,8 +2071,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     # share a `language_group_id`, which is what makes the two the same page — and the Persian one is
     # filed under a different slug on purpose, so nothing here can be right by having the same name.
     #
-    # Read in the background, where the task knows no site of its own: each link is still the
-    # address this site's URL mode gives its language.
+    # Read in the background, in the task `MishkaGervaz.Messages.start_async/4` hands the page's
+    # site: each link is the address this site's URL mode gives its language, built by
+    # `site_path/2` there as in the template.
     for mode <- ~w(prefix_others prefix_all) do
       test "and each leads to the same page in that language, in #{mode}", %{site: site} do
         url_mode!(site, unquote(mode))

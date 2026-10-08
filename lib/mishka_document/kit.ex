@@ -55,6 +55,10 @@ defmodule MishkaDocument.Kit do
   rather than taking the page down. A documentation page carries four of these blocks at once, and
   reading in the background is what stops the slowest of them deciding when the page appears.
 
+  Each task is started through `MishkaGervaz.Messages.start_async/4`, which hands it the site and
+  the locale the page renders in (`MishkaCmsCore.Runtime.LiveViewHelpers.carry_into_tasks/0`), so a
+  link `doc-switcher` builds there with `site_path/2` is the one its template would build.
+
   `doc-workspace-list` streams its rows, and says `phx-update="stream"` only where there is a socket
   to stream from — `@myself` is nil in a cold render, and a stream container is one the client never
   removes a child from, so the builder's canvas would keep the cards of the previous setting beside

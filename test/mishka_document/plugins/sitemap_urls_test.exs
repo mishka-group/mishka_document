@@ -79,6 +79,8 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
   defp paths(urls), do: urls |> Enum.map(& &1.path) |> Enum.sort()
 
+  defp page_reads(reads), do: Enum.count(reads, &(&1 =~ ~s("mishka_document_sections")))
+
   # What `fun` returns, and the SQL of every query the repo ran meanwhile.
   defp reads_while(fun) do
     handler = "sitemap-reads-#{System.unique_integer([:positive])}"
@@ -270,6 +272,8 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
     end
   end
 
+  # READ AS A VISITOR WHO IS NOT SIGNED IN: a locked document or page is left out of the read itself,
+  # whoever holds the lock.
   describe "a record kept out of an index" do
     test "a document that names a permission lists nothing, and its pages are never read",
          %{site: site, mode: mode} do
@@ -361,14 +365,18 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       assert paths(listed(site)) == Enum.map(slugs, &english(mode, "/docs/#{&1}"))
     end
 
-    # ONE READ OF THE PAGES FOR A BATCH OF DOCUMENTS, never one for each document.
+    # ONE READ OF THE PAGES FOR A BATCH OF DOCUMENTS, never one for each document — and the reads
+    # the public action makes to keep a locked page out are made once for the batch too.
     test "reads the pages of a batch of documents together", %{site: site} do
-      for slug <- ["alpha", "beta", "gamma"], do: published!(site, slug)
+      published!(site, "alpha")
+      {one, one_read} = reads_while(fn -> listed(site) end)
 
-      {urls, reads} = reads_while(fn -> listed(site) end)
+      for slug <- ["beta", "gamma"], do: published!(site, slug)
+      {three, three_read} = reads_while(fn -> listed(site) end)
 
-      assert length(urls) == 6
-      assert Enum.count(reads, &(&1 =~ ~s("mishka_document_sections"))) == 1
+      assert length(one) == 2
+      assert length(three) == 6
+      assert page_reads(three_read) == page_reads(one_read)
     end
 
     test "lists every page of a document, past the most one read returns", %{

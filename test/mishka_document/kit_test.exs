@@ -200,6 +200,28 @@ defmodule MishkaDocument.KitTest do
       end
     end
 
+    # A TASK READS IN THE PAGE'S SITE AND LOCALE ONLY WHEN IT IS HANDED THEM. Phoenix's own
+    # `start_async/3` starts one with neither, and `site_path/2` in it builds no link at all; the
+    # host's `MishkaCms.AsyncLocaleTest` holds Elixir code to the same rule, and does not read this
+    # bundle.
+    test "and every block that reads in the background starts its task through Gervaz" do
+      started =
+        for component <- components(),
+            helper <- component["helpers"],
+            String.contains?(helper["code"], "start_async(") do
+          refute helper["code"] =~ ~r/Phoenix\.LiveView\.start_async\(/,
+                 "#{component["name"]}'s #{helper["name"]} starts a task through Phoenix's own " <>
+                   "start_async — use MishkaGervaz.Messages.start_async/4"
+
+          assert helper["code"] =~ "MishkaGervaz.Messages.start_async(",
+                 "#{component["name"]}'s #{helper["name"]} starts a task some other way"
+
+          component["name"]
+        end
+
+      assert Enum.sort(started) == ~w(doc-sidebar doc-switcher doc-toc doc-workspace-list)
+    end
+
     # EVERY ASSIGN THE MARKUP READS IS DECLARED, or the component raises inside a visitor's LiveView
     # the first time a page leaves that attribute out.
     test "declares every assign its own markup reads" do
