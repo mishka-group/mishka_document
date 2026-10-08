@@ -31,7 +31,7 @@ defmodule MishkaDocument.Test.SectionGuardedStructTest do
     end
 
     describe "direct __guarded_change__/1" do
-      test "title strip_tags+trim; content basic_html; review status enums" do
+      test "title as plain text, trimmed; content basic_html; review status enums" do
         assert {:ok,
                 %{
                   title: "Intro",

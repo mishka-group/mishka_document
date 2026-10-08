@@ -9,6 +9,9 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   """
   use MishkaDocument.DataCase, async: false
 
+  import Phoenix.Component, only: [sigil_H: 2]
+  import Phoenix.LiveViewTest, only: [rendered_to_string: 1]
+
   alias MishkaCmsCore.Runtime.{Languages, Seo}
   alias MishkaCmsCore.Runtime.States.SettingsState
   alias MishkaCmsCore.Settings
@@ -122,6 +125,33 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   # The head core builds from the answer, with the CMS page's own layers empty.
   defp head(given), do: given |> answer() |> Seo.accept(given) |> Seo.head(base: base())
 
+  # The head as `MishkaCmsWeb.RuntimeLive.page_head/1` writes it into the page.
+  defp rendered_head(head) do
+    assigns = %{seo: head}
+
+    rendered_to_string(~H"""
+    <meta :for={{"meta", attrs} <- @seo.tags} {attrs} />
+    <script :for={json <- @seo.schema} type="application/ld+json">
+      <%= Phoenix.HTML.raw(json) %>
+    </script>
+    """)
+  end
+
+  defp meta_content(html, selector),
+    do:
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.attribute("content")
+
+  defp json_ld(html, type) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s(script[type="application/ld+json"]))
+    |> Enum.map(&(&1 |> LazyHTML.text() |> Jason.decode!()))
+    |> Enum.find(&(&1["@type"] == type))
+  end
+
   defp robots(head) do
     for {"meta", attrs} <- head.tags,
         {"name", "robots"} in attrs,
@@ -207,6 +237,28 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       end
     end
 
+    # A name is stored as typed (`MishkaCmsCore.PlainText`), so the head escapes it once: `&amp;`
+    # in the page's source, `&` to whoever reads it.
+    test "writes a name with an ampersand escaped once, in the tags and in the JSON-LD", %{
+      site: site
+    } do
+      document!(site, name: "Tips & Tricks", slug: "tips", description: "Read & run.")
+
+      html =
+        site
+        |> given(:workspace, %{"lang" => "en", "workspace" => "tips"})
+        |> head()
+        |> rendered_head()
+
+      assert html =~ ~s(content="Tips &amp; Tricks")
+      assert html =~ ~s(content="Read &amp; run.")
+      refute html =~ "&amp;amp;"
+      assert html =~ ~S("headline":"Tips \u0026 Tricks")
+      assert meta_content(html, ~s(meta[property="og:title"])) == ["Tips & Tricks"]
+      assert meta_content(html, ~s(meta[name="description"])) == ["Read & run."]
+      assert %{"headline" => "Tips & Tricks"} = json_ld(html, "TechArticle")
+    end
+
     test "its own tags and schema come with it", %{site: site} do
       document!(site,
         slug: "guide",
@@ -283,6 +335,22 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
                  "workspace.name" => "Guide"
                } = answered.vars
       end
+    end
+
+    test "escapes a page's title with an ampersand once", %{site: site, document: document} do
+      version = version!(site, document, version_number: "3.0.0", is_latest_for_version: true)
+      page!(site, version, "run", title: "Install & <b>run</b>", content: "<p>Go.</p>")
+
+      html =
+        site
+        |> given(:section, %{"lang" => "en", "workspace" => "guide", "section" => "run"})
+        |> head()
+        |> rendered_head()
+
+      assert html =~ ~s(content="Install &amp; run")
+      refute html =~ "&amp;amp;"
+      assert meta_content(html, ~s(meta[property="og:title"])) == ["Install & run"]
+      assert %{"headline" => "Install & run"} = json_ld(html, "TechArticle")
     end
 
     test "is the page in the version `?v=` names", %{site: site} do

@@ -25,7 +25,7 @@ defmodule MishkaDocument.Test.NoteGuardedStructTest do
     end
 
     describe "direct __guarded_change__/1" do
-      test "title strip_tags+trim; content basic_html; review status accept" do
+      test "title as plain text, trimmed; content basic_html; review status accept" do
         assert {:ok,
                 %{
                   title: "Side Note",

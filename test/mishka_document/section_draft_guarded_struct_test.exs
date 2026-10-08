@@ -50,7 +50,7 @@ defmodule MishkaDocument.Test.SectionDraftGuardedStructTest do
                 ]} = SectionDraft.__guarded_change__(%{version_increment_type: :bogus})
       end
 
-      test "title strip_tags+trim; slug trim; content basic_html" do
+      test "title as plain text, trimmed; slug trim; content basic_html" do
         assert {:ok,
                 %{
                   title: "API Refs",
