@@ -968,6 +968,11 @@ defmodule MishkaDocument.Workspace do
       end
 
       hooks do
+        # While a workspace is added, its slug follows the name until the author types one.
+        on_validate fn params, state ->
+          MishkaCmsCore.Runtime.Helpers.follow_slug(params, state, :name)
+        end
+
         on_cancel fn state -> state end
       end
     end

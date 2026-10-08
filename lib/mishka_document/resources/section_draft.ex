@@ -1058,6 +1058,11 @@ defmodule MishkaDocument.SectionDraft do
       end
 
       hooks do
+        # While a draft is added, its slug follows the title until the author types one.
+        on_validate fn params, state ->
+          MishkaCmsCore.Runtime.Helpers.follow_slug(params, state, :title)
+        end
+
         on_cancel fn state -> state end
       end
     end

@@ -27,6 +27,11 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
   Who wrote a draft is picked when it is added; the edit form shows it and does not let it change.
 
   A note's Site and Section are drawn together, at the top of the form.
+
+  A title is one line, and every textarea besides the content editor is the Tailwind adapter's
+  full-width field, also on the forms `MishkaCmsCoreWeb.UIAdapters.Admin` draws. While a workspace, a
+  tag, a section or a section draft is added, typing its name or title fills the slug the save
+  stores, until the author types one; editing a record's name or title never moves its slug.
   """
   use MishkaDocument.ConnCase
 
@@ -777,6 +782,134 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
                "#{picker(form, :reporter_id)} input[name=_search_reporter_id][disabled]"
              )
     end
+  end
+
+  describe "a document's title and slug" do
+    test "a title is one line on every form that has one", ctx do
+      forms = [
+        {Note, "#{@dashboard}/sections/#{ctx.version.id}", &add_note(&1, ctx.section)},
+        {Section, "#{@dashboard}/sections/#{ctx.version.id}", & &1},
+        {NoteDraft, "#{@dashboard}/note-drafts", & &1},
+        {SectionDraft, "#{@dashboard}/section-drafts", & &1},
+        {Issue, "#{@dashboard}/issues", & &1}
+      ]
+
+      for {resource, path, reach} <- forms do
+        form = FormInfo.component_id(resource)
+        view = ctx.master_conn |> open(path) |> reach.()
+
+        assert has_element?(view, "##{form}-form input[type=text][name='form[title]']"),
+               "#{inspect(resource)}'s title is not one line"
+      end
+    end
+
+    test "an SEO tag's content is the adapter's full-width field", ctx do
+      field = MishkaGervaz.UIAdapters.Tailwind.multiline_class("")
+
+      for {resource, path} <- [
+            {Section, "#{@dashboard}/sections/#{ctx.version.id}"},
+            {SectionDraft, "#{@dashboard}/section-drafts"},
+            {Workspace, @dashboard}
+          ] do
+        form = FormInfo.component_id(resource)
+        view = open(ctx.master_conn, path)
+
+        view
+        |> element("##{form}-form button[phx-click=add_nested]", "Add SEO Tag")
+        |> render_click()
+
+        render_async(view, @await)
+
+        assert view
+               |> element("##{form}-form textarea[name^='form[seo_tags]'][name$='[content]']")
+               |> render()
+               |> LazyHTML.from_fragment()
+               |> LazyHTML.attribute("class") == [field],
+               "#{inspect(resource)}'s SEO tag content is not the adapter's field"
+      end
+    end
+
+    test "the slug follows the name or title while a record is added, until the author types one",
+         ctx do
+      for {resource, path, field} <- [
+            {Workspace, @dashboard, :name},
+            {Tag, "#{@dashboard}/tags", :name},
+            {Section, "#{@dashboard}/sections/#{ctx.version.id}", :title},
+            {SectionDraft, "#{@dashboard}/section-drafts", :title}
+          ] do
+        form = FormInfo.component_id(resource)
+        view = open(ctx.site_admin_conn, path)
+
+        type(view, form, field, "Getting Started: Part 1")
+
+        assert shown(view, form, :slug) == "getting-started-part-1",
+               "#{inspect(resource)}'s slug did not follow its #{field}"
+
+        type(view, form, :slug, "own-slug")
+        type(view, form, field, "Getting Started Again")
+
+        assert shown(view, form, :slug) == "own-slug",
+               "#{inspect(resource)} moved a slug the author typed"
+      end
+    end
+
+    test "a Persian title is saved with the slug the form showed", ctx do
+      form = FormInfo.component_id(Section)
+      view = open(ctx.site_admin_conn, "#{@dashboard}/sections/#{ctx.version.id}")
+
+      type(view, form, :title, "راهنمای شروع")
+      slug = shown(view, form, :slug)
+
+      assert slug == Slug.slugify("راهنمای شروع")
+
+      view
+      |> form("##{form}-form", form: %{language: "en"})
+      |> render_submit()
+
+      assert [%{slug: ^slug}] =
+               Section
+               |> Ash.Query.filter(title == "راهنمای شروع")
+               |> Ash.read!(tenant: ctx.site.id, actor: ctx.site_admin)
+    end
+
+    test "an edited record keeps its slug when its name or title changes", ctx do
+      for {resource, path, record, field} <- [
+            {Workspace, @dashboard, ctx.workspace, :name},
+            {Section, "#{@dashboard}/sections/#{ctx.version.id}", ctx.section, :title}
+          ] do
+        form = FormInfo.component_id(resource)
+        view = ctx.site_admin_conn |> open(path) |> edit(record)
+
+        assert has_element?(view, "##{form}-form[method=put]")
+
+        type(view, form, field, "Renamed Record")
+        assert shown(view, form, :slug) == record.slug
+
+        leave_edit(view, form, :save, %{field => "Renamed Record"})
+
+        assert Ash.get!(resource, record.id, tenant: ctx.site.id, actor: ctx.site_admin).slug ==
+                 record.slug
+      end
+    end
+  end
+
+  # One keystroke's `phx-change`: the form sends every field it shows, with `field` changed.
+  defp type(view, form, field, value) do
+    view
+    |> form("##{form}-form", %{"form" => %{to_string(field) => value}})
+    |> render_change(%{"_target" => ["form", to_string(field)]})
+
+    render_async(view, @await)
+    view
+  end
+
+  defp shown(view, form, field) do
+    view
+    |> element("##{form}-form input[name='form[#{field}]']")
+    |> render()
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.attribute("value")
+    |> List.first()
   end
 
   defp open(conn, path) do
