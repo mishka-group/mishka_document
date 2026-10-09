@@ -28,6 +28,8 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
 
   A note's Site and Section are drawn together, at the top of the form.
 
+  A version's Published At is drawn in its picker as stored, and takes the minutes the picker gives.
+
   A title is one line, and every textarea besides the content editor is the Tailwind adapter's
   full-width field, also on the forms `MishkaCmsCoreWeb.UIAdapters.Admin` draws. While a workspace, a
   tag, a section or a section draft is added, typing its name or title fills the slug the save
@@ -472,6 +474,27 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
 
         assert workspace_id == ctx.workspace.id, "after #{leave}, Add Version lost the workspace"
       end
+    end
+  end
+
+  describe "a version's Published At" do
+    test "shows the stored time in its picker, and saves the one the picker gives", ctx do
+      form = FormInfo.component_id(WorkspaceVersion)
+      Ash.Seed.update!(ctx.version, %{published_at: ~U[2024-03-04 05:06:00Z]})
+
+      view = open(ctx.site_admin_conn, "#{@dashboard}/workspace-version/#{ctx.workspace.id}")
+      edit(view, ctx.version)
+
+      assert shown(view, form, :published_at) == "2024-03-04T05:06"
+
+      view
+      |> form("##{form}-form", form: %{published_at: "2024-09-09T22:45"})
+      |> render_submit()
+
+      refute render(view) =~ "must be a valid date and time"
+
+      assert %{published_at: ~U[2024-09-09 22:45:00Z]} =
+               Ash.get!(WorkspaceVersion, ctx.version.id, tenant: ctx.site.id, authorize?: false)
     end
   end
 
