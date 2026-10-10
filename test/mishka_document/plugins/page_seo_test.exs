@@ -196,6 +196,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
         assert answered.title == "Guide"
         assert answered.description == "How to use it."
         assert answered.type == "article"
+        assert answered.card.eyebrow == "Documentation"
 
         assert %{
                  "headline" => "Guide",
@@ -314,6 +315,9 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
         assert answered.title == "Install"
         assert answered.description == "Run mix setup & wait."
         assert answered.type == "article"
+        assert answered.card.eyebrow == "Guide"
+        assert [version] = answered.card.meta
+        assert version =~ "Version"
 
         assert %{
                  "headline" => "Install",

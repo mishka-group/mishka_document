@@ -34,6 +34,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
     * `vars` — `doc.title`, `doc.description`, `doc.url`, `doc.version`, `doc.published_at`,
       `doc.modified_at` (the front page or the page of it this address shows), and
       `workspace.name`, `workspace.description`, `workspace.url` (the document);
+    * `card` — what its share card (`MishkaCmsCore.Runtime.ShareCard`) shows besides the title and
+      description: "Documentation" above a document's front page, the document's name above one of
+      its pages, and the version;
     * `var_docs` — those variables in the current locale, whether or not this request filled them.
       Called with no `params` — an editor asking which variables a page has — that is all it
       changes.
@@ -207,6 +210,18 @@ defmodule MishkaDocument.Plugins.PageSeo do
   defp moment(%DateTime{} = at), do: DateTime.to_unix(at, :microsecond)
   defp moment(_never), do: 0
 
+  # What a share card (`MishkaCmsCore.Runtime.ShareCard`) shows of it: "Documentation" above a
+  # document's front page, the document's name above one of its pages, and the version.
+  defp card(workspace, %{page?: true} = record),
+    do: %{eyebrow: workspace.name, meta: version(record)}
+
+  defp card(_workspace, record), do: %{eyebrow: gettext("Documentation"), meta: version(record)}
+
+  defp version(%{version: version}) when is_binary(version) and version != "",
+    do: [gettext("Version %{version}", version: version)]
+
+  defp version(_no_version), do: []
+
   defp answer(seo, workspace, record) do
     base = base(seo)
     docs_url = address(Path.dirname(Provision.item_paths().workspace), seo, base)
@@ -243,6 +258,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
         tags: List.wrap(record.seo_tags),
         schema: own_schema(record.schema, article) ++ breadcrumb(trail),
         permissions: List.wrap(record.permissions),
+        card: card(workspace, record),
         vars:
           Map.merge(
             seo.vars,

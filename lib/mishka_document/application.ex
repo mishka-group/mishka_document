@@ -47,6 +47,13 @@ defmodule MishkaDocument.Application do
     MishkaDocument.Plugins.PageSeo
   ]
 
+  # Each document's and page's share card looked at again after it is saved, on its own
+  # `document:<resource>:after_save` event (`MishkaCmsCore.Runtime.ShareCard`).
+  @share_card_plugins [
+    MishkaDocument.Plugins.WorkspaceShareCard,
+    MishkaDocument.Plugins.SectionShareCard
+  ]
+
   @doc """
   Every mishka_installer plugin this extension ships, and exactly what `start/2` supervises. A plugin
   left out of it never registers, so the event it listens on never reaches it.
@@ -55,7 +62,8 @@ defmodule MishkaDocument.Application do
   def plugins,
     do:
       @dashboard_widgets ++
-        @settings_plugins ++ @sidebar_menus ++ @provision_plugins ++ @seo_plugins
+        @settings_plugins ++
+        @sidebar_menus ++ @provision_plugins ++ @seo_plugins ++ @share_card_plugins
 
   @impl true
   def start(_type, _args) do
