@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -396,7 +396,7 @@
         {
           "name": "load",
           "args": "socket",
-          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] == asked do\n  true ->\n    socket\n\n  false ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:documents, fn -> fetch(asked) end)\n    end\nend\n"
+          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] do\n  ^asked ->\n    socket\n\n  before ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) or is_nil(before) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:documents, fn -> fetch(asked) end)\n    end\nend\n"
         },
         {
           "name": "edition_links",
@@ -1160,7 +1160,7 @@
         {
           "name": "load",
           "args": "socket",
-          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] == asked do\n  true ->\n    socket\n\n  false ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:contents, fn -> fetch(asked) end)\n    end\nend\n"
+          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] do\n  ^asked ->\n    socket\n\n  before ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) or is_nil(before) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:contents, fn -> fetch(asked) end)\n    end\nend\n"
         }
       ],
       "permissions": [],
@@ -1502,7 +1502,7 @@
         {
           "name": "load",
           "args": "socket",
-          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] == asked do\n  true ->\n    socket\n\n  false ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:entries, fn -> fetch(asked) end)\n    end\nend\n"
+          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] do\n  ^asked ->\n    socket\n\n  before ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) or is_nil(before) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:entries, fn -> fetch(asked) end)\n    end\nend\n"
         }
       ],
       "permissions": [],
@@ -1895,7 +1895,7 @@
         {
           "name": "load",
           "args": "socket",
-          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] == asked do\n  true ->\n    socket\n\n  false ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:switches, fn -> fetch(asked) end)\n    end\nend\n"
+          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] do\n  ^asked ->\n    socket\n\n  before ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) or is_nil(before) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:switches, fn -> fetch(asked) end)\n    end\nend\n"
         }
       ],
       "permissions": [],

@@ -167,24 +167,22 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     |> IO.iodata_to_binary()
   end
 
-  # A COMPONENT'S OWN ROW, EDITED THE WAY AN ADMIN EDITS ONE — which is also the only way to make a
-  # read fail on purpose. `fetch/1` is the one helper that runs inside the task, so a `raise` there
-  # is exactly what a read that dies looks like from the outside. What was there is handed back, so
-  # a test can put it right again and watch the block recover.
-  defp break!(site, name) do
+  # A READ THAT ANSWERS WITH AN ERROR, which is what a read the database refuses looks like. A
+  # block's FIRST read is in step with the page, so this is how a first read fails.
+  defp refuse!(site, name) do
     kept = site |> component_row(name) |> Map.fetch!(:helpers) |> Enum.map(&helper_map/1)
 
-    broken =
+    refused =
       Enum.map(kept, fn helper ->
         case helper.name do
-          "fetch" -> %{helper | args: "_asked", code: ~s|raise "the read failed"|}
+          "fetch" -> %{helper | args: "_asked", code: "{:error, :refused}"}
           _left_alone -> helper
         end
       end)
 
-    refute broken == kept, "#{name} has no fetch/1, so nothing was broken"
+    refute refused == kept, "#{name} has no fetch/1, so nothing was refused"
 
-    write_helpers!(site, name, broken)
+    write_helpers!(site, name, refused)
 
     kept
   end
@@ -503,32 +501,27 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   # WHAT A READER SEES WHILE A BLOCK IS READING, AND IF IT CANNOT. A documentation page is four
   # blocks side by side, each with reads of its own; before the split the page waited for all four
   # and showed nothing until the slowest of them was done.
-  describe "a block that reads in the background" do
-    test "draws its skeleton first and its rows after", %{site: site} do
+  describe "a block that reads" do
+    # ITS FIRST PAINT HOLDS ITS ROWS, because what a crawler and a reader without JavaScript are
+    # served is the first paint.
+    test "draws its rows in its first paint, with no skeleton", %{site: site} do
       manual!(site)
 
       {view, first_paint} =
         mount_raw(site, [%{"name" => "doc-workspace-list", "id" => "one", "attrs" => %{}}])
 
-      assert roles(first_paint, "doc-list-loading") == 1,
-             "the first paint held no skeleton, so nothing was read in the background"
+      assert roles(first_paint, "doc-list-loading") == 0,
+             "the first paint held a skeleton, so a crawler was served no documents"
 
-      assert roles(first_paint, "doc-list-item") == 0
-
-      arrived = render_async(view, @async)
-
-      assert roles(arrived, "doc-list-loading") == 0
-      assert roles(arrived, "doc-list-item") == 1
+      assert roles(first_paint, "doc-list-item") == 1
+      assert roles(render_async(view, @async), "doc-list-item") == 1
     end
 
-    # AND THE HTTP RESPONSE IS NOT WHERE IT READS. A page is rendered TWICE for one visit — once for
-    # the GET, once when the socket connects — and `Phoenix.LiveView.connected?/1` is false for both,
-    # so a block forking on it read every document inside the HTTP request, threw the rows away with
-    # that socket, and read them again behind a skeleton the reader watched replace them. `cold?/1`
-    # is the difference: the builder's canvas is the only render with nobody to hand a task's answer
-    # to. Counted off the repo's telemetry because the second read left no mark on the markup —
-    # `live_isolated/3` is the whole visit, its dead render and its connected mount.
-    test "and one visit reads once, not once per render", %{site: site} do
+    # ONE READ PER RENDER OF THE VISIT, AND NONE IN A TASK. A visit renders the page twice — the GET
+    # and the connected mount — and each reads its first answer in step: the GET so its HTML holds
+    # the rows, the connected mount so they are drawn at once rather than behind a skeleton. Counted
+    # off the repo's telemetry: `live_isolated/3` is the whole visit, its dead render and its mount.
+    test "and one visit reads once per render, and starts no background read", %{site: site} do
       manual!(site)
 
       asked =
@@ -540,9 +533,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         end)
 
       # One load reads the documents that name a lock of their own — what the list is kept to for its
-      # visitor — then the page of rows and its count. A second load would be three more.
-      assert Enum.count(asked, &String.contains?(&1, "mishka_document_workspaces")) == 3,
-             "one load is the locked documents, the page of rows and its count — anything else is a second load"
+      # visitor — then the page of rows and its count: three per render, two renders.
+      assert Enum.count(asked, &String.contains?(&1, "mishka_document_workspaces")) == 6,
+             "a load is the locked documents, the page of rows and its count, once for each render"
     end
 
     # AND A CHANGE TO WHAT THE ROWS ARE DRAWN FROM RE-STREAMS THEM. A streamed row is rendered once
@@ -566,7 +559,10 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert roles(render(view), "doc-list-item") == 1, "the cards were lost instead of redrawn"
     end
 
-    test "beside the other blocks of a documentation page, each loading on its own", %{site: site} do
+    test "beside the other blocks of a documentation page, each with its rows in the first paint",
+         %{
+           site: site
+         } do
       manual!(site)
 
       attrs = %{
@@ -575,7 +571,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         params: %{"section" => "installation"}
       }
 
-      {view, first_paint} =
+      {_view, first_paint} =
         mount_raw(site, [
           %{"name" => "doc-sidebar", "id" => "sidebar", "attrs" => attrs},
           %{"name" => "doc-toc", "id" => "toc", "attrs" => attrs},
@@ -583,24 +579,17 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         ])
 
       for role <- ~w(doc-sidebar-loading doc-toc-loading doc-switcher-loading) do
-        assert roles(first_paint, role) == 1, "#{role} was not drawn while its block was reading"
+        assert roles(first_paint, role) == 0, "#{role} was drawn in the first paint"
       end
 
-      arrived = render_async(view, @async)
-
-      for role <- ~w(doc-sidebar-loading doc-toc-loading doc-switcher-loading) do
-        assert roles(arrived, role) == 0, "#{role} was still drawn after its block had read"
-      end
-
-      assert roles(arrived, "doc-sidebar-item") > 0
+      assert roles(first_paint, "doc-sidebar-item") > 0
     end
 
-    # ONE BLOCK FAILING IS ONE BLOCK'S PROBLEM. The task raises, LiveView unlinks it before the
-    # raise escapes and hands the component `{:exit, reason}` — so the block draws its own error and
-    # the page around it, blocks and all, is still standing.
+    # ONE BLOCK FAILING IS ONE BLOCK'S PROBLEM. The read answers with an error, so the block draws
+    # its own error and the page around it, blocks and all, is still standing.
     test "and a block whose read fails takes nothing else down with it", %{site: site} do
       manual!(site)
-      break!(site, "doc-sidebar")
+      refuse!(site, "doc-sidebar")
 
       attrs = %{
         workspace: "mishka-cms",
@@ -625,7 +614,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     # that has to be cleared for this, which is what the button's own handler does.
     test "and asking again reads again", %{site: site} do
       manual!(site)
-      kept = break!(site, "doc-workspace-list")
+      kept = refuse!(site, "doc-workspace-list")
 
       {view, _first_paint} =
         mount_raw(site, [%{"name" => "doc-workspace-list", "id" => "list", "attrs" => %{}}])
