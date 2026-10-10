@@ -28,6 +28,9 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
 
   A note's Site and Section are drawn together, at the top of the form.
 
+  A version's Published At is the form's calendar: it opens on the stored month, steps by month and
+  year, and saves the day and the time picked.
+
   A title is one line, and every textarea besides the content editor is the Tailwind adapter's
   full-width field, also on the forms `MishkaCmsCoreWeb.UIAdapters.Admin` draws. While a workspace, a
   tag, a section or a section draft is added, typing its name or title fills the slug the save
@@ -475,6 +478,56 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
     end
   end
 
+  describe "a version's Published At" do
+    test "is a calendar that opens on the stored month, moves by month and year, and saves the day and time picked",
+         ctx do
+      form = FormInfo.component_id(WorkspaceVersion)
+      field = "##{form}-form_published_at"
+      Ash.Seed.update!(ctx.version, %{published_at: ~U[2024-03-04 05:06:00Z]})
+
+      view = open(ctx.site_admin_conn, "#{@dashboard}/workspace-version/#{ctx.workspace.id}")
+      edit(view, ctx.version)
+
+      assert shown(view, form, :published_at) == "2024-03-04T05:06:00"
+      assert view |> element(field) |> render() =~ "04 Mar 2024, 05:06"
+
+      view |> element(field) |> render_click()
+      assert month(view, field) == "March 2024"
+
+      step(view, field, "12")
+      assert month(view, field) == "March 2025"
+      step(view, field, "-12")
+      step(view, field, "-1")
+      assert month(view, field) == "February 2024"
+
+      for _ <- 1..7, do: step(view, field, "1")
+      assert month(view, field) == "September 2024"
+
+      view |> element("#{field}-day-2024-09-09") |> render_click()
+
+      view
+      |> element("#{field}-hour")
+      |> render_change(%{"_gvz_picker" => %{"published_at" => %{"hour" => "22"}}})
+
+      view
+      |> element("#{field}-minute")
+      |> render_change(%{"_gvz_picker" => %{"published_at" => %{"minute" => "45"}}})
+
+      assert shown(view, form, :published_at) == "2024-09-09T22:45:00"
+
+      view |> element("#{field}-calendar button", "Done") |> render_click()
+      refute has_element?(view, "#{field}-month")
+      assert view |> element(field) |> render() =~ "09 Sep 2024, 22:45"
+
+      view |> form("##{form}-form") |> render_submit()
+
+      refute render(view) =~ "must be a valid date and time"
+
+      assert %{published_at: ~U[2024-09-09 22:45:00Z]} =
+               Ash.get!(WorkspaceVersion, ctx.version.id, tenant: ctx.site.id, authorize?: false)
+    end
+  end
+
   describe "the pickers that name a section, draft or note" do
     setup ctx do
       earlier = create_workspace_version!(workspace_id: ctx.workspace.id, site_id: ctx.site.id)
@@ -910,6 +963,23 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
     |> LazyHTML.from_fragment()
     |> LazyHTML.attribute("value")
     |> List.first()
+  end
+
+  defp month(view, field),
+    do:
+      view
+      |> element("#{field}-month")
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.text()
+      |> String.trim()
+
+  defp step(view, field, step) do
+    view
+    |> element(
+      ~s(#{field}-calendar button[phx-click*="picker_month"][phx-click*='"step":"#{step}"'])
+    )
+    |> render_click()
   end
 
   defp open(conn, path) do
