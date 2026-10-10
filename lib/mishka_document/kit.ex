@@ -55,18 +55,16 @@ defmodule MishkaDocument.Kit do
   to its approved pages — and always through the public reads, never by a raw id. That is what keeps
   a draft version out of a URL somebody typed.
 
-  ## Which blocks read in the background, and why not all of them
+  ## When a block reads in step, and when in the background
 
-  Four of the five read in a task, and read inline in exactly one place: the builder's canvas and
-  the Preview, where `MishkaCmsCore.Runtime.LiveViewHelpers.cold/2` renders a component with no
-  process at all and a task would have nobody to answer. Every block's `cold?/1` asks THAT, not
-  `Phoenix.LiveView.connected?/1`, because a visit renders a page twice — once for the GET, once
-  when the socket connects — and `connected?/1` is false for both. Forking on it meant the HTTP
-  response waited for every block on the page in turn, threw the rows away with that socket, and
-  read them all again a moment later behind a skeleton the reader watched replace them. While it is
-  loading a block draws a skeleton, and when a read fails it draws a line and a button to ask again
-  rather than taking the page down. A documentation page carries four of these blocks at once, and
-  reading in the background is what stops the slowest of them deciding when the page appears.
+  Four of the five read their FIRST answer in step with the page, on both of a visit's renders: the
+  GET, so a crawler and a reader with no JavaScript are served the workspaces, the sidebar, the
+  table of contents and the version switcher themselves, and the connected one, so they are drawn
+  straight away rather than replaced by a skeleton while they are read again. Every later read runs
+  in a task, and while it does the block draws a skeleton; when a read fails it draws a line and a
+  button to ask again. `cold?/1` still answers for the builder's canvas and the Preview, where
+  `MishkaCmsCore.Runtime.LiveViewHelpers.cold/2` renders a component with no process at all, and
+  reads inline there too.
 
   Each task is started through `MishkaGervaz.Messages.start_async/4`, which hands it the site and
   the locale the page renders in (`MishkaCmsCore.Runtime.LiveViewHelpers.carry_into_tasks/0`), so a
