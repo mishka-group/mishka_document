@@ -7,8 +7,8 @@ defmodule MishkaDocument.Resources.Changes.EnsureAddressPages do
   A page the site already has at either path is kept, its own design among them. The pages are
   written as the writer, in the same transaction as the document: a writer who may not write pages
   is refused before anything is saved, with what they are missing, unless the site already has
-  both — a document whose address answers nothing would also send its old address there
-  (`MishkaDocument.Plugins.AddressRedirect`). With no actor the system writes, as the seeds do.
+  both — a document with an address is read there and nowhere else, so an address that answers
+  nothing leaves it unread. With no actor the system writes, as the seeds do.
 
   Nothing happens when the address is not changing, or is emptied: a document read under `/docs`
   again leaves the pages it had for the admin to keep or remove.

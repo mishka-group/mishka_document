@@ -485,17 +485,24 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
              ]
     end
 
-    test "asked at its old address under /docs, names its own as the canonical one", %{site: site} do
-      answered =
-        answer(
-          given(site, :section, %{
-            "lang" => "en",
-            "workspace" => "product",
-            "section" => "install/steps"
-          })
-        )
+    test "asked by its slug under /docs, names nothing: it is read at its own address alone",
+         %{site: site} do
+      for {kind, params} <- [
+            workspace: %{"lang" => "en", "workspace" => "product"},
+            section: %{"lang" => "en", "workspace" => "product", "section" => "install/steps"}
+          ] do
+        given = given(site, kind, params)
+        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+      end
+    end
 
-      assert answered.url == base() <> "/product/docs/install/steps"
+    test "at its address, is the one named whatever slug the query carries", %{site: site} do
+      document!(site, slug: "guide", name: "Guide")
+
+      front =
+        answer(at_address(site, "/product/docs", %{"workspace" => "guide"}, "docs:document"))
+
+      assert {front.title, front.url} == {"Product", base() <> "/product/docs"}
     end
 
     test "a page asked by its slug alone, when it is filed under another, names nothing",

@@ -395,8 +395,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   end
 
   # A DOCUMENT WITH AN ADDRESS OF ITS OWN is read there by every block a page at that address holds,
-  # and every link written to it or to a page of it is under that address — never /docs/<slug> —
-  # with no ?lang=, since the address is one edition's. A page's address holds the pages it is filed
+  # and nowhere else: its slug under /docs names nothing. Every link written to it or to a page of it
+  # is under that address — never /docs/<slug> — with no ?lang=, since the address is one edition's. A page's address holds the pages it is filed
   # under (`MishkaDocument.Address`).
   describe "a document with an address of its own" do
     test "is read at it, and every link to a page of it is under it", %{site: site} do
@@ -506,6 +506,34 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         })
 
       assert text_of(view, ~s([data-role="doc-landing-title"])) == ["Mishka CMS"]
+    end
+
+    test "is a missing page at /docs/<its slug>, and the blocks beside it draw none of it",
+         %{site: site} do
+      addressed!(site)
+
+      under_base = %{
+        workspace_param: "workspace",
+        section_param: "section",
+        lang_param: "",
+        doc_base: "/docs",
+        params: %{"workspace" => "mishka-cms", "section" => "installation"}
+      }
+
+      assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+        mount_page(site, "doc-section", under_base)
+      end
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", under_base)
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == []
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", under_base)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == []
+
+      {:ok, switch, _html} =
+        mount_page(site, "doc-switcher", Map.put(under_base, :show, "version"))
+
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == []
     end
 
     test "tells apart two pages of the same name under two parents", %{site: site} do

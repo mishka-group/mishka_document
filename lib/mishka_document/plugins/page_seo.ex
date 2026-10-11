@@ -7,17 +7,19 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   A page is matched by the kind of record it says it shows (`record`, its `extra`'s `"record"`):
   `"docs:document"`, a document's front page, or `"docs:page"`, one page of a document — the kinds
-  `MishkaDocument.Plugins.PageRecords` names. Its path may be anything that captures `workspace`,
-  and `*section` for a page; or a document's own address, `/chelekom/docs` and
-  `/chelekom/docs/*section` (`MishkaDocument.Address`), which names the document instead. Every
-  other page is handed back untouched before anything is read. A kind has one owner, so the answer
+  `MishkaDocument.Plugins.PageRecords` names. Its path is a document's own address,
+  `/chelekom/docs` and `/chelekom/docs/*section` (`MishkaDocument.Address`), which names that
+  document; or anything that captures `workspace`, and `*section` for a page, whose slug names a
+  document with no address of its own. Every other page is handed back untouched before anything
+  is read. A kind has one owner, so the answer
   for one of these halts the chain: no later plugin is asked.
 
   ## What is read
 
   One read, through `:public_list` as `doc-section` reads it, on the page's site, as the system: the
-  active document the `workspace` capture names, or the one whose address the page is at, in the
-  page's language. For one of its pages it brings its published versions and, in each, the approved
+  active document whose own address the page is at, else the one the `workspace` capture names, in
+  the page's language. A slug names only a document with no address of its own: one that has an
+  address is read there and nowhere else, so `/docs/<its slug>` names nothing. For one of its pages it brings its published versions and, in each, the approved
   pages as a tree; the version shown is the one `?v=` names, else the one marked latest, else the
   newest published, and the page is the one at the address the `section` capture holds —
   `headless/switch` — read once more for its own text and lock.
@@ -162,32 +164,31 @@ defmodule MishkaDocument.Plugins.PageSeo do
     end
   end
 
-  # The document the `workspace` capture names, or the one whose own address the page is at, in the
-  # page's language, on the page's site; `nil` when the request names none or none is shown. Read as
-  # the system, because what it reads is the lock `MishkaCmsWeb.RuntimeLive` admits the visitor by:
-  # read as a visitor who may not open it, a locked document or page is no record at all, and the
-  # page is handed no permissions to refuse them with. The hook names no visitor either, and the
-  # head built here reaches only a visitor the page admitted.
-  defp read(%{site_id: site_id} = seo, loads) when is_binary(site_id) do
-    case asked(seo) do
-      nil -> nil
-      named -> read(named, seo, loads)
-    end
-  end
+  # The document whose own address the page is at, else the one with no address of its own the
+  # `workspace` capture names, in the page's language, on the page's site; `nil` when the request
+  # names none or none is shown. Read as the system, because what it reads is the lock
+  # `MishkaCmsWeb.RuntimeLive` admits the visitor by: read as a visitor who may not open it, a locked
+  # document or page is no record at all, and the page is handed no permissions to refuse them with.
+  # The hook names no visitor either, and the head built here reaches only a visitor the page
+  # admitted.
+  defp read(%{site_id: site_id} = seo, loads) when is_binary(site_id),
+    do: Enum.find_value(own_address(seo) ++ by_slug(seo), &read(&1, seo, loads))
 
   defp read(_seo, _loads), do: nil
 
-  defp asked(%{params: %{"workspace" => slug}}) when is_binary(slug) and slug != "",
-    do: {:slug, slug}
-
-  defp asked(%{page: %{path: path}}) do
+  defp own_address(%{page: %{path: path}}) do
     case Address.of_page(path) do
-      nil -> nil
-      address -> {:path, address}
+      nil -> []
+      address -> [{:path, address}]
     end
   end
 
-  defp asked(_seo), do: nil
+  defp own_address(_seo), do: []
+
+  defp by_slug(%{params: %{"workspace" => slug}}) when is_binary(slug) and slug != "",
+    do: [{:slug, slug}]
+
+  defp by_slug(_seo), do: []
 
   defp read(named, %{site_id: site_id} = seo, loads) do
     Workspace
@@ -203,7 +204,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
     end
   end
 
-  defp named_by(query, {:slug, slug}), do: Ash.Query.filter(query, slug == ^slug)
+  defp named_by(query, {:slug, slug}),
+    do: Ash.Query.filter(query, slug == ^slug and is_nil(path))
+
   defp named_by(query, {:path, address}), do: Ash.Query.filter(query, path == ^address)
 
   defp in_language(query, language) when is_binary(language) and language != "",

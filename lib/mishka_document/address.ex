@@ -5,8 +5,8 @@ defmodule MishkaDocument.Address do
 
   A document with no address is read under the documentation's base by its slug, as it always was:
   `/docs/<slug>`, its pages `/docs/<slug>/<page>`. One with an address is read there and nowhere
-  else: `/chelekom/docs`, its pages `/chelekom/docs/<page>`, and its old address under the base
-  answers with a permanent redirect to the new one (`MishkaDocument.Plugins.AddressRedirect`).
+  else: `/chelekom/docs`, its pages `/chelekom/docs/<page>`, and `/docs/chelekom` is a missing
+  page, as any slug that names no document there is.
 
   A page's own part of the address is the slugs of the pages it is filed under, then its own:
   `headless/switch` is the page `switch` filed under `headless`. A slug is unique among the pages
@@ -15,7 +15,7 @@ defmodule MishkaDocument.Address do
 
   An address is a site path: segments of lower-case letters, digits and dashes, and `:lang` at most
   once, where the site's language goes, as in a page's path. The rules live here because the
-  document, its pages, the head, the sitemap and the redirect all read them, and must agree.
+  document, its pages, the head and the sitemap all read them, and must agree.
   """
 
   @lang ":lang"
