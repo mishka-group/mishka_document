@@ -9,6 +9,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.EventLog.Index do
   """
   use MishkaCmsCore.ExtensionLiveView
 
+  alias MishkaCmsCore.Localized
   alias MishkaDocument.EventLog
   alias MishkaGervaz.Table.Web.UrlSync
 
@@ -83,17 +84,4 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.EventLog.Index do
       {gettext("Warning"), :warn, "text-[#a5691a]", "bg-[#cf8a24]"}
     ]
   end
-
-  @doc "A count with thousands separators — `1284` reads as `1,284`."
-  def delimited(number) when is_integer(number) do
-    number
-    |> Integer.to_string()
-    |> String.graphemes()
-    |> Enum.reverse()
-    |> Enum.chunk_every(3)
-    |> Enum.map_join(",", &Enum.join/1)
-    |> String.reverse()
-  end
-
-  def delimited(_number), do: "0"
 end

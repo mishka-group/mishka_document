@@ -41,6 +41,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   import MishkaGervaz.Helpers, only: [dynamic_component: 1]
   import MishkaCmsCore.CoreComponents, only: [show_form_modal: 2]
 
+  alias MishkaCmsCore.Localized
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
   alias Phoenix.LiveView.AsyncResult
@@ -466,26 +467,9 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   def review_label(:archived), do: dgettext("mishka_gervaz", "Archived")
   def review_label(status), do: to_string(status)
 
-  @doc """
-  The month name `Calendar.strftime/3` takes as `:abbreviated_month_names`, in the viewer's language.
-  """
-  @spec short_month_name(1..12) :: String.t()
-  def short_month_name(1), do: gettext("Jan")
-  def short_month_name(2), do: gettext("Feb")
-  def short_month_name(3), do: gettext("Mar")
-  def short_month_name(4), do: gettext("Apr")
-  def short_month_name(5), do: gettext("May")
-  def short_month_name(6), do: gettext("Jun")
-  def short_month_name(7), do: gettext("Jul")
-  def short_month_name(8), do: gettext("Aug")
-  def short_month_name(9), do: gettext("Sep")
-  def short_month_name(10), do: gettext("Oct")
-  def short_month_name(11), do: gettext("Nov")
-  def short_month_name(12), do: gettext("Dec")
-
   defp inserted_on(%{inserted_at: at})
        when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-       do: Calendar.strftime(at, "%b %d, %Y", abbreviated_month_names: &short_month_name/1)
+       do: Localized.date(at, :yMMMd)
 
   defp inserted_on(_record), do: "—"
 
