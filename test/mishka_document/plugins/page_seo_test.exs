@@ -439,6 +439,72 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
     end
   end
 
+  # A DOCUMENT WITH AN ADDRESS OF ITS OWN is named by the page that serves it there — no slug in the
+  # URL — and that address, with its page's under it, is the one canonical address of it, wherever
+  # it was asked for (`MishkaDocument.Address`).
+  describe "a document with an address of its own" do
+    setup %{site: site} do
+      document = document!(site, slug: "product", name: "Product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      install = page!(site, version, "install", title: "Install")
+      page!(site, version, "steps", title: "Steps", parent_section_id: install.id)
+      :ok
+    end
+
+    defp at_address(site, path, params, record) do
+      Seo.given(
+        %{
+          title: "Document page",
+          path: path,
+          language: "en",
+          seo: %{description: nil, schema: []}
+        },
+        site_id: site.id,
+        url: base() <> "/asked/elsewhere",
+        params: params,
+        record: record
+      )
+    end
+
+    test "is named by the page at its address, and its pages by theirs under it", %{site: site} do
+      front = answer(at_address(site, "/product/docs", %{}, "docs:document"))
+
+      assert {front.title, front.url} == {"Product", base() <> "/product/docs"}
+
+      page =
+        answer(
+          at_address(site, "/product/docs/*section", %{"section" => "install/steps"}, "docs:page")
+        )
+
+      assert {page.title, page.url} == {"Steps", base() <> "/product/docs/install/steps"}
+
+      assert crumbs(page) == [
+               {1, "Documentation", base() <> "/docs"},
+               {2, "Product", base() <> "/product/docs"},
+               {3, "Steps", base() <> "/product/docs/install/steps"}
+             ]
+    end
+
+    test "asked at its old address under /docs, names its own as the canonical one", %{site: site} do
+      answered =
+        answer(
+          given(site, :section, %{
+            "lang" => "en",
+            "workspace" => "product",
+            "section" => "install/steps"
+          })
+        )
+
+      assert answered.url == base() <> "/product/docs/install/steps"
+    end
+
+    test "a page asked by its slug alone, when it is filed under another, names nothing",
+         %{site: site} do
+      given = at_address(site, "/product/docs/*section", %{"section" => "steps"}, "docs:page")
+      assert answer(given).title == "Document page"
+    end
+  end
+
   describe "who may open it" do
     setup %{site: site} do
       document = document!(site, slug: "members", permissions: ["members:read"])
@@ -488,13 +554,15 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       page!(site, members, "invoices", parent_section_id: billing.id)
       page!(site, members, "steps", parent_section_id: install.id)
 
+      # Each page at its address: under the pages it is filed under, and at the top when its parent
+      # is not published — `notes`, whose parent `draft` is still waiting on a review.
       for {workspace, section, permissions} <- [
-            {"handbook", "leave", ["hr:read"]},
-            {"handbook", "parental", ["hr:read"]},
-            {"handbook", "payroll", ["payroll:read"]},
+            {"handbook", "hr/leave", ["hr:read"]},
+            {"handbook", "hr/leave/parental", ["hr:read"]},
+            {"handbook", "hr/payroll", ["payroll:read"]},
             {"handbook", "notes", ["hr:read"]},
-            {"members", "invoices", ["billing:read"]},
-            {"members", "steps", ["members:read"]}
+            {"members", "billing/invoices", ["billing:read"]},
+            {"members", "install/steps", ["members:read"]}
           ] do
         params = %{"lang" => "en", "workspace" => workspace, "section" => section}
 

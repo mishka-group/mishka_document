@@ -67,7 +67,7 @@ defmodule MishkaDocument.Plugins.PageRecords do
     Section
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
     |> Ash.Query.select([:title, :slug, :language, :workspace_version_id])
-    |> Ash.Query.load(workspace_version: [workspace: [:slug]])
+    |> Ash.Query.load([:breadcrumb_path, workspace_version: [workspace: [:slug]]])
     |> Ash.Query.sort(updated_at: :desc)
     |> Ash.read(tenant: site_id, authorize?: false, page: [limit: @samples])
     |> case do
@@ -75,7 +75,11 @@ defmodule MishkaDocument.Plugins.PageRecords do
         for %{slug: slug, language: language} = row <- rows,
             %{workspace: %{slug: workspace}} <- [row.workspace_version],
             is_binary(slug) and is_binary(workspace),
-            do: sample(row.title, language, %{"workspace" => workspace, "section" => slug})
+            do:
+              sample(row.title, language, %{
+                "workspace" => workspace,
+                "section" => address_under(row.breadcrumb_path, slug)
+              })
 
       _unreadable ->
         []
@@ -83,6 +87,16 @@ defmodule MishkaDocument.Plugins.PageRecords do
   end
 
   defp pages(_no_site), do: []
+
+  # A page's own part of its address — the slugs of the pages it is filed under, then its own —
+  # which is what a `*section` capture holds (`MishkaDocument.Address`).
+  defp address_under(parents, slug) when is_list(parents),
+    do: Enum.map_join(parents, "/", &Map.get(&1, "slug")) |> join_slug(slug)
+
+  defp address_under(_no_parents, slug), do: slug
+
+  defp join_slug("", slug), do: slug
+  defp join_slug(parents, slug), do: parents <> "/" <> slug
 
   defp sample(name, language, captures),
     do: %{

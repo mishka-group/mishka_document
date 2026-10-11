@@ -198,7 +198,7 @@ defmodule MishkaDocument.ProvisionTest do
       assert Provision.page_paths() == [
                "/:lang/docs",
                "/:lang/docs/:workspace",
-               "/:lang/docs/:workspace/:section"
+               "/:lang/docs/:workspace/*section"
              ]
     end
 

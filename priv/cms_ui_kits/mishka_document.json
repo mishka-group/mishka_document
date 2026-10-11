@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -13,7 +13,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-workspace-list\"\n  lang={page_lang(@language)}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-list-heading\"\n    class=\"mb-5 text-lg font-bold leading-tight\"\n  >\n    {@heading}\n  </h2>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-list-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-list-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @total == 0}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-list-empty\"\n    text={@empty_text}\n  />\n\n  <div\n    :if={not @loading and not @failed}\n    id={\"#{@id}-items\"}\n    phx-update={(@myself && \"stream\") || nil}\n    data-role=\"doc-list-items\"\n    class=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3\"\n  >\n    <div\n      :for={{dom_id, row} <- @streams.documents}\n      id={dom_id}\n      data-role=\"doc-list-item\"\n      lang={row.doc.language}\n      dir={text_direction(row.doc.language)}\n      class=\"h-full\"\n    >\n      <.component\n        :if={trimmed(@card) == \"\"}\n        component_name=\"doc-workspace-card\"\n        site={site_name()}\n        doc={row.doc}\n        href={doc_href(@doc_base, [row.doc.slug], row.doc.language, @lang_param, %{})}\n        editions={\n          (@show_languages && edition_links(@editions, row.doc, @doc_base, @lang_param)) || []\n        }\n        show_description={@show_description}\n        read_text={@read_text}\n        unavailable_text={@unavailable_text}\n        featured_text={@featured_text}\n      />\n\n      <.component\n        :if={trimmed(@card) != \"\"}\n        component_name={@card}\n        site={site_name()}\n        id={\"#{dom_id}-card\"}\n        doc={row.doc}\n        href={doc_href(@doc_base, [row.doc.slug], row.doc.language, @lang_param, %{})}\n      />\n    </div>\n  </div>\n\n  <.component\n    :if={@show_pager and not @loading and not @failed}\n    component_name=\"doc-pager\"\n    site={site_name()}\n    role=\"doc-list-pager\"\n    page={@page}\n    pages={@pages}\n    base={@base}\n    params={@params}\n    page_param={@page_param}\n    target={@myself}\n    first_text={@first_text}\n    previous_text={@previous_text}\n    next_text={@next_text}\n    last_text={@last_text}\n  />\n</div>",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-workspace-list\"\n  lang={page_lang(@language)}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-list-heading\"\n    class=\"mb-5 text-lg font-bold leading-tight\"\n  >\n    {@heading}\n  </h2>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-list-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-list-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @total == 0}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-list-empty\"\n    text={@empty_text}\n  />\n\n  <div\n    :if={not @loading and not @failed}\n    id={\"#{@id}-items\"}\n    phx-update={(@myself && \"stream\") || nil}\n    data-role=\"doc-list-items\"\n    class=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3\"\n  >\n    <div\n      :for={{dom_id, row} <- @streams.documents}\n      id={dom_id}\n      data-role=\"doc-list-item\"\n      lang={row.doc.language}\n      dir={text_direction(row.doc.language)}\n      class=\"h-full\"\n    >\n      <.component\n        :if={trimmed(@card) == \"\"}\n        component_name=\"doc-workspace-card\"\n        site={site_name()}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n        editions={\n          (@show_languages && edition_links(@editions, row.doc, @doc_base, @lang_param)) || []\n        }\n        show_description={@show_description}\n        read_text={@read_text}\n        unavailable_text={@unavailable_text}\n        featured_text={@featured_text}\n      />\n\n      <.component\n        :if={trimmed(@card) != \"\"}\n        component_name={@card}\n        site={site_name()}\n        id={\"#{dom_id}-card\"}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n      />\n    </div>\n  </div>\n\n  <.component\n    :if={@show_pager and not @loading and not @failed}\n    component_name=\"doc-pager\"\n    site={site_name()}\n    role=\"doc-list-pager\"\n    page={@page}\n    pages={@pages}\n    base={@base}\n    params={@params}\n    page_param={@page_param}\n    target={@myself}\n    first_text={@first_text}\n    previous_text={@previous_text}\n    next_text={@next_text}\n    last_text={@last_text}\n  />\n</div>",
       "attrs": [
         {
           "name": "heading",
@@ -123,7 +123,7 @@
           "type": "any",
           "opts": {
             "default": "/docs",
-            "doc": "Where a document lives — /docs, say, under which each one is reached by its slug. Write the language into it as :lang — /:lang/docs — and every link is built under the language of the edition it points at, which is the only way one of them can lead to another language's — at the address the site's URL mode gives that language."
+            "doc": "Where documents with no address of their own live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to. A document with an Address of its own is linked there instead, its pages under it."
           }
         },
         {
@@ -304,6 +304,11 @@
           "code": "# THE ADDRESS OF AN EDITION, built by `site_path/2` for the site the page renders for — in the\n# template and in the task a block reads in alike, because `MishkaGervaz.Messages.start_async/4`\n# hands the task the page's site. Each segment is appended to the base, and a `:lang` in the base —\n# in any position, /:lang/docs or /docs/:lang — is filled with the language of the edition being\n# linked to, not the one the page is read in, which is the only way a link to an edition in ANOTHER\n# language can be built. The address is the one the site's URL mode gives that language:\n# /docs/<document> in a first language the site leaves unprefixed, /fa/docs/<document> in Persian. A\n# base without the segment carries the language as a query key instead, so nothing appends it twice.\n# An edition whose language this site does not publish, or cannot be read, gets no link rather than\n# a link to a 404.\nnumbered = Enum.with_index(segments)\npattern = Enum.reduce(numbered, to_string(base), fn {_segment, at}, acc -> acc <> \"/:segment#{at}\" end)\n\ncaptures =\n  numbered\n  |> Map.new(fn {segment, at} -> {\"segment#{at}\", to_string(segment)} end)\n  |> Map.put(\"lang\", trimmed(language))\n\ncase site_path(pattern, captures) do\n  nil ->\n    nil\n\n  path ->\n    in_path? = \":lang\" in String.split(to_string(base), \"/\")\n\n    query =\n      case {in_path?, trimmed(lang_param), trimmed(language)} do\n        {false, key, code} when key != \"\" and code != \"\" -> Map.put(extra, key, code)\n        _carried_by_the_path_or_not_asked_for -> extra\n      end\n\n    case URI.encode_query(query) do\n      \"\" -> path\n      encoded -> path <> \"?\" <> encoded\n    end\nend\n"
         },
         {
+          "name": "document_href",
+          "args": "base, document, segments, lang_param, extra",
+          "code": "# THE ADDRESS OF A DOCUMENT, OR OF ONE OF ITS PAGES. A document with an Address of its own is read\n# there and its pages under it — /product/docs/headless/switch — and that address is one edition's,\n# so no `?lang=` is written onto it; any other is read under the base, by its slug.\ncase document do\n  %{path: own} when is_binary(own) and own != \"\" ->\n    doc_href(own, segments, document.language, \"\", extra)\n\n  _read_by_its_slug ->\n    doc_href(base, [document.slug | segments], document.language, lang_param, extra)\nend\n"
+        },
+        {
           "name": "text_direction",
           "args": "language",
           "code": "case trimmed(language) do\n  code when code in ~w(fa ar he ur ps ckb dv yi) -> \"rtl\"\n  _left_to_right_or_unknown -> \"auto\"\nend\n"
@@ -336,12 +341,12 @@
         {
           "name": "documents_page",
           "args": "asked, page, per_page",
-          "code": "require Ash.Query\n\nquery =\n  MishkaDocument.Workspace\n  |> Ash.Query.for_read(:public_list, %{}, read_as(asked.visitor))\n  |> narrow_language(asked.language)\n  |> sorted(asked.sort)\n  |> Ash.Query.select([\n    :id,\n    :name,\n    :slug,\n    :description,\n    :language,\n    :language_group_id,\n    :featured,\n    :display_order,\n    :updated_at\n  ])\n\nquery =\n  case asked.featured_only do\n    true -> Ash.Query.filter(query, featured == true)\n    false -> query\n  end\n\nquery\n|> Ash.read(\n  tenant: site_id(),\n  page: [limit: per_page, offset: (page - 1) * per_page, count: true]\n)\n|> paged()\n"
+          "code": "require Ash.Query\n\nquery =\n  MishkaDocument.Workspace\n  |> Ash.Query.for_read(:public_list, %{}, read_as(asked.visitor))\n  |> narrow_language(asked.language)\n  |> sorted(asked.sort)\n  |> Ash.Query.select([\n    :id,\n    :name,\n    :slug,\n    :path,\n    :description,\n    :language,\n    :language_group_id,\n    :featured,\n    :display_order,\n    :updated_at\n  ])\n\nquery =\n  case asked.featured_only do\n    true -> Ash.Query.filter(query, featured == true)\n    false -> query\n  end\n\nquery\n|> Ash.read(\n  tenant: site_id(),\n  page: [limit: per_page, offset: (page - 1) * per_page, count: true]\n)\n|> paged()\n"
         },
         {
           "name": "editions_of",
           "args": "documents, visitor",
-          "code": "# EVERY EDITION OF EVERY DOCUMENT ON THIS PAGE, IN ONE READ. A chip row per card is a read per card\n# otherwise, and a page of twenty documents would pay for twenty-one.\nrequire Ash.Query\n\ngroups =\n  documents\n  |> Enum.map(& &1.language_group_id)\n  |> Enum.reject(&is_nil/1)\n  |> Enum.uniq()\n\ncase groups do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(language_group_id in ^wanted)\n    |> Ash.Query.sort(language: :asc)\n    |> Ash.Query.select([:id, :slug, :language, :language_group_id])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.group_by(& &1.language_group_id)\nend\n"
+          "code": "# EVERY EDITION OF EVERY DOCUMENT ON THIS PAGE, IN ONE READ. A chip row per card is a read per card\n# otherwise, and a page of twenty documents would pay for twenty-one.\nrequire Ash.Query\n\ngroups =\n  documents\n  |> Enum.map(& &1.language_group_id)\n  |> Enum.reject(&is_nil/1)\n  |> Enum.uniq()\n\ncase groups do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(language_group_id in ^wanted)\n    |> Ash.Query.sort(language: :asc)\n    |> Ash.Query.select([:id, :slug, :path, :language, :language_group_id])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.group_by(& &1.language_group_id)\nend\n"
         },
         {
           "name": "editions_for",
@@ -401,7 +406,7 @@
         {
           "name": "edition_links",
           "args": "editions, document, doc_base, lang_param",
-          "code": "# THE CHIPS A CARD DRAWS, prepared here because only this block knows where a document lives.\n#\n# A CHIP ROW SAYS WHAT EXISTS, so an edition this site has no URL for stays in it as a word —\n# `doc_href/5` makes none for a language the site does not publish. That is the truth about it: the\n# translation was written, this site does not serve it.\nEnum.map(editions_for(editions, document), fn edition ->\n  %{\n    language: edition.language,\n    selected: edition.id == document.id,\n    href: doc_href(doc_base, [edition.slug], edition.language, lang_param, %{})\n  }\nend)\n"
+          "code": "# THE CHIPS A CARD DRAWS, prepared here because only this block knows where a document lives.\n#\n# A CHIP ROW SAYS WHAT EXISTS, so an edition this site has no URL for stays in it as a word —\n# `doc_href/5` makes none for a language the site does not publish. That is the truth about it: the\n# translation was written, this site does not serve it.\nEnum.map(editions_for(editions, document), fn edition ->\n  %{\n    language: edition.language,\n    selected: edition.id == document.id,\n    href: document_href(doc_base, edition, [], lang_param, %{})\n  }\nend)\n"
         }
       ],
       "permissions": [],
@@ -427,7 +432,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_slug == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={@sections != []}\n      data-role=\"doc-landing-items\"\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              roots(@sections),\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != []}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <div\n      data-role=\"doc-section-body\"\n      class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-4 [&_h3]:font-semibold [&_img]:rounded-lg [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div :if={@show_notes and @notes != []} data-role=\"doc-section-notes\" class=\"mt-6 space-y-5\">\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_code]:rounded [&_code]:bg-[#f0efea] [&_code]:px-1 [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_document == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_document != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={@sections != []}\n      data-role=\"doc-landing-items\"\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              roots(@sections),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != []}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <div\n      data-role=\"doc-section-body\"\n      class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-4 [&_h3]:font-semibold [&_img]:rounded-lg [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div :if={@show_notes and @notes != []} data-role=\"doc-section-notes\" class=\"mt-6 space-y-5\">\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_code]:rounded [&_code]:bg-[#f0efea] [&_code]:px-1 [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
       "attrs": [
         {
           "name": "workspace",
@@ -435,6 +440,14 @@
           "opts": {
             "default": "",
             "doc": "A document's slug, to pin this block to one document. Left empty it reads the slug out of the URL under workspace_param."
+          }
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The address of the document this page serves — the Address set on the document, /product/docs say — so the page reads that document rather than one a slug in the URL names, and its pages under it. The pages a document is given at its own address are written with it. A pinned workspace wins over it; left empty, the URL's slug decides."
           }
         },
         {
@@ -450,7 +463,7 @@
           "type": "any",
           "opts": {
             "default": "section",
-            "doc": "The URL key a page's slug arrives under. Nothing under it means the document's front page."
+            "doc": "The URL key a page's address under its document arrives under — headless/switch for the page switch filed under headless, which a *section capture holds. Nothing under it means the document's front page."
           }
         },
         {
@@ -490,7 +503,7 @@
           "type": "any",
           "opts": {
             "default": "/docs",
-            "doc": "Where documents live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to."
+            "doc": "Where documents with no address of their own live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to. A document with an Address of its own is linked there instead, its pages under it."
           }
         },
         {
@@ -584,7 +597,7 @@
         {
           "name": "mount",
           "args": "socket",
-          "code": "{:ok,\n Phoenix.Component.assign(socket,\n   document: nil,\n   version: nil,\n   latest: nil,\n   sections: [],\n   section: nil,\n   body: \"\",\n   notes: [],\n   crumbs: [],\n   previous: nil,\n   next: nil,\n   language: \"\",\n   asked_slug: \"\",\n   wanted_slug: \"\"\n )}\n"
+          "code": "{:ok,\n Phoenix.Component.assign(socket,\n   document: nil,\n   version: nil,\n   latest: nil,\n   sections: [],\n   section: nil,\n   body: \"\",\n   notes: [],\n   crumbs: [],\n   previous: nil,\n   next: nil,\n   language: \"\",\n   asked_document: \"\",\n   wanted_slug: \"\"\n )}\n"
         },
         {
           "name": "update",
@@ -622,9 +635,14 @@
           "code": "# THE AUTHOR'S CHOICE WINS OVER THE URL'S. A block pinned to one document is pinned: it sits on a\n# page about that document, and a reader appending ?workspace= must not turn it into another.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> from_url(assigns, :workspace_param)\n  pinned -> pinned\nend\n"
         },
         {
+          "name": "asked_path",
+          "args": "assigns",
+          "code": "# THE ADDRESS THIS PAGE SERVES A DOCUMENT AT, when it is that document's own — /product/docs. A\n# block pinned to a document by its slug is the author's choice for a page of their own, and keeps\n# it.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> trimmed(assigns[:path])\n  _pinned -> \"\"\nend\n"
+        },
+        {
           "name": "page_subject?",
           "args": "assigns",
-          "code": "# WHETHER THIS COMPONENT IS WHAT THE PAGE IS ABOUT, or a block an author placed on a page about\n# something else. Only the first decides the response: a document named by the URL is the page's\n# own subject, while one PINNED through the `workspace` attribute — see `asked_workspace/1` — sits\n# on a page that stands on its own and must keep standing.\ntrimmed(assigns[:workspace]) == \"\" and from_url(assigns, :workspace_param) != \"\"\n"
+          "code": "# WHETHER THIS COMPONENT IS WHAT THE PAGE IS ABOUT, or a block an author placed on a page about\n# something else. Only the first decides the response: a document named by the URL, or by the\n# address the page serves it at, is the page's own subject, while one PINNED through the\n# `workspace` attribute — see `asked_workspace/1` — sits on a page that stands on its own and must\n# keep standing.\ntrimmed(assigns[:workspace]) == \"\" and\n  (trimmed(assigns[:path]) != \"\" or from_url(assigns, :workspace_param) != \"\")\n"
         },
         {
           "name": "asked_language",
@@ -637,9 +655,14 @@
           "code": "# THE ADDRESS OF AN EDITION, built by `site_path/2` for the site the page renders for — in the\n# template and in the task a block reads in alike, because `MishkaGervaz.Messages.start_async/4`\n# hands the task the page's site. Each segment is appended to the base, and a `:lang` in the base —\n# in any position, /:lang/docs or /docs/:lang — is filled with the language of the edition being\n# linked to, not the one the page is read in, which is the only way a link to an edition in ANOTHER\n# language can be built. The address is the one the site's URL mode gives that language:\n# /docs/<document> in a first language the site leaves unprefixed, /fa/docs/<document> in Persian. A\n# base without the segment carries the language as a query key instead, so nothing appends it twice.\n# An edition whose language this site does not publish, or cannot be read, gets no link rather than\n# a link to a 404.\nnumbered = Enum.with_index(segments)\npattern = Enum.reduce(numbered, to_string(base), fn {_segment, at}, acc -> acc <> \"/:segment#{at}\" end)\n\ncaptures =\n  numbered\n  |> Map.new(fn {segment, at} -> {\"segment#{at}\", to_string(segment)} end)\n  |> Map.put(\"lang\", trimmed(language))\n\ncase site_path(pattern, captures) do\n  nil ->\n    nil\n\n  path ->\n    in_path? = \":lang\" in String.split(to_string(base), \"/\")\n\n    query =\n      case {in_path?, trimmed(lang_param), trimmed(language)} do\n        {false, key, code} when key != \"\" and code != \"\" -> Map.put(extra, key, code)\n        _carried_by_the_path_or_not_asked_for -> extra\n      end\n\n    case URI.encode_query(query) do\n      \"\" -> path\n      encoded -> path <> \"?\" <> encoded\n    end\nend\n"
         },
         {
+          "name": "document_href",
+          "args": "base, document, segments, lang_param, extra",
+          "code": "# THE ADDRESS OF A DOCUMENT, OR OF ONE OF ITS PAGES. A document with an Address of its own is read\n# there and its pages under it — /product/docs/headless/switch — and that address is one edition's,\n# so no `?lang=` is written onto it; any other is read under the base, by its slug.\ncase document do\n  %{path: own} when is_binary(own) and own != \"\" ->\n    doc_href(own, segments, document.language, \"\", extra)\n\n  _read_by_its_slug ->\n    doc_href(base, [document.slug | segments], document.language, lang_param, extra)\nend\n"
+        },
+        {
           "name": "page_links",
-          "args": "pages, base, document, lang_param, extra",
-          "code": "# EACH PAGE OF `document` WITH ITS ADDRESS, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`) — so the template draws that page as a word rather than\n# as a link to nothing.\nEnum.map(\n  pages,\n  &{&1, doc_href(base, [document.slug, &1.slug], document.language, lang_param, extra)}\n)\n"
+          "args": "pages, sections, base, document, lang_param, extra",
+          "code": "# EACH PAGE OF `document` WITH ITS ADDRESS, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`) — so the template draws that page as a word rather than\n# as a link to nothing. A page's address holds the pages it is filed under (`section_paths/1`).\npaths = section_paths(sections)\n\nEnum.map(\n  pages,\n  &{&1, document_href(base, document, Map.get(paths, &1.id, [&1.slug]), lang_param, extra)}\n)\n"
         },
         {
           "name": "version_query",
@@ -673,8 +696,8 @@
         },
         {
           "name": "workspace_row",
-          "args": "slug, language",
-          "code": "require Ash.Query\n\ncase trimmed(slug) do\n  \"\" ->\n    nil\n\n  wanted ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n    |> Ash.Query.filter(slug == ^wanted)\n    |> only_language(language)\n    |> Ash.Query.select([:id, :name, :slug, :description, :language])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
+          "args": "slug, path, language",
+          "code": "# A DOCUMENT IS FOUND BY THE ADDRESS ITS OWN PAGES SERVE IT AT — `path` — and by its slug\n# everywhere else.\nrequire Ash.Query\n\nwanted =\n  case {trimmed(path), trimmed(slug)} do\n    {\"\", \"\"} -> nil\n    {\"\", by_slug} -> {:slug, by_slug}\n    {address, _slug} -> {:path, address}\n  end\n\ncase wanted do\n  nil ->\n    nil\n\n  {by, value} ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    query =\n      MishkaDocument.Workspace\n      |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n      |> only_language(language)\n      |> Ash.Query.select([:id, :name, :slug, :path, :description, :language])\n\n    case by do\n      :slug -> Ash.Query.filter(query, slug == ^value)\n      :path -> Ash.Query.filter(query, path == ^value)\n    end\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
         },
         {
           "name": "versions_of",
@@ -772,6 +795,21 @@
           "code": "# THE ORDER A READER GOES THROUGH A DOCUMENT IN — a page, then the pages filed under it, then the\n# next page beside it, which is the order `doc-sidebar` draws them in. Taking the flat list instead\n# puts a child of the first chapter between two chapters, because a page's position is counted among\n# its siblings and not among its uncles, and Next then leaves the chapter the reader is in.\nby_id = Map.new(sections, &{&1.id, &1})\n\nsections\n|> Enum.group_by(&effective_parent(by_id, &1))\n|> descend(nil, 0)\n"
         },
         {
+          "name": "section_paths",
+          "args": "sections",
+          "code": "# EACH PAGE'S OWN PART OF ITS ADDRESS — the slugs of the pages it is drawn under, then its own:\n# headless/switch. The parents are the ones `effective_parent/2` draws it under, so a page's address\n# is where the reader finds it in the contents. A slug is unique among the pages under one parent,\n# so the same one under two parents is two addresses.\nby_id = Map.new(sections, &{&1.id, &1})\nMap.new(sections, &{&1.id, path_up(by_id, &1, [], 0)})\n"
+        },
+        {
+          "name": "path_up",
+          "args": "by_id, section, gathered, depth",
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+        },
+        {
+          "name": "section_at_path",
+          "args": "sections, wanted",
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(asked != [] and Map.get(paths, &1.id) == asked))\n"
+        },
+        {
           "name": "note_blocks",
           "args": "notes",
           "code": "Enum.map(notes, fn note ->\n  %{\n    id: note.id,\n    anchor: \"note-\" <> to_string(note.id),\n    title: note.title,\n    html: clean(note.content)\n  }\nend)\n"
@@ -779,7 +817,7 @@
         {
           "name": "load",
           "args": "socket",
-          "code": "assigns = socket.assigns\nlanguage = asked_language(assigns)\nslug = asked_workspace(assigns)\nworkspace = workspace_row(slug, language)\n# THE URL NAMED A DOCUMENT AND NOTHING ANSWERS IS A MISSING PAGE, not a page with a notice on it —\n# the same answer `MishkaCmsCore.ErrorsExceptions.NotFoundError` gives everywhere else in this CMS,\n# which LiveView converts exactly as a controller does.\n#\n# ONLY WHEN THE URL NAMED IT: a block PINNED to a document by its author — see `asked_workspace/1` —\n# is their content to fix, and taking the page down for it would be the worse answer.\nif workspace == nil and page_subject?(assigns) do\n  missing!(socket)\nend\n\nversions = versions_of(workspace)\nversion = pick_version(versions, from_url(assigns, :version_param))\nsections = sections_of(version, assigns[:current_user])\nwanted = from_url(assigns, :section_param)\n\nfound =\n  case wanted do\n    \"\" -> nil\n    slug -> Enum.find(sections, &(&1.slug == slug))\n  end\n\nsection = (found && section_body(found.id, assigns[:current_user])) || nil\n# AND A SECTION IT NAMED, on the page the document itself is the subject of. An author who PINNED a\n# document has put this block on a page of their own — a stray `?section=` in the URL is a bad link\n# into their page, not a missing page, and taking the whole thing down for it would be the worse\n# answer. The same line the blog draws between the URL's subject and an author's choice.\nif section == nil and wanted != \"\" and page_subject?(assigns) do\n  missing!(socket)\nend\n\nnotes = (section && assigns[:show_notes] && notes_of(section, assigns[:current_user])) || []\n{previous, next} = neighbours(reading_order(sections), section)\n\nPhoenix.Component.assign(socket,\n  document: workspace,\n  version: version,\n  latest: latest_of(versions),\n  sections: sections,\n  section: section,\n  body: (section && with_heading_ids(clean(section.rendered_content))) || \"\",\n  notes: note_blocks(notes),\n  crumbs: (assigns[:show_breadcrumb] && crumbs_to(sections, section)) || [],\n  previous: previous,\n  next: next,\n  language: (workspace && workspace.language) || language,\n  asked_slug: slug,\n  wanted_slug: wanted\n)\n"
+          "code": "assigns = socket.assigns\nlanguage = asked_language(assigns)\nslug = asked_workspace(assigns)\npath = asked_path(assigns)\nworkspace = workspace_row(slug, path, language)\n# THE URL NAMED A DOCUMENT AND NOTHING ANSWERS IS A MISSING PAGE, not a page with a notice on it —\n# the same answer `MishkaCmsCore.ErrorsExceptions.NotFoundError` gives everywhere else in this CMS,\n# which LiveView converts exactly as a controller does.\n#\n# ONLY WHEN THE URL NAMED IT: a block PINNED to a document by its author — see `asked_workspace/1` —\n# is their content to fix, and taking the page down for it would be the worse answer.\nif workspace == nil and page_subject?(assigns) do\n  missing!(socket)\nend\n\nversions = versions_of(workspace)\nversion = pick_version(versions, from_url(assigns, :version_param))\nsections = sections_of(version, assigns[:current_user])\nwanted = from_url(assigns, :section_param)\n\nfound =\n  case wanted do\n    \"\" -> nil\n    address -> section_at_path(sections, address)\n  end\n\nsection = (found && section_body(found.id, assigns[:current_user])) || nil\n# AND A SECTION IT NAMED, on the page the document itself is the subject of. An author who PINNED a\n# document has put this block on a page of their own — a stray `?section=` in the URL is a bad link\n# into their page, not a missing page, and taking the whole thing down for it would be the worse\n# answer. The same line the blog draws between the URL's subject and an author's choice.\nif section == nil and wanted != \"\" and page_subject?(assigns) do\n  missing!(socket)\nend\n\nnotes = (section && assigns[:show_notes] && notes_of(section, assigns[:current_user])) || []\n{previous, next} = neighbours(reading_order(sections), section)\n\nPhoenix.Component.assign(socket,\n  document: workspace,\n  version: version,\n  latest: latest_of(versions),\n  sections: sections,\n  section: section,\n  body: (section && with_heading_ids(clean(section.rendered_content))) || \"\",\n  notes: note_blocks(notes),\n  crumbs: (assigns[:show_breadcrumb] && crumbs_to(sections, section)) || [],\n  previous: previous,\n  next: next,\n  language: (workspace && workspace.language) || language,\n  asked_document: (path != \"\" && path) || slug,\n  wanted_slug: wanted\n)\n"
         },
         {
           "name": "site_name",
@@ -808,7 +846,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<nav\n  id={@id}\n  {@rest}\n  data-role=\"doc-sidebar\"\n  aria-label=\"Document contents\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction((@document && @document.language) || \"\")}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-sidebar-heading\"\n    class=\"mb-3 text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n  >\n    {@heading}\n  </h2>\n\n  <form\n    :if={@show_filter}\n    id={\"#{@id}-filter\"}\n    phx-change=\"filter\"\n    phx-submit=\"filter\"\n    phx-target={@myself}\n    class=\"mb-3\"\n  >\n    <input\n      type=\"search\"\n      name=\"q\"\n      value={@query}\n      data-role=\"doc-sidebar-filter\"\n      placeholder={@filter_text}\n      autocomplete=\"off\"\n      phx-debounce=\"200\"\n      class=\"w-full rounded-[10px] border border-[#ecebe6] bg-white px-3 py-1.5 text-sm outline-none focus:border-[#5b57d6]\"\n    />\n  </form>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-sidebar-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-sidebar-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-empty\"\n    text={@empty_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections != [] and @items == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-none\"\n    text={@none_text}\n    quiet={true}\n  />\n\n  <ul\n    :if={not @loading and not @failed and @items != []}\n    data-role=\"doc-sidebar-items\"\n    class=\"space-y-0.5\"\n  >\n    <li\n      :for={\n        {item, href} <-\n          item_links(\n            @items,\n            @doc_base,\n            @document,\n            @lang_param,\n            version_query(@version, @latest, @version_param)\n          )\n      }\n      id={\"#{@id}-item-#{item.section.id}\"}\n      data-role=\"doc-sidebar-item\"\n      data-depth={item.depth}\n      data-active={to_string(item.active)}\n      style={\"padding-inline-start: #{item.depth * 12}px\"}\n    >\n      <.link\n        :if={href}\n        navigate={href}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        aria-expanded={(item.parent? && to_string(item.open)) || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug hover:bg-[#f2f1fc]\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </.link>\n\n      <span\n        :if={is_nil(href)}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </span>\n    </li>\n  </ul>\n</nav>\n",
+      "template": "<nav\n  id={@id}\n  {@rest}\n  data-role=\"doc-sidebar\"\n  aria-label=\"Document contents\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction((@document && @document.language) || \"\")}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-sidebar-heading\"\n    class=\"mb-3 text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n  >\n    {@heading}\n  </h2>\n\n  <form\n    :if={@show_filter}\n    id={\"#{@id}-filter\"}\n    phx-change=\"filter\"\n    phx-submit=\"filter\"\n    phx-target={@myself}\n    class=\"mb-3\"\n  >\n    <input\n      type=\"search\"\n      name=\"q\"\n      value={@query}\n      data-role=\"doc-sidebar-filter\"\n      placeholder={@filter_text}\n      autocomplete=\"off\"\n      phx-debounce=\"200\"\n      class=\"w-full rounded-[10px] border border-[#ecebe6] bg-white px-3 py-1.5 text-sm outline-none focus:border-[#5b57d6]\"\n    />\n  </form>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-sidebar-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-sidebar-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-empty\"\n    text={@empty_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections != [] and @items == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-none\"\n    text={@none_text}\n    quiet={true}\n  />\n\n  <ul\n    :if={not @loading and not @failed and @items != []}\n    data-role=\"doc-sidebar-items\"\n    class=\"space-y-0.5\"\n  >\n    <li\n      :for={\n        {item, href} <-\n          item_links(\n            @items,\n            @sections,\n            @doc_base,\n            @document,\n            @lang_param,\n            version_query(@version, @latest, @version_param)\n          )\n      }\n      id={\"#{@id}-item-#{item.section.id}\"}\n      data-role=\"doc-sidebar-item\"\n      data-depth={item.depth}\n      data-active={to_string(item.active)}\n      style={\"padding-inline-start: #{item.depth * 12}px\"}\n    >\n      <.link\n        :if={href}\n        navigate={href}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        aria-expanded={(item.parent? && to_string(item.open)) || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug hover:bg-[#f2f1fc]\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </.link>\n\n      <span\n        :if={is_nil(href)}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </span>\n    </li>\n  </ul>\n</nav>\n",
       "attrs": [
         {
           "name": "heading",
@@ -827,6 +865,14 @@
           }
         },
         {
+          "name": "path",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The address of the document this page serves — the Address set on the document, /product/docs say — so the page reads that document rather than one a slug in the URL names, and its pages under it. The pages a document is given at its own address are written with it. A pinned workspace wins over it; left empty, the URL's slug decides."
+          }
+        },
+        {
           "name": "workspace_param",
           "type": "any",
           "opts": {
@@ -839,7 +885,7 @@
           "type": "any",
           "opts": {
             "default": "section",
-            "doc": "The URL key a page's slug arrives under. It is how this list knows which entry the reader is on."
+            "doc": "The URL key a page's address under its document arrives under — headless/switch, which a *section capture holds. It is how this list knows which entry the reader is on."
           }
         },
         {
@@ -879,7 +925,7 @@
           "type": "any",
           "opts": {
             "default": "/docs",
-            "doc": "Where documents live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to."
+            "doc": "Where documents with no address of their own live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to. A document with an Address of its own is linked there instead, its pages under it."
           }
         },
         {
@@ -1003,6 +1049,11 @@
           "code": "# THE AUTHOR'S CHOICE WINS OVER THE URL'S. A block pinned to one document is pinned: it sits on a\n# page about that document, and a reader appending ?workspace= must not turn it into another.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> from_url(assigns, :workspace_param)\n  pinned -> pinned\nend\n"
         },
         {
+          "name": "asked_path",
+          "args": "assigns",
+          "code": "# THE ADDRESS THIS PAGE SERVES A DOCUMENT AT, when it is that document's own — /product/docs. A\n# block pinned to a document by its slug is the author's choice for a page of their own, and keeps\n# it.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> trimmed(assigns[:path])\n  _pinned -> \"\"\nend\n"
+        },
+        {
           "name": "asked_language",
           "args": "assigns",
           "code": "# HERE THE URL WINS, which is the opposite of every other key and is the point of a language: a page\n# offered in four of them is one page, and the reader says which. `lang_param` is the one key the\n# language travels under — read here, written onto every link below — so emptying it stops both, and\n# that is how an author pins a page to one language, and how a page whose language is a path segment\n# keeps the language out of its query strings.\ncase from_url(assigns, :lang_param) do\n  \"\" -> trimmed(assigns[:lang])\n  asked -> asked\nend\n"
@@ -1013,9 +1064,14 @@
           "code": "# THE ADDRESS OF AN EDITION, built by `site_path/2` for the site the page renders for — in the\n# template and in the task a block reads in alike, because `MishkaGervaz.Messages.start_async/4`\n# hands the task the page's site. Each segment is appended to the base, and a `:lang` in the base —\n# in any position, /:lang/docs or /docs/:lang — is filled with the language of the edition being\n# linked to, not the one the page is read in, which is the only way a link to an edition in ANOTHER\n# language can be built. The address is the one the site's URL mode gives that language:\n# /docs/<document> in a first language the site leaves unprefixed, /fa/docs/<document> in Persian. A\n# base without the segment carries the language as a query key instead, so nothing appends it twice.\n# An edition whose language this site does not publish, or cannot be read, gets no link rather than\n# a link to a 404.\nnumbered = Enum.with_index(segments)\npattern = Enum.reduce(numbered, to_string(base), fn {_segment, at}, acc -> acc <> \"/:segment#{at}\" end)\n\ncaptures =\n  numbered\n  |> Map.new(fn {segment, at} -> {\"segment#{at}\", to_string(segment)} end)\n  |> Map.put(\"lang\", trimmed(language))\n\ncase site_path(pattern, captures) do\n  nil ->\n    nil\n\n  path ->\n    in_path? = \":lang\" in String.split(to_string(base), \"/\")\n\n    query =\n      case {in_path?, trimmed(lang_param), trimmed(language)} do\n        {false, key, code} when key != \"\" and code != \"\" -> Map.put(extra, key, code)\n        _carried_by_the_path_or_not_asked_for -> extra\n      end\n\n    case URI.encode_query(query) do\n      \"\" -> path\n      encoded -> path <> \"?\" <> encoded\n    end\nend\n"
         },
         {
+          "name": "document_href",
+          "args": "base, document, segments, lang_param, extra",
+          "code": "# THE ADDRESS OF A DOCUMENT, OR OF ONE OF ITS PAGES. A document with an Address of its own is read\n# there and its pages under it — /product/docs/headless/switch — and that address is one edition's,\n# so no `?lang=` is written onto it; any other is read under the base, by its slug.\ncase document do\n  %{path: own} when is_binary(own) and own != \"\" ->\n    doc_href(own, segments, document.language, \"\", extra)\n\n  _read_by_its_slug ->\n    doc_href(base, [document.slug | segments], document.language, lang_param, extra)\nend\n"
+        },
+        {
           "name": "item_links",
-          "args": "items, base, document, lang_param, extra",
-          "code": "# EACH ITEM WITH THE ADDRESS OF ITS PAGE, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`) — so the template draws that item as a word rather than\n# as a link to nothing.\nEnum.map(items, fn item ->\n  {item,\n   doc_href(\n     base,\n     [(document && document.slug) || \"\", item.section.slug],\n     (document && document.language) || \"\",\n     lang_param,\n     extra\n   )}\nend)\n"
+          "args": "items, sections, base, document, lang_param, extra",
+          "code": "# EACH ITEM WITH THE ADDRESS OF ITS PAGE, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`) — so the template draws that item as a word rather than\n# as a link to nothing. A page's address holds the pages it is filed under (`section_paths/1`).\npaths = section_paths(sections)\n\nEnum.map(items, fn item ->\n  href =\n    case document do\n      nil ->\n        nil\n\n      found ->\n        document_href(\n          base,\n          found,\n          Map.get(paths, item.section.id, [item.section.slug]),\n          lang_param,\n          extra\n        )\n    end\n\n  {item, href}\nend)\n"
         },
         {
           "name": "version_query",
@@ -1049,8 +1105,8 @@
         },
         {
           "name": "workspace_row",
-          "args": "slug, language",
-          "code": "require Ash.Query\n\ncase trimmed(slug) do\n  \"\" ->\n    {:ok, nil}\n\n  wanted ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n    |> Ash.Query.filter(slug == ^wanted)\n    |> only_language(language)\n    |> Ash.Query.select([:id, :slug, :language])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
+          "args": "slug, path, language",
+          "code": "# A DOCUMENT IS FOUND BY THE ADDRESS ITS OWN PAGES SERVE IT AT — `path` — and by its slug\n# everywhere else.\nrequire Ash.Query\n\nwanted =\n  case {trimmed(path), trimmed(slug)} do\n    {\"\", \"\"} -> nil\n    {\"\", by_slug} -> {:slug, by_slug}\n    {address, _slug} -> {:path, address}\n  end\n\ncase wanted do\n  nil ->\n    {:ok, nil}\n\n  {by, value} ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    query =\n      MishkaDocument.Workspace\n      |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n      |> only_language(language)\n      |> Ash.Query.select([:id, :slug, :path, :language])\n\n    case by do\n      :slug -> Ash.Query.filter(query, slug == ^value)\n      :path -> Ash.Query.filter(query, path == ^value)\n    end\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
         },
         {
           "name": "versions_of",
@@ -1081,6 +1137,21 @@
           "name": "effective_parent",
           "args": "by_id, section",
           "code": "# THE PARENT A PAGE IS DRAWN UNDER, which is not always the parent it names. A parent still waiting\n# on a review is not published, and hanging its children off it would drop them out of the contents\n# altogether — so they surface at the top instead, and so does anything in a loop.\nparent = section.parent_section_id\n\ncond do\n  is_nil(parent) -> nil\n  not Map.has_key?(by_id, parent) -> nil\n  not rooted?(by_id, section, 0) -> nil\n  true -> parent\nend\n"
+        },
+        {
+          "name": "section_paths",
+          "args": "sections",
+          "code": "# EACH PAGE'S OWN PART OF ITS ADDRESS — the slugs of the pages it is drawn under, then its own:\n# headless/switch. The parents are the ones `effective_parent/2` draws it under, so a page's address\n# is where the reader finds it in the contents. A slug is unique among the pages under one parent,\n# so the same one under two parents is two addresses.\nby_id = Map.new(sections, &{&1.id, &1})\nMap.new(sections, &{&1.id, path_up(by_id, &1, [], 0)})\n"
+        },
+        {
+          "name": "path_up",
+          "args": "by_id, section, gathered, depth",
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+        },
+        {
+          "name": "section_at_path",
+          "args": "sections, wanted",
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(asked != [] and Map.get(paths, &1.id) == asked))\n"
         },
         {
           "name": "ancestors",
@@ -1130,12 +1201,12 @@
         {
           "name": "asked",
           "args": "assigns",
-          "code": "%{\n  visitor: assigns[:current_user],\n  workspace: asked_workspace(assigns),\n  language: asked_language(assigns),\n  version: from_url(assigns, :version_param),\n  section: from_url(assigns, :section_param),\n  expand_all: assigns[:expand_all] == true\n}\n"
+          "code": "%{\n  visitor: assigns[:current_user],\n  workspace: asked_workspace(assigns),\n  path: asked_path(assigns),\n  language: asked_language(assigns),\n  version: from_url(assigns, :version_param),\n  section: from_url(assigns, :section_param),\n  expand_all: assigns[:expand_all] == true\n}\n"
         },
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.language),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     {:ok, sections} <- sections_of(version, asked.visitor) do\n  {:ok,\n   %{\n     document: workspace,\n     version: version,\n     latest: latest_of(versions),\n     sections: sections,\n     active:\n       Enum.find_value(sections, fn section -> section.slug == asked.section && section.id end)\n   }}\nend\n"
+          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.path, asked.language),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     {:ok, sections} <- sections_of(version, asked.visitor) do\n  {:ok,\n   %{\n     document: workspace,\n     version: version,\n     latest: latest_of(versions),\n     sections: sections,\n     active:\n       case section_at_path(sections, asked.section) do\n         nil -> nil\n         found -> found.id\n       end\n   }}\nend\n"
         },
         {
           "name": "arrived",
@@ -1203,6 +1274,14 @@
           }
         },
         {
+          "name": "path",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The address of the document this page serves — the Address set on the document, /product/docs say — so the page reads that document rather than one a slug in the URL names, and its pages under it. The pages a document is given at its own address are written with it. A pinned workspace wins over it; left empty, the URL's slug decides."
+          }
+        },
+        {
           "name": "workspace_param",
           "type": "any",
           "opts": {
@@ -1215,7 +1294,7 @@
           "type": "any",
           "opts": {
             "default": "section",
-            "doc": "The URL key a page's slug arrives under. Nothing under it and there is no page to list."
+            "doc": "The URL key a page's address under its document arrives under — headless/switch, which a *section capture holds. Nothing under it means the front page, which has no table of contents of its own."
           }
         },
         {
@@ -1255,7 +1334,7 @@
           "type": "any",
           "opts": {
             "default": "/docs",
-            "doc": "Where documents live — /docs, say. This block links only inside the page it is drawn on and builds nothing from it; it is declared so that a page handing every documentation block one set of attributes does not print this one as an HTML attribute on the list."
+            "doc": "Where documents with no address of their own live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to. A document with an Address of its own is linked there instead, its pages under it."
           }
         },
         {
@@ -1365,6 +1444,11 @@
           "code": "# THE AUTHOR'S CHOICE WINS OVER THE URL'S. A block pinned to one document is pinned: it sits on a\n# page about that document, and a reader appending ?workspace= must not turn it into another.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> from_url(assigns, :workspace_param)\n  pinned -> pinned\nend\n"
         },
         {
+          "name": "asked_path",
+          "args": "assigns",
+          "code": "# THE ADDRESS THIS PAGE SERVES A DOCUMENT AT, when it is that document's own — /product/docs. A\n# block pinned to a document by its slug is the author's choice for a page of their own, and keeps\n# it.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> trimmed(assigns[:path])\n  _pinned -> \"\"\nend\n"
+        },
+        {
           "name": "asked_language",
           "args": "assigns",
           "code": "# HERE THE URL WINS, which is the opposite of every other key and is the point of a language: a page\n# offered in four of them is one page, and the reader says which. Emptying `lang_param` is how an\n# author pins a page to one language, and how a page whose language is a path segment keeps the\n# language out of its query strings.\ncase from_url(assigns, :lang_param) do\n  \"\" -> trimmed(assigns[:lang])\n  asked -> asked\nend\n"
@@ -1401,8 +1485,8 @@
         },
         {
           "name": "workspace_row",
-          "args": "slug, language",
-          "code": "require Ash.Query\n\ncase trimmed(slug) do\n  \"\" ->\n    {:ok, nil}\n\n  wanted ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n    |> Ash.Query.filter(slug == ^wanted)\n    |> only_language(language)\n    |> Ash.Query.select([:id, :language])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
+          "args": "slug, path, language",
+          "code": "# A DOCUMENT IS FOUND BY THE ADDRESS ITS OWN PAGES SERVE IT AT — `path` — and by its slug\n# everywhere else.\nrequire Ash.Query\n\nwanted =\n  case {trimmed(path), trimmed(slug)} do\n    {\"\", \"\"} -> nil\n    {\"\", by_slug} -> {:slug, by_slug}\n    {address, _slug} -> {:path, address}\n  end\n\ncase wanted do\n  nil ->\n    {:ok, nil}\n\n  {by, value} ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    query =\n      MishkaDocument.Workspace\n      |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n      |> only_language(language)\n      |> Ash.Query.select([:id, :language])\n\n    case by do\n      :slug -> Ash.Query.filter(query, slug == ^value)\n      :path -> Ash.Query.filter(query, path == ^value)\n    end\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
         },
         {
           "name": "versions_of",
@@ -1421,8 +1505,33 @@
         },
         {
           "name": "section_at",
-          "args": "version, slug, visitor",
-          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE. A slug is unique to a version, not\n# to a document, so reading it directly would answer with a page of whichever version happened to\n# come first — a draft one among them.\nrequire Ash.Query\n\ncase {version, slug} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {_version, \"\"} ->\n    {:ok, nil}\n\n  {%{id: id}, wanted} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(\n      :public_list_at_workspace_version,\n      %{workspace_version_id: id},\n      read_as(visitor)\n    )\n    |> Ash.Query.filter(slug == ^wanted)\n    |> Ash.Query.load([:rendered_content])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
+          "args": "version, wanted, visitor",
+          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE, and by its whole address: the\n# version's pages are read as a tree, the one whose own part of the address is the one asked is\n# picked — headless/switch, a slug being unique only among the pages under one parent — and that one\n# alone is read for its text.\nrequire Ash.Query\n\ncase {version, trimmed(wanted)} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {_version, \"\"} ->\n    {:ok, nil}\n\n  {%{id: id}, asked} ->\n    pages =\n      MishkaDocument.Section\n      |> Ash.Query.for_read(\n        :public_list_at_workspace_version,\n        %{workspace_version_id: id},\n        read_as(visitor)\n      )\n\n    with {:ok, tree} <-\n           pages\n           |> Ash.Query.select([:id, :slug, :parent_section_id])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      case section_at_path(tree, asked) do\n        nil ->\n          {:ok, nil}\n\n        %{id: found} ->\n          pages\n          |> Ash.Query.filter(id == ^found)\n          |> Ash.Query.load([:rendered_content])\n          |> Ash.read(tenant: site_id(), page: [limit: 1])\n          |> first_row()\n      end\n    end\nend\n"
+        },
+        {
+          "name": "rooted?",
+          "args": "by_id, section, depth",
+          "code": "# WHETHER WALKING UP FROM A PAGE EVER REACHES THE TOP. A pair of pages filed under each other is\n# reachable from neither end, so without this both of them would be missing from the document's\n# front page with nothing saying why. Twenty steps is deeper than any manual and cheap.\ncase {section, depth} do\n  {nil, _gone} ->\n    true\n\n  {_deep, walked} when walked >= 20 ->\n    false\n\n  {%{parent_section_id: nil}, _at_the_top} ->\n    true\n\n  {%{parent_section_id: parent}, _keep_going} ->\n    case Map.get(by_id, parent) do\n      nil -> true\n      found -> rooted?(by_id, found, depth + 1)\n    end\nend\n"
+        },
+        {
+          "name": "effective_parent",
+          "args": "by_id, section",
+          "code": "# THE PARENT A PAGE IS DRAWN UNDER, which is not always the parent it names. A parent still waiting\n# on a review is not published, and hanging its children off it would drop them out of the document\n# altogether — so they surface at the top instead, and so does anything in a loop. `doc-sidebar`\n# decides the same question the same way, so the front page, the pager and the contents agree.\nparent = section.parent_section_id\n\ncond do\n  is_nil(parent) -> nil\n  not Map.has_key?(by_id, parent) -> nil\n  not rooted?(by_id, section, 0) -> nil\n  true -> parent\nend\n"
+        },
+        {
+          "name": "section_paths",
+          "args": "sections",
+          "code": "# EACH PAGE'S OWN PART OF ITS ADDRESS — the slugs of the pages it is drawn under, then its own:\n# headless/switch. The parents are the ones `effective_parent/2` draws it under, so a page's address\n# is where the reader finds it in the contents. A slug is unique among the pages under one parent,\n# so the same one under two parents is two addresses.\nby_id = Map.new(sections, &{&1.id, &1})\nMap.new(sections, &{&1.id, path_up(by_id, &1, [], 0)})\n"
+        },
+        {
+          "name": "path_up",
+          "args": "by_id, section, gathered, depth",
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+        },
+        {
+          "name": "section_at_path",
+          "args": "sections, wanted",
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(asked != [] and Map.get(paths, &1.id) == asked))\n"
         },
         {
           "name": "notes_of",
@@ -1477,12 +1586,12 @@
         {
           "name": "asked",
           "args": "assigns",
-          "code": "%{\n  visitor: assigns[:current_user],\n  workspace: asked_workspace(assigns),\n  language: asked_language(assigns),\n  version: from_url(assigns, :version_param),\n  section: from_url(assigns, :section_param),\n  show_headings: assigns[:show_headings] == true,\n  show_notes: assigns[:show_notes] == true\n}\n"
+          "code": "%{\n  visitor: assigns[:current_user],\n  workspace: asked_workspace(assigns),\n  path: asked_path(assigns),\n  language: asked_language(assigns),\n  version: from_url(assigns, :version_param),\n  section: from_url(assigns, :section_param),\n  show_headings: assigns[:show_headings] == true,\n  show_notes: assigns[:show_notes] == true\n}\n"
         },
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.language),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     {:ok, section} <- section_at(version, asked.section, asked.visitor),\n     {:ok, notes} <- (asked.show_notes && notes_of(section, asked.visitor)) || {:ok, []} do\n  {:ok,\n   %{\n     entries: entries_of(section, notes, asked.show_headings, asked.show_notes),\n     language: (workspace && workspace.language) || asked.language\n   }}\nend\n"
+          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.path, asked.language),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     {:ok, section} <- section_at(version, asked.section, asked.visitor),\n     {:ok, notes} <- (asked.show_notes && notes_of(section, asked.visitor)) || {:ok, []} do\n  {:ok,\n   %{\n     entries: entries_of(section, notes, asked.show_headings, asked.show_notes),\n     language: (workspace && workspace.language) || asked.language\n   }}\nend\n"
         },
         {
           "name": "arrived",
@@ -1550,6 +1659,14 @@
           }
         },
         {
+          "name": "path",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The address of the document this page serves — the Address set on the document, /product/docs say — so the page reads that document rather than one a slug in the URL names, and its pages under it. The pages a document is given at its own address are written with it. A pinned workspace wins over it; left empty, the URL's slug decides."
+          }
+        },
+        {
           "name": "workspace_param",
           "type": "any",
           "opts": {
@@ -1562,7 +1679,7 @@
           "type": "any",
           "opts": {
             "default": "section",
-            "doc": "The URL key a page's slug arrives under. It is how each switch knows which page to lead back to."
+            "doc": "The URL key a page's address under its document arrives under — headless/switch, which a *section capture holds. It is how each entry knows which page to lead back to."
           }
         },
         {
@@ -1602,7 +1719,7 @@
           "type": "any",
           "opts": {
             "default": "/docs",
-            "doc": "Where documents live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — and each language link is built under the language it leads to, which is the only way one of them can leave this one — at the address the site's URL mode gives that language."
+            "doc": "Where documents with no address of their own live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to. A document with an Address of its own is linked there instead, its pages under it."
           }
         },
         {
@@ -1729,14 +1846,19 @@
           "code": "# THE AUTHOR'S CHOICE WINS OVER THE URL'S. A block pinned to one document is pinned: it sits on a\n# page about that document, and a reader appending ?workspace= must not turn it into another.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> from_url(assigns, :workspace_param)\n  pinned -> pinned\nend\n"
         },
         {
+          "name": "asked_path",
+          "args": "assigns",
+          "code": "# THE ADDRESS THIS PAGE SERVES A DOCUMENT AT, when it is that document's own — /product/docs. A\n# block pinned to a document by its slug is the author's choice for a page of their own, and keeps\n# it.\ncase trimmed(assigns[:workspace]) do\n  \"\" -> trimmed(assigns[:path])\n  _pinned -> \"\"\nend\n"
+        },
+        {
           "name": "asked_language",
           "args": "assigns",
           "code": "# HERE THE URL WINS, which is the opposite of every other key and is the point of a language: a page\n# offered in four of them is one page, and the reader says which. Emptying `lang_param` is how an\n# author pins a page to one language, and how a page whose language is a path segment keeps the\n# language out of its query strings.\ncase from_url(assigns, :lang_param) do\n  \"\" -> trimmed(assigns[:lang])\n  asked -> asked\nend\n"
         },
         {
           "name": "served?",
-          "args": "base, language",
-          "code": "# WHETHER THIS SITE HAS A URL FOR AN EDITION IN THIS LANGUAGE — whether the base makes an address in\n# it (`site_path/2`, as `doc_href/5` builds one). A `:lang` capture answers `site.languages` alone,\n# so a document translated into French on a site publishing English and Persian cannot be addressed\n# here at all. A base with no `:lang` in it makes no language claim, so everything is addressable\n# through it.\nsite_path(to_string(base), %{\"lang\" => trimmed(language)}) != nil\n",
+          "args": "base, edition",
+          "code": "# WHETHER THIS SITE HAS A URL FOR AN EDITION — whether the address it is read under, its own or the\n# base, makes one in its language (`site_path/2`, as `doc_href/5` builds one). A `:lang` capture\n# answers `site.languages` alone, so a document translated into French on a site publishing English\n# and Persian cannot be addressed here at all. An address with no `:lang` in it makes no language\n# claim, so everything is addressable through it.\nroot =\n  case edition do\n    %{path: own} when is_binary(own) and own != \"\" -> own\n    _read_by_its_slug -> base\n  end\n\nsite_path(to_string(root), %{\"lang\" => trimmed(edition.language)}) != nil\n",
           "attrs": [],
           "slots": [],
           "signature": null,
@@ -1746,6 +1868,11 @@
           "name": "doc_href",
           "args": "base, segments, language, lang_param, extra",
           "code": "# THE ADDRESS OF AN EDITION, built by `site_path/2` for the site the page renders for — in the\n# template and in the task a block reads in alike, because `MishkaGervaz.Messages.start_async/4`\n# hands the task the page's site. Each segment is appended to the base, and a `:lang` in the base —\n# in any position, /:lang/docs or /docs/:lang — is filled with the language of the edition being\n# linked to, not the one the page is read in, which is the only way a link to an edition in ANOTHER\n# language can be built. The address is the one the site's URL mode gives that language:\n# /docs/<document> in a first language the site leaves unprefixed, /fa/docs/<document> in Persian. A\n# base without the segment carries the language as a query key instead, so nothing appends it twice.\n# An edition whose language this site does not publish, or cannot be read, gets no link rather than\n# a link to a 404.\nnumbered = Enum.with_index(segments)\npattern = Enum.reduce(numbered, to_string(base), fn {_segment, at}, acc -> acc <> \"/:segment#{at}\" end)\n\ncaptures =\n  numbered\n  |> Map.new(fn {segment, at} -> {\"segment#{at}\", to_string(segment)} end)\n  |> Map.put(\"lang\", trimmed(language))\n\ncase site_path(pattern, captures) do\n  nil ->\n    nil\n\n  path ->\n    in_path? = \":lang\" in String.split(to_string(base), \"/\")\n\n    query =\n      case {in_path?, trimmed(lang_param), trimmed(language)} do\n        {false, key, code} when key != \"\" and code != \"\" -> Map.put(extra, key, code)\n        _carried_by_the_path_or_not_asked_for -> extra\n      end\n\n    case URI.encode_query(query) do\n      \"\" -> path\n      encoded -> path <> \"?\" <> encoded\n    end\nend\n"
+        },
+        {
+          "name": "document_href",
+          "args": "base, document, segments, lang_param, extra",
+          "code": "# THE ADDRESS OF A DOCUMENT, OR OF ONE OF ITS PAGES. A document with an Address of its own is read\n# there and its pages under it — /product/docs/headless/switch — and that address is one edition's,\n# so no `?lang=` is written onto it; any other is read under the base, by its slug.\ncase document do\n  %{path: own} when is_binary(own) and own != \"\" ->\n    doc_href(own, segments, document.language, \"\", extra)\n\n  _read_by_its_slug ->\n    doc_href(base, [document.slug | segments], document.language, lang_param, extra)\nend\n"
         },
         {
           "name": "version_query",
@@ -1789,8 +1916,8 @@
         },
         {
           "name": "workspace_row",
-          "args": "slug, language",
-          "code": "require Ash.Query\n\ncase trimmed(slug) do\n  \"\" ->\n    {:ok, nil}\n\n  wanted ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n    |> Ash.Query.filter(slug == ^wanted)\n    |> only_language(language)\n    |> Ash.Query.select([:id, :slug, :language, :language_group_id])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
+          "args": "slug, path, language",
+          "code": "# A DOCUMENT IS FOUND BY THE ADDRESS ITS OWN PAGES SERVE IT AT — `path` — and by its slug\n# everywhere else.\nrequire Ash.Query\n\nwanted =\n  case {trimmed(path), trimmed(slug)} do\n    {\"\", \"\"} -> nil\n    {\"\", by_slug} -> {:slug, by_slug}\n    {address, _slug} -> {:path, address}\n  end\n\ncase wanted do\n  nil ->\n    {:ok, nil}\n\n  {by, value} ->\n    # AS THE SYSTEM, since a page whose own lock opens is drawn inside a document that does not.\n    query =\n      MishkaDocument.Workspace\n      |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n      |> only_language(language)\n      |> Ash.Query.select([:id, :slug, :path, :language, :language_group_id])\n\n    case by do\n      :slug -> Ash.Query.filter(query, slug == ^value)\n      :path -> Ash.Query.filter(query, path == ^value)\n    end\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
         },
         {
           "name": "versions_of",
@@ -1809,18 +1936,43 @@
         },
         {
           "name": "section_at",
-          "args": "version, slug, visitor",
-          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE. A slug is unique to a version, not\n# to a document, so reading it directly would answer with a page of whichever version happened to\n# come first — a draft one among them.\nrequire Ash.Query\n\ncase {version, slug} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {_version, \"\"} ->\n    {:ok, nil}\n\n  {%{id: id}, wanted} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(\n      :public_list_at_workspace_version,\n      %{workspace_version_id: id},\n      read_as(visitor)\n    )\n    |> Ash.Query.filter(slug == ^wanted)\n    |> Ash.Query.select([:id, :slug, :section_lineage_id, :language_group_id])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend\n"
+          "args": "version, wanted, visitor",
+          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE, and by its whole address: the\n# version's pages are read as a tree and the one whose own part of the address is the one asked is\n# picked — headless/switch, a slug being unique only among the pages under one parent. It comes back\n# with that address, which is what the entry for its own edition leads back to.\nrequire Ash.Query\n\ncase {version, trimmed(wanted)} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {_version, \"\"} ->\n    {:ok, nil}\n\n  {%{id: id}, asked} ->\n    with {:ok, tree} <-\n           MishkaDocument.Section\n           |> Ash.Query.for_read(\n             :public_list_at_workspace_version,\n             %{workspace_version_id: id},\n             read_as(visitor)\n           )\n           |> Ash.Query.select([\n             :id,\n             :slug,\n             :parent_section_id,\n             :section_lineage_id,\n             :language_group_id\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      case section_at_path(tree, asked) do\n        nil -> {:ok, nil}\n        found -> {:ok, %{section: found, address: Map.get(section_paths(tree), found.id)}}\n      end\n    end\nend\n"
+        },
+        {
+          "name": "rooted?",
+          "args": "by_id, section, depth",
+          "code": "# WHETHER WALKING UP FROM A PAGE EVER REACHES THE TOP. A pair of pages filed under each other is\n# reachable from neither end, so without this both of them would be missing from the document's\n# front page with nothing saying why. Twenty steps is deeper than any manual and cheap.\ncase {section, depth} do\n  {nil, _gone} ->\n    true\n\n  {_deep, walked} when walked >= 20 ->\n    false\n\n  {%{parent_section_id: nil}, _at_the_top} ->\n    true\n\n  {%{parent_section_id: parent}, _keep_going} ->\n    case Map.get(by_id, parent) do\n      nil -> true\n      found -> rooted?(by_id, found, depth + 1)\n    end\nend\n"
+        },
+        {
+          "name": "effective_parent",
+          "args": "by_id, section",
+          "code": "# THE PARENT A PAGE IS DRAWN UNDER, which is not always the parent it names. A parent still waiting\n# on a review is not published, and hanging its children off it would drop them out of the document\n# altogether — so they surface at the top instead, and so does anything in a loop. `doc-sidebar`\n# decides the same question the same way, so the front page, the pager and the contents agree.\nparent = section.parent_section_id\n\ncond do\n  is_nil(parent) -> nil\n  not Map.has_key?(by_id, parent) -> nil\n  not rooted?(by_id, section, 0) -> nil\n  true -> parent\nend\n"
+        },
+        {
+          "name": "section_paths",
+          "args": "sections",
+          "code": "# EACH PAGE'S OWN PART OF ITS ADDRESS — the slugs of the pages it is drawn under, then its own:\n# headless/switch. The parents are the ones `effective_parent/2` draws it under, so a page's address\n# is where the reader finds it in the contents. A slug is unique among the pages under one parent,\n# so the same one under two parents is two addresses.\nby_id = Map.new(sections, &{&1.id, &1})\nMap.new(sections, &{&1.id, path_up(by_id, &1, [], 0)})\n"
+        },
+        {
+          "name": "path_up",
+          "args": "by_id, section, gathered, depth",
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+        },
+        {
+          "name": "section_at_path",
+          "args": "sections, wanted",
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(asked != [] and Map.get(paths, &1.id) == asked))\n"
         },
         {
           "name": "lineage_slugs",
-          "args": "versions, section, visitor",
-          "code": "# THE SAME PAGE IN EVERY OTHER VERSION, IN ONE READ. A page cloned forward keeps its\n# `section_lineage_id`, so this is what \"the same page\" means across versions — and asking version\n# by version would be a read per entry in the switch.\nrequire Ash.Query\n\ncase {Enum.map(versions, & &1.id), section} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {_ids, %{section_lineage_id: nil}} ->\n    %{}\n\n  {wanted, %{section_lineage_id: lineage}} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted and section_lineage_id == ^lineage)\n    |> Ash.Query.select([:slug, :workspace_version_id])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Map.new(&{&1.workspace_version_id, &1.slug})\nend\n"
+          "args": "versions, page, visitor",
+          "code": "# THE SAME PAGE IN EVERY OTHER VERSION, AT ITS ADDRESS THERE, IN ONE READ. A page cloned forward\n# keeps its `section_lineage_id`, so this is what \"the same page\" means across versions — and asking\n# version by version would be a read per entry in the switch. Each version's pages come whole,\n# because a page's address holds the pages it is filed under in that version.\nrequire Ash.Query\n\ncase {Enum.map(versions, & &1.id), page} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {_ids, %{section: %{section_lineage_id: nil}}} ->\n    %{}\n\n  {wanted, %{section: %{section_lineage_id: lineage}}} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([:id, :slug, :parent_section_id, :workspace_version_id, :section_lineage_id])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Enum.flat_map(fn {version_id, pages} ->\n      case Enum.find(pages, &(&1.section_lineage_id == lineage)) do\n        nil -> []\n        found -> [{version_id, Map.get(section_paths(pages), found.id)}]\n      end\n    end)\n    |> Map.new()\nend\n"
         },
         {
           "name": "variants_of",
           "args": "workspace, visitor",
-          "code": "# EVERY EDITION OF THIS DOCUMENT, the one being read among them — and none at all where it is the\n# only one. `SetLanguageGroupId` gives every document written here a group holding itself, so the\n# nil clause below catches only a row an admin later emptied; without the last one, a document\n# nobody has translated draws a switch offering the language it is already being read in, and pays\n# the two reads under `language_links/5` to fill it.\nrequire Ash.Query\n\ncase workspace do\n  nil ->\n    []\n\n  %{language_group_id: nil} ->\n    []\n\n  %{language_group_id: group} ->\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(language_group_id == ^group)\n    |> Ash.Query.sort(language: :asc)\n    |> Ash.Query.select([:id, :slug, :language])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> case do\n      [_the_only_edition] -> []\n      editions -> editions\n    end\nend\n"
+          "code": "# EVERY EDITION OF THIS DOCUMENT, the one being read among them — and none at all where it is the\n# only one. `SetLanguageGroupId` gives every document written here a group holding itself, so the\n# nil clause below catches only a row an admin later emptied; without the last one, a document\n# nobody has translated draws a switch offering the language it is already being read in, and pays\n# the two reads under `language_links/5` to fill it.\nrequire Ash.Query\n\ncase workspace do\n  nil ->\n    []\n\n  %{language_group_id: nil} ->\n    []\n\n  %{language_group_id: group} ->\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(language_group_id == ^group)\n    |> Ash.Query.sort(language: :asc)\n    |> Ash.Query.select([:id, :slug, :path, :language])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> case do\n      [_the_only_edition] -> []\n      editions -> editions\n    end\nend\n"
         },
         {
           "name": "latest_versions_of",
@@ -1829,23 +1981,23 @@
         },
         {
           "name": "translated_slugs",
-          "args": "version_ids, section, visitor",
-          "code": "# THE SAME PAGE IN EVERY OTHER LANGUAGE, IN ONE READ. Translations of one page share a\n# `language_group_id`, and the slug is the fallback for an edition whose author never linked them —\n# a Persian page called `installation` is still the Persian `installation`.\nrequire Ash.Query\n\ncase {version_ids, section} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {wanted, %{slug: slug, language_group_id: group}} ->\n    query = Ash.Query.for_read(MishkaDocument.Section, :public_list, %{}, read_as(visitor))\n\n    query =\n      case group do\n        nil ->\n          Ash.Query.filter(query, workspace_version_id in ^wanted and slug == ^slug)\n\n        linked ->\n          Ash.Query.filter(\n            query,\n            workspace_version_id in ^wanted and\n              (language_group_id == ^linked or slug == ^slug)\n          )\n      end\n\n    query\n    |> Ash.Query.select([:slug, :workspace_version_id, :language_group_id])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Map.new(fn {version_id, found} ->\n      best = Enum.find(found, &(not is_nil(group) and &1.language_group_id == group))\n      {version_id, (best || List.first(found)).slug}\n    end)\nend\n"
+          "args": "version_ids, page, visitor",
+          "code": "# THE SAME PAGE IN EVERY OTHER LANGUAGE, AT ITS ADDRESS THERE, IN ONE READ. Translations of one page\n# share a `language_group_id`, and the slug is the fallback for an edition whose author never linked\n# them — a Persian page called `installation` is still the Persian `installation`. Each version's\n# pages come whole, because a page's address holds the pages it is filed under in that version.\nrequire Ash.Query\n\ncase {version_ids, page} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {wanted, %{section: %{slug: slug, language_group_id: group}}} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([:id, :slug, :parent_section_id, :workspace_version_id, :language_group_id])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Enum.flat_map(fn {version_id, pages} ->\n      linked = Enum.find(pages, &(not is_nil(group) and &1.language_group_id == group))\n\n      case linked || Enum.find(pages, &(&1.slug == slug)) do\n        nil -> []\n        found -> [{version_id, Map.get(section_paths(pages), found.id)}]\n      end\n    end)\n    |> Map.new()\nend\n"
         },
         {
           "name": "landing_or_page",
-          "args": "base, workspace, slug, lang_param, extra",
-          "code": "# THE SAME PAGE WHERE THERE IS ONE, AND THE DOCUMENT'S FRONT PAGE WHERE THERE IS NOT. A page written\n# after an older version was cut does not exist in it, and a link to a slug that version never had\n# would be a link to nothing.\nsegments =\n  case slug do\n    nil -> [workspace.slug]\n    found -> [workspace.slug, found]\n  end\n\ndoc_href(base, segments, workspace.language, lang_param, extra)\n"
+          "args": "base, workspace, address, lang_param, extra",
+          "code": "# THE SAME PAGE WHERE THERE IS ONE, AND THE DOCUMENT'S FRONT PAGE WHERE THERE IS NOT. A page written\n# after an older version was cut does not exist in it, and a link to an address that version never\n# had would be a link to nothing.\ndocument_href(base, workspace, address || [], lang_param, extra)\n"
         },
         {
           "name": "version_links",
-          "args": "assigns, workspace, versions, slugs, current, latest",
-          "code": "# A VERSION OFFERED IS ONE IT CAN SWITCH TO — the rule `language_links/5` keeps: a version of a\n# document in a language this site does not publish has no address (`doc_href/5`), and an entry\n# leading nowhere in a menu whose whole purpose is to be clicked is dropped, the menu with it once\n# none is left.\nEnum.map(versions, fn version ->\n  %{\n    version: version,\n    latest: latest != nil and version.id == latest.id,\n    current: current != nil and version.id == current.id,\n    href:\n      landing_or_page(\n        assigns[:doc_base],\n        workspace,\n        Map.get(slugs, version.id),\n        assigns[:lang_param],\n        version_query(version, latest, assigns[:version_param])\n      )\n  }\nend)\n|> Enum.filter(& &1.href)\n"
+          "args": "assigns, workspace, versions, addresses, current, latest",
+          "code": "# A VERSION OFFERED IS ONE IT CAN SWITCH TO — the rule `language_links/5` keeps: a version of a\n# document in a language this site does not publish has no address (`doc_href/5`), and an entry\n# leading nowhere in a menu whose whole purpose is to be clicked is dropped, the menu with it once\n# none is left.\nEnum.map(versions, fn version ->\n  %{\n    version: version,\n    latest: latest != nil and version.id == latest.id,\n    current: current != nil and version.id == current.id,\n    href:\n      landing_or_page(\n        assigns[:doc_base],\n        workspace,\n        Map.get(addresses, version.id),\n        assigns[:lang_param],\n        version_query(version, latest, assigns[:version_param])\n      )\n  }\nend)\n|> Enum.filter(& &1.href)\n"
         },
         {
           "name": "language_links",
-          "args": "assigns, workspace, section, version, latest",
-          "code": "# A SWITCH OFFERS ONLY WHAT IT CAN SWITCH TO. `:lang` is a page capture and a capture only answers\n# `site.languages`, so a document translated into French on a site publishing English and Persian\n# has no URL here at all — `served?/2` is what knows that. A chip leading nowhere is worse than no\n# chip in a control whose whole purpose is to be clicked, so those editions are dropped before the\n# links are built, and a switch left offering only the edition already being read is dropped too.\n# A chip ROW is the other way round: see `edition_links/4` on doc-workspace-list.\nvariants = Enum.filter(variants_of(workspace, assigns[:visitor]), &served?(assigns[:doc_base], &1.language))\nnewest = latest_versions_of(variants, assigns[:visitor])\n\nslugs =\n  newest\n  |> Map.values()\n  |> Enum.reject(&is_nil/1)\n  |> Enum.map(& &1.id)\n  |> translated_slugs(section, assigns[:visitor])\n\nEnum.map(variants, fn variant ->\n  # THE CHIP FOR THE EDITION BEING READ LEADS BACK TO THIS PAGE. Built like the others it would\n  # send a reader on ?v=0.9.0 to the latest version, and to whatever page that version files under\n  # the lineage — from the one chip marked as the one they are already on.\n  {slug, extra} =\n    case variant.id == workspace.id do\n      true ->\n        {section && section.slug, version_query(version, latest, assigns[:version_param])}\n\n      false ->\n        mapped =\n          case Map.get(newest, variant.id) do\n            nil -> nil\n            newest_version -> Map.get(slugs, newest_version.id)\n          end\n\n        {mapped, %{}}\n    end\n\n  %{\n    workspace: variant,\n    current: variant.id == workspace.id,\n    href: landing_or_page(assigns[:doc_base], variant, slug, assigns[:lang_param], extra)\n  }\nend)\n|> Enum.filter(& &1.href)\n|> case do\n  [_the_only_one_left] -> []\n  offered -> offered\nend\n"
+          "args": "assigns, workspace, page, version, latest",
+          "code": "# A SWITCH OFFERS ONLY WHAT IT CAN SWITCH TO. `:lang` is a page capture and a capture only answers\n# `site.languages`, so a document translated into French on a site publishing English and Persian\n# has no URL here at all — `served?/2` is what knows that. A chip leading nowhere is worse than no\n# chip in a control whose whole purpose is to be clicked, so those editions are dropped before the\n# links are built, and a switch left offering only the edition already being read is dropped too.\n# A chip ROW is the other way round: see `edition_links/4` on doc-workspace-list.\nvariants = Enum.filter(variants_of(workspace, assigns[:visitor]), &served?(assigns[:doc_base], &1))\nnewest = latest_versions_of(variants, assigns[:visitor])\n\naddresses =\n  newest\n  |> Map.values()\n  |> Enum.reject(&is_nil/1)\n  |> Enum.map(& &1.id)\n  |> translated_slugs(page, assigns[:visitor])\n\nEnum.map(variants, fn variant ->\n  # THE CHIP FOR THE EDITION BEING READ LEADS BACK TO THIS PAGE. Built like the others it would\n  # send a reader on ?v=0.9.0 to the latest version, and to whatever page that version files under\n  # the lineage — from the one chip marked as the one they are already on.\n  {address, extra} =\n    case variant.id == workspace.id do\n      true ->\n        {page && page.address, version_query(version, latest, assigns[:version_param])}\n\n      false ->\n        mapped =\n          case Map.get(newest, variant.id) do\n            nil -> nil\n            newest_version -> Map.get(addresses, newest_version.id)\n          end\n\n        {mapped, %{}}\n    end\n\n  %{\n    workspace: variant,\n    current: variant.id == workspace.id,\n    href: landing_or_page(assigns[:doc_base], variant, address, assigns[:lang_param], extra)\n  }\nend)\n|> Enum.filter(& &1.href)\n|> case do\n  [_the_only_one_left] -> []\n  offered -> offered\nend\n"
         },
         {
           "name": "handle_event",
@@ -1870,12 +2022,12 @@
         {
           "name": "asked",
           "args": "assigns",
-          "code": "# THE LINK BUILDERS READ THEIR BASES OFF THIS TOO, which is why the addresses are part of the\n# term and not just the URL keys: `version_links/6` and `language_links/5` are handed this map in\n# the task, where the socket's assigns do not exist.\n%{\n  visitor: assigns[:current_user],\n  workspace: asked_workspace(assigns),\n  language: asked_language(assigns),\n  version: from_url(assigns, :version_param),\n  section: from_url(assigns, :section_param),\n  show: trimmed(assigns[:show]),\n  show_banner: assigns[:show_banner] == true,\n  doc_base: assigns[:doc_base],\n  lang_param: assigns[:lang_param],\n  version_param: assigns[:version_param]\n}\n"
+          "code": "# THE LINK BUILDERS READ THEIR BASES OFF THIS TOO, which is why the addresses are part of the\n# term and not just the URL keys: `version_links/6` and `language_links/5` are handed this map in\n# the task, where the socket's assigns do not exist.\n%{\n  visitor: assigns[:current_user],\n  workspace: asked_workspace(assigns),\n  path: asked_path(assigns),\n  language: asked_language(assigns),\n  version: from_url(assigns, :version_param),\n  section: from_url(assigns, :section_param),\n  show: trimmed(assigns[:show]),\n  show_banner: assigns[:show_banner] == true,\n  doc_base: assigns[:doc_base],\n  lang_param: assigns[:lang_param],\n  version_param: assigns[:version_param]\n}\n"
         },
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.language),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     latest = latest_of(versions),\n     {:ok, section} <- section_at(version, asked.section, asked.visitor) do\n  older = version != nil and latest != nil and version.id != latest.id\n  banner? = older and asked.show_banner\n\n  # NOTHING IS READ FOR A SWITCH THE AUTHOR TURNED OFF. A header showing versions alone would\n  # otherwise pay for three reads of the language side of it. The one read the banner needs is the\n  # version switch's own, so a banner without a switch still costs one rather than sending the\n  # reader to a page the latest version does not have.\n  wants_versions? = workspace != nil and (asked.show in [\"both\", \"version\"] or banner?)\n  slugs = (wants_versions? && lineage_slugs(versions, section, asked.visitor)) || %{}\n\n  {:ok,\n   %{\n     document: workspace,\n     version: version,\n     latest: latest,\n     version_links:\n       (workspace != nil and asked.show in [\"both\", \"version\"] and\n          version_links(asked, workspace, versions, slugs, version, latest)) || [],\n     variants:\n       (workspace != nil and asked.show in [\"both\", \"language\"] and\n          language_links(asked, workspace, section, version, latest)) || [],\n     older: older,\n     latest_href:\n       (banner? &&\n          landing_or_page(\n            asked.doc_base,\n            workspace,\n            Map.get(slugs, latest.id),\n            asked.lang_param,\n            %{}\n          )) || nil,\n     language: (workspace && workspace.language) || asked.language\n   }}\nend\n"
+          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.path, asked.language),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     latest = latest_of(versions),\n     {:ok, page} <- section_at(version, asked.section, asked.visitor) do\n  older = version != nil and latest != nil and version.id != latest.id\n  banner? = older and asked.show_banner\n\n  # NOTHING IS READ FOR A SWITCH THE AUTHOR TURNED OFF. A header showing versions alone would\n  # otherwise pay for three reads of the language side of it. The one read the banner needs is the\n  # version switch's own, so a banner without a switch still costs one rather than sending the\n  # reader to a page the latest version does not have.\n  wants_versions? = workspace != nil and (asked.show in [\"both\", \"version\"] or banner?)\n  addresses = (wants_versions? && lineage_slugs(versions, page, asked.visitor)) || %{}\n\n  {:ok,\n   %{\n     document: workspace,\n     version: version,\n     latest: latest,\n     version_links:\n       (workspace != nil and asked.show in [\"both\", \"version\"] and\n          version_links(asked, workspace, versions, addresses, version, latest)) || [],\n     variants:\n       (workspace != nil and asked.show in [\"both\", \"language\"] and\n          language_links(asked, workspace, page, version, latest)) || [],\n     older: older,\n     latest_href:\n       (banner? &&\n          landing_or_page(\n            asked.doc_base,\n            workspace,\n            Map.get(addresses, latest.id),\n            asked.lang_param,\n            %{}\n          )) || nil,\n     language: (workspace && workspace.language) || asked.language\n   }}\nend\n"
         },
         {
           "name": "arrived",

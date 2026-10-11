@@ -6,7 +6,8 @@ defmodule MishkaDocument.ShareCards do
 
     * a document (`MishkaDocument.Workspace`), while it is active — its front page, `"docs:document"`
     * a page (`MishkaDocument.Section`), while both its reviews approve it and its document is
-      active — `"docs:page"`, under its document's slug
+      active — `"docs:page"`, under its document's slug, at its own part of the address: the slugs
+      of the pages it is filed under, then its own (`MishkaDocument.Address`)
 
   The after-save plugins (`MishkaDocument.Plugins.WorkspaceShareCard`,
   `MishkaDocument.Plugins.SectionShareCard`) hand it to `ShareCard.refresh/3`, and each record's
@@ -36,7 +37,7 @@ defmodule MishkaDocument.ShareCards do
 
       document ->
         {:record, "docs:page",
-         captures(%{"workspace" => document, "section" => slug}, section.language)}
+         captures(%{"workspace" => document, "section" => address_of(section)}, section.language)}
     end
   end
 
@@ -56,6 +57,17 @@ defmodule MishkaDocument.ShareCards do
   end
 
   defp active_document(_section), do: nil
+
+  # The slugs of the pages a page is filed under, then its own, as a `*section` capture holds them.
+  defp address_of(%{slug: slug, site_id: site_id} = section) do
+    case Ash.load(section, [:breadcrumb_path], tenant: site_id, authorize?: false) do
+      {:ok, %{breadcrumb_path: [_ | _] = parents}} ->
+        Enum.map_join(parents, "/", &Map.get(&1, "slug")) <> "/" <> slug
+
+      _at_the_top ->
+        slug
+    end
+  end
 
   defp captures(captures, language) when is_binary(language),
     do: Map.put(captures, Languages.capture(), language)

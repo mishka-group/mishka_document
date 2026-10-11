@@ -93,6 +93,7 @@ defmodule MishkaDocument.Dev.Generator do
       defaults: [
         name: sequence(:name, &"Test Workspace #{&1}"),
         slug: sequence(:slug, &"test-workspace-#{&1}"),
+        path: nil,
         description: sequence(:description, &"Test workspace description #{&1}"),
         status: StreamData.member_of([:active, :draft]),
         schema: [],

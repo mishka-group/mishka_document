@@ -149,6 +149,31 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
     document
   end
 
+  # A DOCUMENT WITH AN ADDRESS OF ITS OWN is listed there, its pages under it — never under /docs,
+  # which would list one page at two addresses. Its front page is a page of the site at a fixed path,
+  # which the sitemap lists as one, so only its pages are added here.
+  describe "a document with an address of its own" do
+    test "lists its pages under the address, each under the pages it is filed under",
+         %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      install = page!(site, version, "install")
+      page!(site, version, "steps", parent_section_id: install.id)
+
+      assert paths(listed(site)) == ["/product/docs/install", "/product/docs/install/steps"]
+    end
+
+    test "lists nothing for it once the page at its address is gone", %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      page!(site, version, "install")
+
+      pages = Enum.reject(handed(site), &(&1.path == "/product/docs/*section"))
+
+      assert paths(listed(site, pages)) == []
+    end
+  end
+
   describe "a published document" do
     test "is listed at its front page and each approved page of the version marked latest",
          %{site: site, mode: mode} do
@@ -339,7 +364,7 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
                [
                  english(mode, "/docs/guide"),
                  english(mode, "/docs/guide/open"),
-                 english(mode, "/docs/guide/open-child")
+                 english(mode, "/docs/guide/open/open-child")
                ]
     end
   end

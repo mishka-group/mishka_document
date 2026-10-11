@@ -2412,9 +2412,17 @@ defmodule MishkaDocument.Section do
   end
 
   identities do
-    identity :unique_slug_per_version, [:slug, :workspace_version_id, :site_id] do
-      description "Ensures section slugs are unique within each workspace version and site"
-      message dgettext_noop("errors", "Section slug must be unique within a workspace version.")
+    # A PAGE'S SLUG IS ITS PART OF THE ADDRESS UNDER ITS PARENT — see `MishkaDocument.Address` — so it
+    # is unique among the pages that share that parent, and two parents may each hold a `tabs`.
+    identity :unique_slug_per_parent,
+             [:slug, :parent_section_id, :workspace_version_id, :site_id] do
+      description "Ensures section slugs are unique among the sections sharing a parent, in each workspace version and site"
+
+      message dgettext_noop(
+                "errors",
+                "Another section under the same parent already has this slug."
+              )
+
       all_tenants? true
       nils_distinct? false
     end

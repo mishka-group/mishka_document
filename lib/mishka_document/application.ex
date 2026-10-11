@@ -40,11 +40,13 @@ defmodule MishkaDocument.Application do
 
   # Lists this extension's documents in a site's sitemap (a `seo:sitemap:urls` plugin), names a
   # document and a page of one as kinds of record a page can show (a `runtime:page:records` plugin),
-  # and gives each its own head on the page that shows it (a `runtime:page:seo` plugin).
+  # gives each its own head on the page that shows it (a `runtime:page:seo` plugin), and sends a
+  # document's old address under /docs to its own (a `web:request:after_site_resolve` plugin).
   @seo_plugins [
     MishkaDocument.Plugins.SitemapUrls,
     MishkaDocument.Plugins.PageRecords,
-    MishkaDocument.Plugins.PageSeo
+    MishkaDocument.Plugins.PageSeo,
+    MishkaDocument.Plugins.AddressRedirect
   ]
 
   # Each document's and page's share card looked at again after it is saved, on its own

@@ -394,6 +394,145 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     %{document: document, version: version, pages: pages}
   end
 
+  # A DOCUMENT WITH AN ADDRESS OF ITS OWN is read there by every block a page at that address holds,
+  # and every link written to it or to a page of it is under that address — never /docs/<slug> —
+  # with no ?lang=, since the address is one edition's. A page's address holds the pages it is filed
+  # under (`MishkaDocument.Address`).
+  describe "a document with an address of its own" do
+    test "is read at it, and every link to a page of it is under it", %{site: site} do
+      addressed!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "installation/from-source"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["From source"]
+      assert hrefs(view, ~s([data-role="doc-section-crumb"])) == ["/mishka/docs/installation"]
+      assert hrefs(view, ~s([data-role="doc-section-prev"])) == ["/mishka/docs/installation"]
+      assert hrefs(view, ~s([data-role="doc-section-next"])) == ["/mishka/docs/upgrading"]
+    end
+
+    test "draws its front page at the address, its pages under it", %{site: site} do
+      addressed!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-landing-title"])) == ["Mishka CMS"]
+
+      assert hrefs(view, ~s([data-role="doc-landing-link"])) == [
+               "/mishka/docs/installation",
+               "/mishka/docs/upgrading"
+             ]
+    end
+
+    test "is listed and linked at its address, with no language written onto it",
+         %{site: site} do
+      addressed!(site)
+
+      {:ok, list, _html} = mount_page(site, "doc-workspace-list", %{per_page: 10})
+      assert hrefs(list, ~s([data-role="doc-list-title"])) == ["/mishka/docs"]
+
+      {:ok, contents, _html} =
+        mount_page(site, "doc-sidebar", %{path: "/mishka/docs", lang_param: "", expand_all: true})
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/mishka/docs/installation",
+               "/mishka/docs/installation/from-source",
+               "/mishka/docs/upgrading"
+             ]
+    end
+
+    test "keeps a page filed under another inside its parent's address, in every block",
+         %{site: site} do
+      addressed!(site)
+
+      attrs = %{
+        path: "/mishka/docs",
+        lang_param: "",
+        params: %{"section" => "installation/from-source"}
+      }
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", attrs)
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"][aria-current="page"])) == [
+               "/mishka/docs/installation/from-source"
+             ]
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == ["Clone", "Build"]
+
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+
+      # The older version has no "From source", so its entry leads to its front page.
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == [
+               "/mishka/docs/installation/from-source",
+               "/mishka/docs?v=0.9.0"
+             ]
+    end
+
+    test "answers a page filed under another only at its whole address", %{site: site} do
+      addressed!(site)
+
+      assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "from-source"}
+        })
+      end
+    end
+
+    test "and an address no document is read at is a missing page", %{site: site} do
+      addressed!(site)
+
+      assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+        mount_page(site, "doc-section", %{path: "/nothing/here", lang_param: "", params: %{}})
+      end
+    end
+
+    test "but a document an author pinned wins over the address", %{site: site} do
+      addressed!(site)
+      document!(site, name: "Other", slug: "other")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          path: "/nothing/here",
+          params: %{}
+        })
+
+      assert text_of(view, ~s([data-role="doc-landing-title"])) == ["Mishka CMS"]
+    end
+
+    test "tells apart two pages of the same name under two parents", %{site: site} do
+      %{version: version} = addressed!(site)
+      page!(site, version, title: "Tabs", slug: "tabs", order_position: 2)
+      headless = page!(site, version, title: "Headless", slug: "headless", order_position: 3)
+
+      page!(site, version,
+        title: "Headless tabs",
+        slug: "tabs",
+        order_position: 0,
+        parent_section_id: headless.id
+      )
+
+      for {address, title} <- [{"tabs", "Tabs"}, {"headless/tabs", "Headless tabs"}] do
+        {:ok, view, _html} =
+          mount_page(site, "doc-section", %{
+            path: "/mishka/docs",
+            lang_param: "",
+            params: %{"section" => address}
+          })
+
+        assert text_of(view, ~s([data-role="doc-section-title"])) == [title]
+      end
+    end
+  end
+
   describe "they compile" do
     # WHICH KIND EACH ONE IS COMES OUT OF THE BUNDLE, not out of a list here. The kit holds both
     # now — blocks that read and hold what they read, and the function components they draw their
@@ -1420,7 +1559,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           workspace: "mishka-cms",
           doc_base: "/docs",
           lang_param: "",
-          params: %{"section" => "from-source"}
+          params: %{"section" => "installation/from-source"}
         })
 
       assert text_of(view, ~s([data-role="doc-section-crumb"])) == ["Installation"]
@@ -1492,9 +1631,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       # flat, "From source" would sit at the top of the document and "Installation" would lead
       # straight to "Upgrading", past the page filed under it.
       walked =
-        for slug <- ~w(getting-started installation from-source upgrading) do
+        for address <- ~w(getting-started installation installation/from-source upgrading) do
           {:ok, view, _html} =
-            mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => slug}))
+            mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => address}))
 
           assert [text] = text_of(view, ~s([data-role="doc-section-next"]))
           text |> String.split("\n") |> List.last() |> String.trim()
@@ -1637,7 +1776,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, open, _html} =
         mount_page(site, "doc-sidebar", %{
           workspace: "mishka-cms",
-          params: %{"section" => "from-source"}
+          params: %{"section" => "installation/from-source"}
         })
 
       assert text_of(open, ~s([data-role="doc-sidebar-link"])) ==
@@ -2076,7 +2215,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
             {"doc-workspace-list", %{per_page: 10, doc_base: "/:lang/docs", lang_param: ""},
              ["doc-list-title"]},
             {"doc-section", attrs, ["doc-landing-link"]},
-            {"doc-section", Map.put(attrs, :params, %{"section" => "from-source"}),
+            {"doc-section", Map.put(attrs, :params, %{"section" => "installation/from-source"}),
              ["doc-section-crumb", "doc-section-prev", "doc-section-next"]},
             {"doc-sidebar", Map.put(attrs, :expand_all, true), ["doc-sidebar-link"]},
             {"doc-switcher", Map.put(attrs, :show, "version"), []}
@@ -2350,6 +2489,38 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert marked == ["Installation"],
              "the block was not redrawn, so the line above asserts nothing about what survived"
     end
+  end
+
+  # One manual read at /mishka/docs, with "From source" filed under "Installation", and an older
+  # version holding "Installation" too.
+  defp addressed!(site) do
+    document = document!(site, name: "Mishka CMS", slug: "mishka-cms", path: "/mishka/docs")
+    version = version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
+
+    install =
+      page!(site, version,
+        title: "Installation",
+        slug: "installation",
+        order_position: 0,
+        content: "<h2>Steps</h2><p>One.</p><h2>Checks</h2><p>Two.</p>"
+      )
+
+    page!(site, version,
+      title: "From source",
+      slug: "from-source",
+      order_position: 0,
+      parent_section_id: install.id,
+      content: "<h2>Clone</h2><p>One.</p><h2>Build</h2><p>Two.</p>"
+    )
+
+    page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 1)
+
+    older =
+      version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+    page!(site, older, title: "Installation", slug: "installation", order_position: 0)
+
+    %{document: document, version: version}
   end
 
   defp public_versions(site, document) do
