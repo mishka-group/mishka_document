@@ -429,6 +429,49 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
     end
   end
 
+  describe "dates and times" do
+    test "read as the reader's language writes them, on the Sections and event log pages", %{
+      conn: conn,
+      site: site,
+      workspace: workspace,
+      version: version
+    } do
+      section = create_section!(site_id: site.id, workspace_version_id: version.id)
+      Ash.Seed.update!(section, %{inserted_at: ~U[2024-03-09 10:00:00.000000Z]})
+      Ash.Seed.update!(workspace, %{updated_at: ~U[2025-07-03 08:04:00.000000Z]})
+
+      event =
+        workspace.id
+        |> event_about!()
+        |> Ash.Seed.update!(%{occurred_at: ~U[2099-07-03 08:04:00.000000Z]})
+
+      {:ok, view, _html} =
+        live(
+          log_in(conn, tenant([@site_loads, @workspace, @section], site)),
+          "/admin/dashboard/document/sections/#{version.id}"
+        )
+
+      render_async(view, 5_000)
+      assert has_element?(view, "span", "Updated Jul 3, 2025")
+      assert has_element?(view, "[data-role=seccard][id$='#{section.id}']", "Mar 9, 2024")
+
+      assert has_element?(
+               view,
+               "div:has(> #workspace-activity-actor-#{event.id})",
+               "· 7/3, 08:04"
+             )
+
+      close(view)
+
+      {:ok, view, _html} =
+        live(log_in(conn, tenant([@workspace], site)), "/admin/dashboard/document/event-logs")
+
+      render_async(view, 5_000)
+      assert has_element?(view, "[id$='#{event.id}']", ~r/08:04\s+Jul 3\b/)
+      close(view)
+    end
+  end
+
   test "the document API's names open no document page", %{conn: conn, site: site} do
     conn = log_in(conn, tenant(["admin:dashboard:runtime:page", "admin:api:document:*"], site))
 

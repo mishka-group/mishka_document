@@ -46,6 +46,7 @@ defmodule MishkaDocument.EventLog do
 
   alias MishkaCmsCore.Activity.Helpers
   alias MishkaCmsCore.Activity.Sources.EventLog, as: EventLogSource
+  alias MishkaCmsCore.Localized
   alias MishkaCmsCoreWeb.Templates.ActivityTimeline
 
   # The same endpoint the `pub_sub` block below publishes through — the re-broadcast is a second
@@ -183,11 +184,8 @@ defmodule MishkaDocument.EventLog do
           # The day heading above the row already carries the year; the row only needs the day.
           render fn record ->
             assigns = %{
-              time: Calendar.strftime(record.occurred_at, "%H:%M"),
-              day:
-                Calendar.strftime(record.occurred_at, "%b %-d",
-                  abbreviated_month_names: &short_month_name/1
-                )
+              time: Localized.time(record.occurred_at, :Hm),
+              day: Localized.date(record.occurred_at, :MMMd)
             }
 
             ~H"""
@@ -542,17 +540,4 @@ defmodule MishkaDocument.EventLog do
       (Map.get(event, :actor_id) && :unknown) || :system
     )
   end
-
-  defp short_month_name(1), do: gettext("Jan")
-  defp short_month_name(2), do: gettext("Feb")
-  defp short_month_name(3), do: gettext("Mar")
-  defp short_month_name(4), do: gettext("Apr")
-  defp short_month_name(5), do: gettext("May")
-  defp short_month_name(6), do: gettext("Jun")
-  defp short_month_name(7), do: gettext("Jul")
-  defp short_month_name(8), do: gettext("Aug")
-  defp short_month_name(9), do: gettext("Sep")
-  defp short_month_name(10), do: gettext("Oct")
-  defp short_month_name(11), do: gettext("Nov")
-  defp short_month_name(12), do: gettext("Dec")
 end

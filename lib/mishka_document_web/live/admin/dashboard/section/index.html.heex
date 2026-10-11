@@ -91,10 +91,7 @@
               <span class="inline-flex items-center gap-1.5 rounded-lg border border-[#eceae4] bg-[#f6f5f2] px-2.5 py-[5px] text-[11.5px] font-semibold text-[#8a877f]">
                 <.icon name="hero-clock" class="size-[13px]" />
                 {gettext("Updated %{date}",
-                  date:
-                    Calendar.strftime(@workspace.updated_at, "%b %d, %Y",
-                      abbreviated_month_names: &DocumentSection.short_month_name/1
-                    )
+                  date: Localized.date(@workspace.updated_at, :yMMMd)
                 )}
               </span>
             </div>
@@ -514,7 +511,7 @@
                       <span id={"workspace-activity-actor-#{event.id}"}>
                         {MishkaDocument.EventLog.actor_label(event)}
                       </span>
-                      · {Calendar.strftime(event.occurred_at, "%m/%d %H:%M")}
+                      · {Localized.datetime(event.occurred_at, :MdHm)}
                     </div>
                   </div>
                 </div>

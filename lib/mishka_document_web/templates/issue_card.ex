@@ -41,8 +41,8 @@ defmodule MishkaDocumentWeb.Templates.IssueCard do
 
   import MishkaGervaz.Helpers, only: [dynamic_component: 1]
 
+  alias MishkaCmsCore.Localized
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
-  alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
   alias Phoenix.LiveView.AsyncResult
 
@@ -543,10 +543,7 @@ defmodule MishkaDocumentWeb.Templates.IssueCard do
 
   defp inserted_on(%{inserted_at: at})
        when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-       do:
-         Calendar.strftime(at, "%b %d, %Y",
-           abbreviated_month_names: &DocumentSection.short_month_name/1
-         )
+       do: Localized.date(at, :yMMMd)
 
   defp inserted_on(_record), do: "—"
 

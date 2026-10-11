@@ -38,6 +38,7 @@ defmodule MishkaDocument.Section do
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaCmsCore.CoreComponents, only: [icon: 1]
   import MishkaGervaz.UIAdapters.Tailwind, only: [copy_button: 1]
+  alias MishkaCmsCore.Localized
 
   # The card's action squares. `MishkaDocumentWeb.Templates.DocumentSection` gives them a row of their
   # own, so every one is icon-only and hides its label — which still reaches the DOM as `title` and as a
@@ -2454,20 +2455,7 @@ defmodule MishkaDocument.Section do
 
   @spec inserted_on(term()) :: String.t()
   defp inserted_on(at) when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-    do: Calendar.strftime(at, "%b %d, %Y", abbreviated_month_names: &short_month_name/1)
+    do: Localized.date(at, :yMMMd)
 
   defp inserted_on(_missing), do: "—"
-
-  defp short_month_name(1), do: gettext("Jan")
-  defp short_month_name(2), do: gettext("Feb")
-  defp short_month_name(3), do: gettext("Mar")
-  defp short_month_name(4), do: gettext("Apr")
-  defp short_month_name(5), do: gettext("May")
-  defp short_month_name(6), do: gettext("Jun")
-  defp short_month_name(7), do: gettext("Jul")
-  defp short_month_name(8), do: gettext("Aug")
-  defp short_month_name(9), do: gettext("Sep")
-  defp short_month_name(10), do: gettext("Oct")
-  defp short_month_name(11), do: gettext("Nov")
-  defp short_month_name(12), do: gettext("Dec")
 end

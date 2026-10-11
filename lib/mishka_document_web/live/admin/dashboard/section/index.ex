@@ -3,6 +3,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
 
   alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
+  alias MishkaCmsCore.Localized
   alias MishkaDocumentWeb.Templates.DocumentCard
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
@@ -703,7 +704,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
                       <span id={"section-activity-actor-#{event.id}"}>
                         {MishkaDocument.EventLog.actor_label(event)}
                       </span>
-                      · {Calendar.strftime(event.occurred_at, "%m/%d %H:%M")}
+                      · {Localized.datetime(event.occurred_at, :MdHm)}
                     </div>
                   </div>
                 </div>
