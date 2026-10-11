@@ -23,6 +23,7 @@ defmodule MishkaDocument.MixProject do
   # `config` and `test` are absent for the same reason — they exist only to run the suite on its own.
   defp package do
     [
+      licenses: ["Apache-2.0"],
       files: ~w(lib priv/cms_ui_kits .formatter.exs mix.exs LICENSE README*)
     ]
   end
