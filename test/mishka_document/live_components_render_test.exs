@@ -769,6 +769,93 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # THE PAGE'S OWN TEXT IS STYLED, AND NOTHING A COMPONENT IN IT DRAWS. The body's and a note's
+  # rules reach only the content's own elements — the body's children with no class of their own and
+  # what sits in those — so a component placed in the text keeps its own look: its `<li>` gets no
+  # bullet and its `<a>` no underline. Each rule is read off the markup and run as the selector it
+  # compiles to.
+  describe "the text of a page" do
+    defp rules(view, role) do
+      [class] =
+        view
+        |> render_async(@async)
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s([data-role="#{role}"]))
+        |> LazyHTML.attribute("class")
+        |> Enum.take(1)
+
+      class
+      |> String.split()
+      |> Enum.filter(&String.starts_with?(&1, "[&"))
+      |> Enum.map(fn rule ->
+        [variant, _utility] = String.split(rule, "]:", parts: 2)
+
+        variant
+        |> String.trim_leading("[")
+        |> String.replace("_", " ")
+        |> String.replace("&", ~s([data-role="#{role}"]))
+      end)
+      |> Enum.uniq()
+    end
+
+    test "styles its own lists and links, and not a component's", %{site: site} do
+      name = "content-list"
+      :ok = SiteState.put_component(site.id, name)
+      on_exit(fn -> SiteState.delete_component(site.id, name) end)
+
+      create_component!(
+        name: name,
+        site_id: site.id,
+        active: true,
+        template:
+          ~S|<ul class="m-0" data-role="content-list" data-mark="component"><li class="p-1" data-mark="component"><a class="no-underline" href="/x" data-mark="component">Home</a></li></ul>|,
+        attrs: [],
+        slots: []
+      )
+
+      %{version: version} = manual!(site)
+
+      content =
+        ~s(<p>Intro <a href="/a">a link</a>.</p><ul><li>One</li><li>Two</li></ul>) <>
+          "[[component content-list /]]"
+
+      page =
+        page!(site, version, title: "Lists", slug: "lists", order_position: 9, content: content)
+
+      note!(site, page, title: "Aside", content: content)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "lists"}
+        })
+
+      html = view |> render_async(@async) |> LazyHTML.from_fragment()
+
+      assert html |> LazyHTML.query(~s([data-role="content-list"] li)) |> Enum.count() == 2
+
+      for role <- ["doc-section-body", "doc-note-body"] do
+        selectors = rules(view, role)
+
+        refute Enum.any?(selectors, &String.contains?(&1, ~s|"] |)),
+               "#{role} reaches any descendant of the text"
+
+        for selector <- selectors do
+          assert html |> LazyHTML.query(selector <> "[data-mark]") |> Enum.count() == 0,
+                 "#{role}'s #{selector} reaches into the component's own markup"
+        end
+
+        list = ~s|[data-role="#{role}"]>ul:not([class])>li|
+        assert list in selectors
+        assert html |> LazyHTML.query(list) |> Enum.count() == 2
+
+        link = ~s|[data-role="#{role}"]>p:not([class])>a|
+        assert link in selectors
+        assert html |> LazyHTML.query(link) |> LazyHTML.text() == "a link"
+      end
+    end
+  end
+
   # THE TRAIL CAN END WITH THE PAGE ITSELF, as a word marked as the current page — and then a page
   # at the top of its document has a trail too. Left off, the trail is the pages above it alone.
   describe "doc-section's crumb_current" do
