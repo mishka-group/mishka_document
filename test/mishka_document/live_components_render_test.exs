@@ -24,10 +24,14 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   alias MishkaCmsCore.Runtime.LiveViewHelpers
   alias MishkaCmsCore.Runtime.States.{SettingsState, SiteState}
   alias MishkaCmsCore.Runtime.Translations
+  alias MishkaDocument.Test.Plugins.PageExtras
+  alias MishkaInstaller.Event.{Event, EventHandler, ModuleStateCompiler}
 
   require Ash.Query
 
   @moduletag :integration
+
+  @extras_event "document:page:extras"
 
   # A UNIQUE SITE NAME PER TEST, and it is not tidiness. A component's runtime module is named from
   # a hash of (component name, SITE NAME) and is cached in the VM's code table for the rest of the
@@ -2875,6 +2879,509 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert "Orphan" in text_of(view, ~s([data-role="doc-landing-link"]))
     end
+  end
+
+  # WHAT A PLUGIN ADDS TO A PAGE on `document:page:extras`: facts under its title and tabs beside its
+  # text, every word of them escaped, the tab shown the one the URL names; a page no plugin adds to
+  # is drawn as it always was.
+  describe "doc-section's page extras" do
+    setup do
+      Process.register(self(), :__page_extras_probe__)
+
+      {:ok, _} =
+        Event.write(%{
+          name: PageExtras,
+          event: @extras_event,
+          extension: :mishka_installer,
+          status: :started
+        })
+
+      :ok = EventHandler.do_compile(@extras_event, :start, false)
+
+      on_exit(fn ->
+        PageExtras.forget!()
+        Event.unregister(:name, PageExtras, false)
+        EventHandler.do_compile(@extras_event, :start, false)
+      end)
+
+      :ok
+    end
+
+    test "tells the plugin the page it draws", %{site: site} do
+      grouped!(site)
+
+      {:ok, _view, _html} = mount_breadcrumb(site)
+
+      site_id = site.id
+
+      assert_received {:page_extras_asked,
+                       %{
+                         site_id: ^site_id,
+                         document: %{slug: "grouped", path: "/mishka/docs", language: "en"},
+                         version: "1.0.0",
+                         page: %{
+                           slug: "breadcrumb",
+                           title: "Breadcrumb",
+                           path: "breadcrumb",
+                           parents: [%{slug: "navigation", title: "Navigation", group: true}]
+                         },
+                         header: [],
+                         tabs: []
+                       }}
+    end
+
+    test "draws the facts it puts under the title, as text", %{site: site} do
+      grouped!(site)
+
+      PageExtras.answer!(fn state ->
+        %{
+          state
+          | header: [
+              %{
+                kind: :badges,
+                items: [
+                  %{text: "v1.0.0", tone: :primary},
+                  %{text: "Stable", tone: "success"},
+                  %{text: "Odd", tone: "Not A Tone"},
+                  %{tone: "success"}
+                ]
+              },
+              %{kind: :command, label: "Installation", value: "mix gen breadcrumb"},
+              %{
+                kind: :link,
+                label: "Source",
+                href: "https://github.com/x/y",
+                text: "View Source"
+              },
+              %{kind: :link, label: "Docs", href: "/mishka/docs", text: "Contents"},
+              %{kind: :text, label: "Package", value: ~S|<b>"Kit"</b>|},
+              %{kind: :link, label: "Bad", href: "javascript:alert(1)", text: "Run"},
+              %{kind: :link, label: "Away", href: "//elsewhere.test/x", text: "Away"},
+              %{kind: :command, label: "Empty", value: "  "},
+              %{kind: :script, value: "nothing"},
+              "not a fact"
+            ]
+        }
+      end)
+
+      {:ok, view, _html} = mount_breadcrumb(site)
+
+      extras = drawn(view, ~s([data-role="doc-section-article"] > [data-role="doc-extras"]))
+      assert Enum.count(extras) == 1
+
+      badges = LazyHTML.query(extras, ~s([data-role="doc-extra-badge"]))
+      assert Enum.map(badges, &LazyHTML.text/1) == ["v1.0.0", "Stable", "Odd"]
+      assert LazyHTML.attribute(badges, "data-tone") == ["primary", "success", "neutral"]
+
+      assert text_of(view, ~s([data-role="doc-extras"] [data-role="doc-extra-label"])) ==
+               ["Installation", "Source", "Docs", "Package"]
+
+      command = LazyHTML.query(extras, ~s([data-role="doc-extra-command"]))
+      assert command |> LazyHTML.query("code") |> LazyHTML.attribute("dir") == ["ltr"]
+      assert text_of(view, ~s([data-role="doc-extra-command"] code)) == ["mix gen breadcrumb"]
+
+      button = LazyHTML.query(command, ~s(button[type="button"][data-role="doc-code-copy"]))
+      assert LazyHTML.attribute(button, "aria-label") == ["Copy code"]
+      assert LazyHTML.attribute(button, "data-copied-text") == ["Copied"]
+      assert command |> LazyHTML.query(~s([data-role="doc-code-status"])) |> Enum.count() == 1
+
+      links = LazyHTML.query(extras, ~s([data-role="doc-extra-link"] a))
+      assert LazyHTML.attribute(links, "href") == ["https://github.com/x/y", "/mishka/docs"]
+      assert LazyHTML.attribute(links, "target") == ["_blank"]
+      assert LazyHTML.attribute(links, "rel") == ["noopener noreferrer"]
+
+      assert text_of(view, ~s([data-role="doc-extra-text"] [data-role="doc-extra-value"])) ==
+               [~S|<b>"Kit"</b>|]
+
+      assert extras |> LazyHTML.query("b") |> Enum.count() == 0
+      assert view |> drawn(~s([data-role="doc-tabs"])) |> Enum.count() == 0
+    end
+
+    test "adds its tabs after the text's own, which is shown", %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site)
+
+      assert text_of(view, ~s([data-role="doc-tabs"] [data-role="doc-tab"])) ==
+               ["Documentation", "Props", "CLI", "Pending"]
+
+      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/breadcrumb?tab=props",
+               "/mishka/docs/breadcrumb?tab=cli",
+               "/mishka/docs/breadcrumb?tab=pending"
+             ]
+
+      assert shown_tab(view) == ["documentation"]
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               []
+
+      panels = drawn(view, ~s([data-role="doc-section-article"] > [data-role="doc-tab-panel"]))
+      assert LazyHTML.attribute(panels, "data-tab") == ["props", "cli", "pending"]
+      assert LazyHTML.attribute(panels, "hidden") == ["", "", ""]
+
+      assert LazyHTML.attribute(panels, "aria-labelledby") ==
+               ["one-tab-props", "one-tab-cli", "one-tab-pending"]
+
+      # The Props tab: one table, every cell as text.
+      assert text_of(view, panel("props", ~s([data-role="doc-extra-title"]))) == ["Attributes"]
+      assert text_of(view, panel("props", "th")) == ["Name", "Values", "Required", "Description"]
+
+      assert text_of(view, panel("props", ~s(td[data-column="name"] code))) == [
+               "color",
+               "<script>"
+             ]
+
+      assert text_of(view, panel("props", ~s([data-role="doc-extra-item"]))) == [
+               "base",
+               "primary"
+             ]
+
+      assert view
+             |> drawn(
+               panel("props", ~s(td[data-column="required"] [data-role="doc-extra-badge"]))
+             )
+             |> LazyHTML.attribute("data-tone") == ["secondary", "neutral"]
+
+      assert text_of(view, panel("props", ~s([data-role="doc-extra-blank"]))) == ["—", "—"]
+      assert view |> drawn(panel("props", "script")) |> Enum.count() == 0
+
+      # The CLI tab: a list of facts, its command copied by the same button, and an empty table.
+      assert text_of(
+               view,
+               panel("cli", ~s([data-role="doc-extra-list"] [data-role="doc-extra-label"]))
+             ) ==
+               ["Command", "Needs"]
+
+      assert view
+             |> drawn(
+               panel("cli", ~s([data-role="doc-extra-command"] [data-role="doc-code-copy"]))
+             )
+             |> Enum.count() == 1
+
+      assert text_of(view, panel("cli", ~s([data-role="doc-extra-rows-empty"]))) == [
+               "No options."
+             ]
+
+      # A tab whose data is being fetched says so.
+      assert text_of(view, panel("pending", ~s([data-role="doc-tab-pending"]))) ==
+               ["Still fetching."]
+    end
+
+    test "opens the tab the URL names, keeps the page's other keys, and reads nothing for it",
+         %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"tab" => "props", "utm" => "feed"})
+
+      assert shown_tab(view) == ["props"]
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               [""]
+
+      assert open_panels(view) == ["props"]
+
+      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+               "/mishka/docs/breadcrumb?utm=feed",
+               "/mishka/docs/breadcrumb?tab=props&utm=feed",
+               "/mishka/docs/breadcrumb?tab=cli&utm=feed",
+               "/mishka/docs/breadcrumb?tab=pending&utm=feed"
+             ]
+
+      flush_asks()
+      send(view.pid, {:params, %{"section" => "breadcrumb", "tab" => "cli", "utm" => "feed"}})
+
+      assert open_panels(view) == ["cli"]
+      assert shown_tab(view) == ["cli"]
+      refute_received {:page_extras_asked, _again}
+
+      send(view.pid, {:params, %{"section" => "breadcrumb", "tab" => "nothing", "utm" => "feed"}})
+
+      assert open_panels(view) == []
+      assert shown_tab(view) == ["documentation"]
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               []
+
+      send(view.pid, {:params, %{"section" => "menu", "tab" => "nothing"}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Menu"]
+      assert_received {:page_extras_asked, %{page: %{slug: "menu"}}}
+    end
+
+    test "on a document's landing, tells the plugin there is no page and hides the contents under a tab",
+         %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"tab" => "cli"}
+        })
+
+      assert_received {:page_extras_asked, %{page: nil, version: "1.0.0"}}
+
+      assert view
+             |> drawn(~s([data-role="doc-section-landing"] > [data-role="doc-tabs"]))
+             |> Enum.count() == 1
+
+      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+               "/mishka/docs",
+               "/mishka/docs?tab=props",
+               "/mishka/docs?tab=cli",
+               "/mishka/docs?tab=pending"
+             ]
+
+      for hidden <- ~w(doc-landing-items doc-landing-group) do
+        assert view |> drawn(~s([data-role="#{hidden}"])) |> LazyHTML.attribute("hidden") == [""]
+      end
+
+      assert view
+             |> drawn(
+               ~s|[data-role="doc-section-landing"] > [data-role="doc-tab-panel"]:not([hidden])|
+             )
+             |> LazyHTML.attribute("data-tab") == ["cli"]
+    end
+
+    # WHAT A PLUGIN IS STILL FETCHING is a skeleton until the fetch is announced on the topic the
+    # plugin names, and then the page asks once more and draws it, with no reload and no polling.
+    test "draws a skeleton while its data is fetched, and the rows once the fetch is announced",
+         %{site: site} do
+      grouped!(site)
+      topic = "test:page_extras:#{System.unique_integer([:positive])}"
+      fetched = :atomics.new(1, [])
+
+      PageExtras.answer!(fn state ->
+        case :atomics.get(fetched, 1) do
+          1 -> with_tabs(state)
+          0 -> fetching(state, topic)
+        end
+      end)
+
+      {view, _first_paint} = mount_raw(site, [breadcrumb_block(%{})])
+      view_pid = view.pid
+      test_pid = self()
+
+      # The task that waits has subscribed once it asks for itself.
+      assert_receive {:page_extras_asker, asker} when asker not in [view_pid, test_pid], @async
+
+      waiting = LazyHTML.from_fragment(render(view))
+
+      assert waiting
+             |> LazyHTML.query(~s([data-role="doc-extras"] [data-role="doc-extra-pending"]))
+             |> Enum.count() == 1
+
+      assert waiting
+             |> LazyHTML.query(
+               ~s([data-role="doc-tab-panel"] [data-role="doc-tab-pending"][data-tone="loading"])
+             )
+             |> Enum.count() == 2
+
+      :atomics.put(fetched, 1, 1)
+      :ok = Phoenix.PubSub.broadcast(MishkaCmsCore.PubSub, topic, {:fetched, "1.0.0"})
+
+      assert text_of(view, panel("props", ~s(td[data-column="name"] code))) == [
+               "color",
+               "<script>"
+             ]
+
+      assert view |> drawn(~s([data-role="doc-extra-pending"])) |> Enum.count() == 0
+      assert view |> drawn(~s([data-role="doc-tab"])) |> Enum.count() == 4
+
+      assert hrefs(view, ~s([data-role="doc-tab"][data-tab="cli"])) == [
+               "/mishka/docs/breadcrumb?tab=cli"
+             ]
+    end
+
+    test "says what it could not fetch once the wait is over, and a tab the plugin says failed",
+         %{site: site} do
+      grouped!(site)
+      topic = "test:page_extras:#{System.unique_integer([:positive])}"
+
+      PageExtras.answer!(fn state ->
+        failed = %{id: "gone", label: "Gone", state: :failed, text: "Not here."}
+        fetching = fetching(state, topic)
+        %{fetching | tabs: fetching.tabs ++ [failed]}
+      end)
+
+      {view, _first_paint} = mount_raw(site, [breadcrumb_block(%{pending_wait: 50})])
+
+      assert text_of(view, panel("props", ~s([data-role="doc-tab-failed"]))) == [
+               "Could not fetch."
+             ]
+
+      assert text_of(view, panel("cli", ~s([data-role="doc-tab-failed"]))) == ["Could not fetch."]
+      assert text_of(view, panel("gone", ~s([data-role="doc-tab-failed"]))) == ["Not here."]
+      assert view |> drawn(~s([data-role="doc-tab-pending"])) |> Enum.count() == 0
+      assert view |> drawn(~s([data-role="doc-extra-pending"])) |> Enum.count() == 0
+    end
+
+    test "draws a page no plugin adds to as it always was", %{site: site} do
+      grouped!(site)
+
+      {:ok, asked_nothing, _html} = mount_breadcrumb(site)
+
+      PageExtras.answer!(&%{&1 | header: "not a list", tabs: nil})
+      {:ok, nonsense, _html} = mount_breadcrumb(site, %{"tab" => "props"})
+
+      for view <- [asked_nothing, nonsense] do
+        assert view |> drawn(~s([data-role^="doc-extra"], [data-role^="doc-tab"])) |> Enum.count() ==
+                 0
+
+        assert view |> drawn("[hidden]") |> Enum.count() == 0
+        assert text_of(view, ~s([data-role="doc-section-body"] > p)) == ["Body"]
+      end
+
+      assert article(nonsense) == article(asked_nothing)
+    end
+
+    test "draws the page as it always was when the event cannot run", %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      :ok = ModuleStateCompiler.purge_create([], @extras_event, [__MODULE__.NotLoadedPlugin])
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"tab" => "props"})
+
+      refute_received {:page_extras_asked, _state}
+
+      assert view |> drawn(~s([data-role^="doc-extra"], [data-role^="doc-tab"])) |> Enum.count() ==
+               0
+
+      assert view |> drawn("[hidden]") |> Enum.count() == 0
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Breadcrumb"]
+    end
+  end
+
+  defp mount_breadcrumb(site, params \\ %{}) do
+    mount_page(site, "doc-section", %{
+      path: "/mishka/docs",
+      lang_param: "",
+      params: Map.put(params, "section", "breadcrumb")
+    })
+  end
+
+  defp breadcrumb_block(attrs) do
+    %{
+      "name" => "doc-section",
+      "id" => "one",
+      "attrs" =>
+        Map.merge(
+          %{path: "/mishka/docs", lang_param: "", params: %{"section" => "breadcrumb"}},
+          attrs
+        )
+    }
+  end
+
+  # The skeleton of the facts and two tabs still being fetched, announced on `topic`.
+  defp fetching(state, topic) do
+    pending = fn id, label ->
+      %{
+        id: id,
+        label: label,
+        state: :not_ready,
+        text: "Fetching.",
+        failed_text: "Could not fetch.",
+        pending: %{topic: topic}
+      }
+    end
+
+    %{
+      state
+      | header: [%{kind: :pending, text: "Fetching."}],
+        tabs: [pending.("props", "Props"), pending.("cli", "CLI")]
+    }
+  end
+
+  defp panel(id, selector), do: ~s([data-role="doc-tab-panel"][data-tab="#{id}"] #{selector})
+
+  defp shown_tab(view) do
+    view
+    |> drawn(~s([data-role="doc-tab"][aria-current="page"]))
+    |> LazyHTML.attribute("data-tab")
+  end
+
+  defp open_panels(view) do
+    view
+    |> drawn(~s|[data-role="doc-tab-panel"]:not([hidden])|)
+    |> LazyHTML.attribute("data-tab")
+  end
+
+  defp article(view) do
+    view
+    |> drawn(~s([data-role="doc-section-article"]))
+    |> LazyHTML.to_html()
+  end
+
+  defp flush_asks do
+    receive do
+      {:page_extras_asked, _state} -> flush_asks()
+    after
+      0 -> :ok
+    end
+  end
+
+  # Three tabs, and the four a plugin should not have added: the text's own id, an id no URL
+  # carries, one with no label and a second Props.
+  defp with_tabs(state) do
+    %{
+      state
+      | tabs: [
+          %{
+            id: "props",
+            label: "Props",
+            kind: :table,
+            title: "Attributes",
+            columns: [
+              %{key: :name, label: "Name", code: true},
+              %{key: :values, label: "Values"},
+              %{key: :required, label: "Required"},
+              %{key: "doc", label: "Description"},
+              %{label: "No key"}
+            ],
+            rows: [
+              %{
+                :name => "color",
+                :values => ["base", :primary],
+                :required => %{text: "Yes", tone: :secondary},
+                "doc" => "The colour."
+              },
+              %{name: "<script>", values: [], required: %{text: "No"}},
+              "not a row"
+            ],
+            empty_text: "No attributes."
+          },
+          %{
+            id: "cli",
+            label: "CLI",
+            blocks: [
+              %{
+                kind: :list,
+                items: [
+                  %{kind: :command, label: "Command", value: "mix gen breadcrumb"},
+                  %{kind: :badges, label: "Needs", items: [%{text: "icon"}]}
+                ]
+              },
+              %{
+                kind: :table,
+                columns: [%{key: :flag, label: "Option"}],
+                rows: [],
+                empty_text: "No options."
+              }
+            ]
+          },
+          %{id: "pending", label: "Pending", state: :not_ready, text: "Still fetching."},
+          %{id: "documentation", label: "Mine", kind: :list, items: []},
+          %{id: "Not An Id", label: "Odd", kind: :list, items: []},
+          %{id: "nolabel", kind: :list, items: []},
+          %{id: "props", label: "Props again", kind: :list, items: []}
+        ]
+    }
   end
 
   describe "doc-sidebar" do

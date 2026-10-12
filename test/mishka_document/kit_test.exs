@@ -269,7 +269,8 @@ defmodule MishkaDocument.KitTest do
           component["name"]
         end
 
-      assert Enum.sort(started) == ~w(doc-sidebar doc-switcher doc-toc doc-workspace-list)
+      assert Enum.sort(started) ==
+               ~w(doc-section doc-sidebar doc-switcher doc-toc doc-workspace-list)
     end
 
     # A READ THAT FAILS IS A TUPLE THE BLOCK DRAWS ITS ERROR FROM, on the builder's canvas as in a
@@ -507,7 +508,8 @@ defmodule MishkaDocument.KitTest do
 
     # A HELPER NOBODY CALLS IS CODE A SITE STILL COMPILES AND AN ADMIN STILL READS. Five components
     # share one set of small helpers, and each carries only its own copies, so a helper dropped from
-    # a template has to be dropped from the component too.
+    # a template has to be dropped from the component too. A helper is called as a function, or, when
+    # it is a function component, as `<.name …>`.
     test "and ships no helper its own template and code never call" do
       lifecycle = ~w(mount update update_many render handle_event handle_async site_id)
 
@@ -521,7 +523,7 @@ defmodule MishkaDocument.KitTest do
           ]
           |> Enum.join()
 
-        assert callers =~ ~r/\b#{Regex.escape(name)}\s*\(/,
+        assert callers =~ ~r/\b#{Regex.escape(name)}\s*\(|<\.#{Regex.escape(name)}\b/,
                "#{component["name"]} carries #{name}/n and calls it nowhere"
       end
     end
@@ -568,6 +570,30 @@ defmodule MishkaDocument.KitTest do
                "MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name("
 
       assert copy_hook["code"] =~ ~s(name: "doc-code-copy")
+    end
+
+    # WHAT A PLUGIN ADDS TO A PAGE is asked through the core's `PluginEvent.call/3`, which hands the
+    # state back when the event cannot run, and a command it adds is copied by the same hook as a
+    # code window.
+    test "asks plugins for a page's extras through the event that falls back to the page" do
+      section = Enum.find(components(), &(&1["name"] == "doc-section"))
+      asks = Enum.find(section["helpers"], &(&1["name"] == "ask_extras"))
+
+      assert asks["code"] =~ ~s|MishkaCmsCore.PluginEvent.call("document:page:extras", asked)|
+      refute Enum.any?(section["helpers"], &(&1["code"] =~ "Hook.call"))
+
+      # What is still being fetched is waited for on the topic the plugin names, never polled.
+      waits = Enum.find(section["helpers"], &(&1["name"] == "wait_for_extras"))
+      assert waits["code"] =~ "Phoenix.PubSub.subscribe(MishkaCmsCore.PubSub, &1)"
+      assert waits["code"] =~ "after\n            wait ->"
+      refute Enum.any?(section["helpers"], &(&1["code"] =~ ~r/Process\.send_after|:timer\./))
+
+      for drawn <- ~w(doc_extras doc_tab_bar doc_tab_panels) do
+        assert section["template"] =~ "<.#{drawn}\n      :if={@extras."
+      end
+
+      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-code-copy"))
+      assert hook["content"] =~ ~s([data-role="doc-extra-command"])
     end
 
     # AN EXAMPLE'S TOOLBAR IS ANSWERED IN THE BROWSER, by the hook `doc-example` mounts on its own

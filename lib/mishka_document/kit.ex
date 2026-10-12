@@ -91,10 +91,88 @@ defmodule MishkaDocument.Kit do
   stylesheet to restyle, and what the button says is the block's `copy_text`, `copied_text` and
   `copy_label`. The window is drawn, never stored: a page's text keeps only its code.
 
+  ### What plugins add to a page
+
+  Each time `doc-section` reads a page of a document it fires the `document:page:extras`
+  mishka_installer event through `MishkaCmsCore.PluginEvent.call/3`, with:
+
+      %{
+        site_id: "…",
+        document: %{slug: "chelekom", path: "/chelekom/docs", language: "en"},
+        version: "0.0.9",
+        page: %{
+          slug: "breadcrumb",
+          title: "Breadcrumb",
+          path: "breadcrumb",
+          parents: [%{slug: "navigations", title: "Navigations", group: true}]
+        },
+        header: [],
+        tabs: []
+      }
+
+  `page` is `nil` on a document's landing. Its `path` is its address under the document and
+  `parents` the pages and groups it is filed under, nearest last. A plugin appends to `header` and
+  `tabs` and replies with the map:
+
+      use MishkaInstaller.Event.Hook, event: "document:page:extras"
+
+      def call(%{document: %{slug: "handbook"}, header: header} = state),
+        do: {:reply, %{state | header: header ++ [%{kind: :text, label: "Edition", value: "2"}]}}
+
+      def call(state), do: {:reply, state}
+
+  `header` holds facts, drawn under the title in the order given:
+
+    * `%{kind: :badges, label: nil, items: [%{text: "v1.0", tone: :primary}]}` — a `tone` is
+      `neutral` (the default), `primary`, `secondary`, `success`, `info`, `warning`, `danger`, or
+      any other word a site's stylesheet keys on as `data-tone`.
+    * `%{kind: :command, label: "Install", value: "mix …"}` — drawn left to right, with the button a
+      code window has.
+    * `%{kind: :link, label: "Source", href: "https://…", text: "View source"}` — `http`, `https`
+      or a path on the site; an `http` or `https` address opens in a new tab.
+    * `%{kind: :text, label: "Package", value: "…"}`.
+    * `%{kind: :pending, text: "…"}` — a skeleton for the facts still being fetched, `text` for a
+      screen reader.
+
+  `tabs` holds tabs, drawn after the page's own text, `docs_tab_text`. A tab is
+  `%{id: "props", label: "Props", blocks: [block]}`, or the one block it is —
+  `%{id: "props", label: "Props", kind: :table, …}`. While its data is being fetched it is
+  `%{id: "props", label: "Props", state: :not_ready, text: "…", failed_text: "…",
+  pending: %{topic: "…"}}`, drawn as a skeleton, and one whose data could not be had is
+  `%{id: "props", label: "Props", state: :failed, text: "…"}`. An `id` is lower-case letters,
+  digits, `-` and `_`, and never `documentation`; the first tab with an id is kept. A block is:
+
+    * `%{kind: :table, title: nil, description: nil, columns: [%{key: :name, label: "Name",
+      code: true}], rows: [%{name: "color"}], empty_text: "…"}` — a cell is a word (in code under
+      a `code: true` column), a list of words, or a badge, `%{text: "Yes", tone: :success}`;
+      nothing is a dash, and a table with no rows says `empty_text`.
+    * `%{kind: :list, title: nil, description: nil, items: [fact]}` — facts, one a row.
+
+  Each tab is a link to the page with its id under `tab_param` — `?tab=props` — and the page's
+  other URL keys; the text is shown when the URL names no tab a plugin added. Every panel is drawn,
+  the ones not shown `hidden`, and changing tabs reads nothing again. Every element says what it is
+  in its `data-role`: `doc-extras`, `doc-extra-badges`, `doc-extra-badge`, `doc-extra-command`,
+  `doc-extra-link`, `doc-extra-text`, `doc-extra-label`, `doc-extra-value`, `doc-tabs`, `doc-tab`
+  (`aria-current` on the one shown), `doc-tab-panel`, `doc-extra-table`, `doc-extra-list`,
+  `doc-extra-row`, `doc-extra-item`, `doc-extra-blank`, `doc-extra-pending`, `doc-tab-pending` and
+  `doc-tab-failed`.
+
+  A `pending` topic — on a tab, or on the answer as `pending: %{topic: "…"}` — is a
+  `Phoenix.PubSub` topic on `MishkaCmsCore.PubSub` the plugin announces the end of its fetch on.
+  Once connected, `doc-section` starts one task (`MishkaGervaz.Messages.start_async/4`) that
+  subscribes to it, asks the event once more, and otherwise waits for the next message on it, up
+  to `pending_wait` milliseconds; then it asks again and draws the answer, and waits again while it
+  still names a topic. Nothing polls. A wait that runs out turns each tab still being fetched into
+  its `failed_text`, and takes the header's skeleton away.
+
+  Every word is text the template escapes, and anything of another shape is left out. With no
+  plugin, or an event that cannot run, the page is drawn as it was.
+
   ### The hooks
 
-  `doc-code-copy` answers those buttons. `doc-section` mounts it on its own root, outside the page's
-  text, under the name the site's JavaScript registers it by
+  `doc-code-copy` answers the button on each code window, and the one beside each command a plugin
+  adds to the page. `doc-section` mounts it on its own root, outside the page's text, under the
+  name the site's JavaScript registers it by
   (`MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`), and one listener there
   answers every button inside, whatever render drew it. A press copies the window's code with the
   Clipboard API, or a textarea and `execCommand("copy")` where that API is missing, marks the button
