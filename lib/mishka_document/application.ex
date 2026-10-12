@@ -54,8 +54,9 @@ defmodule MishkaDocument.Application do
     MishkaDocument.Plugins.SectionShareCard
   ]
 
-  # Names the components the site's documentation draws in its text and the icons it names, so its
-  # stylesheet carries them (a `runtime:compile:content_components` plugin).
+  # Names the components the site's documentation draws in its text, the icons it names and the
+  # classes it writes, so its stylesheet carries them (a `runtime:compile:content_components`
+  # plugin).
   @runtime_plugins [
     MishkaDocument.Plugins.ContentComponents
   ]
