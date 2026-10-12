@@ -1,6 +1,7 @@
 defmodule MishkaDocument.Test.ContentFactsTest do
   @moduledoc """
-  The components and the icons a page's or a note's text names, stored when it is written —
+  The components, the icons and the classes a page's or a note's text names, stored when it is
+  written —
   `MishkaDocument.Resources.Changes.ContentFacts` — which
   `MishkaDocument.Plugins.ContentComponents` hands a site's stylesheet. Reading either works out
   nothing.
@@ -171,6 +172,75 @@ defmodule MishkaDocument.Test.ContentFactsTest do
     end
   end
 
+  # A COMPONENT THAT TAKES A CLASS STRING in an attribute declares `examples` for it and no `values`.
+  @open_attrs [
+    %{
+      "name" => "size",
+      "type" => "string",
+      "opts" => %{"default" => "small", "examples" => ["small", "large"]}
+    },
+    %{
+      "name" => "color",
+      "type" => "string",
+      "opts" => %{"default" => "base", "values" => ["base", "dark"]}
+    },
+    %{"name" => "label", "type" => "string", "opts" => %{"default" => nil}}
+  ]
+
+  describe "content_classes" do
+    test "are the classes a page's HTML, its markers' *_class and its components' open attributes write",
+         ctx do
+      create_component!(
+        name: "open-badge",
+        attrs: @open_attrs,
+        active: true,
+        precompile: false,
+        site_id: ctx.site.id
+      )
+
+      page =
+        page!(
+          ctx,
+          ~s(<div class="bg-[#282828] text-white">x</div>) <>
+            ~s([[component doc-example title="Hidden block"]][[component slider track_class="h-1 bg-neutral-200" ) <>
+            ~s(thumb_class="size-4" /]][[/component]]) <>
+            ~s([[component open-badge size="leading-5 py-2" color="bg-red-500" label="flex" /]]) <>
+            ~s(<pre><code>[[component slider track_class="in-code" /]]</code></pre>)
+        )
+
+      assert stored(page).content_classes == [
+               "bg-[#282828]",
+               "text-white",
+               "size-4",
+               "h-1",
+               "bg-neutral-200",
+               "leading-5",
+               "py-2"
+             ]
+    end
+
+    test "are nothing for text that writes none, and follow the text it is written with", ctx do
+      page = page!(ctx, ~s(<p class="bg-[#282828]">x</p>))
+
+      assert stored(write!(page, %{title: "Renamed"}, ctx)).content_classes == ["bg-[#282828]"]
+      assert stored(write!(page, %{content: "<p>plain</p>"}, ctx)).content_classes == nil
+      assert stored(page!(ctx, nil)).content_classes == nil
+    end
+
+    test "are a note's too", ctx do
+      page = page!(ctx, "<p>Body</p>")
+
+      note =
+        create_note!(
+          site_id: ctx.site.id,
+          section_id: page.id,
+          content: ~s(<p>[[component tip-box class="ring-2 ring-[#ff0]" /]]</p>)
+        )
+
+      assert stored(note).content_classes == ["ring-2", "ring-[#ff0]"]
+    end
+  end
+
   # A SITE'S STYLESHEET IS BUILT FROM WHAT IT REACHES, and a page's components are in no template.
   describe "the names a site's stylesheet hears" do
     test "are those its approved pages and notes name, each once", ctx do
@@ -288,6 +358,74 @@ defmodule MishkaDocument.Test.ContentFactsTest do
     end
   end
 
+  # A CLASS A PAGE WRITES IS IN NO TEMPLATE EITHER: a marker's `track_class="h-1"` reaches its
+  # component as an expression, and a page's HTML is never scanned.
+  describe "the classes a site's stylesheet hears" do
+    test "are those its approved pages and notes write, each once", ctx do
+      page = page!(ctx, ~s(<p class="bg-[#282828] p-2">x</p>), approved())
+      page!(ctx, ~s(<p class="p-2">x</p>), approved())
+      page!(ctx, ~s(<p class="in-review">x</p>))
+
+      create_note!(
+        [
+          site_id: ctx.site.id,
+          section_id: page.id,
+          content: ~s(<p>[[component tip-box thumb_class="size-4" /]]</p>)
+        ] ++ approved()
+      )
+
+      assert {:reply, %{classes: classes, components: components}} =
+               ContentComponents.call(%{
+                 site: ctx.site.name,
+                 site_id: ctx.site.id,
+                 components: [],
+                 icons: [],
+                 classes: ["kept"]
+               })
+
+      assert Enum.sort(classes) == ["bg-[#282828]", "kept", "p-2", "size-4"]
+      assert components == ["tip-box"]
+    end
+
+    test "are not asked of a build that asks for none, which still hears the names", ctx do
+      page!(ctx, ~s(<p class="p-2">[[component callout /]]</p>), approved())
+
+      assert {:reply, answer} =
+               ContentComponents.call(%{
+                 site: ctx.site.name,
+                 site_id: ctx.site.id,
+                 components: [],
+                 icons: []
+               })
+
+      assert answer.components == ["callout"]
+      refute Map.has_key?(answer, :classes)
+    end
+  end
+
+  describe "a write that changes the classes an approved page writes" do
+    setup :open_site
+
+    test "rebuilds the site's stylesheet when it writes one no approved page did", ctx do
+      write!(ctx.page, %{content: ~s(<p class="p-2 bg-[#282828]">x</p>)}, ctx)
+
+      assert [_job] = css_jobs(ctx.site)
+    end
+
+    test "rebuilds nothing when its classes stay as they were", ctx do
+      write!(ctx.page, %{content: ~s(<p>New text</p><i class="p-2"></i>)}, ctx)
+
+      assert stored(ctx.page).content_classes == ["p-2"]
+      assert css_jobs(ctx.site) == []
+    end
+
+    test "rebuilds nothing for classes other approved pages already write", ctx do
+      write!(ctx.page, %{content: ~s(<p class="p-2 m-4 text-sm">x</p>)}, ctx)
+
+      assert css_jobs(ctx.site) == []
+    end
+  end
+
   # A WRITE THAT MAKES AN ICON LIVE asks for the site's stylesheet again, as one that makes a
   # component name live does. `TailwindCompiler.schedule/1` enqueues nothing under the `:env_test?`
   # flag, so it is switched off once the pages a test starts from exist.
@@ -301,14 +439,14 @@ defmodule MishkaDocument.Test.ContentFactsTest do
     end
 
     test "rebuilds nothing when its icons stay as they were", ctx do
-      write!(ctx.page, %{content: ~s(<p>New text</p><i class="hero-cloud"></i>)}, ctx)
+      write!(ctx.page, %{content: ~s(<p>New text</p><i class="hero-cloud p-2"></i>)}, ctx)
 
       assert stored(ctx.page).content_icons == ["hero-cloud"]
       assert css_jobs(ctx.site) == []
     end
 
     test "rebuilds nothing for an icon another approved page already names", ctx do
-      write!(ctx.page, %{content: ~s(<span class="hero-cloud hero-star"></span>)}, ctx)
+      write!(ctx.page, %{content: ~s(<span class="hero-cloud hero-star p-2"></span>)}, ctx)
 
       assert css_jobs(ctx.site) == []
     end
@@ -325,8 +463,9 @@ defmodule MishkaDocument.Test.ContentFactsTest do
     version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
     ctx = %{site: site, version: version}
 
-    page = page!(ctx, ~s(<span class="hero-cloud"></span>), approved())
-    page!(ctx, ~s(<span class="hero-star"></span>), approved())
+    page = page!(ctx, ~s(<span class="hero-cloud p-2"></span>), approved())
+    page!(ctx, ~s(<span class="hero-star m-4"></span>), approved())
+    page!(ctx, ~s(<span class="text-sm"></span>), approved())
 
     Application.put_env(:mishka_cms_core, :env_test?, false)
     on_exit(fn -> Application.put_env(:mishka_cms_core, :env_test?, true) end)
@@ -373,6 +512,19 @@ defmodule MishkaDocument.Test.ContentFactsTest do
       assert ContentFacts.newly_live(approved, pending) == []
       assert ContentFacts.newly_live(%Section{}, pending) == []
       assert ContentFacts.newly_live(%Note{}, approved) == ["a"]
+    end
+
+    test "is the same question of the classes a page writes" do
+      was = %{
+        content_review_status: :approved,
+        technical_review_status: :approved,
+        content_classes: ["p-2"]
+      }
+
+      now = %{was | content_classes: ["p-2", "bg-[#282828]"]}
+
+      assert ContentFacts.newly_live(was, now, :content_classes) == ["bg-[#282828]"]
+      assert ContentFacts.newly_live(now, was, :content_classes) == []
     end
 
     test "is the same question of the icons a page names" do

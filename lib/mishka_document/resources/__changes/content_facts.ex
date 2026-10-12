@@ -1,7 +1,7 @@
 defmodule MishkaDocument.Resources.Changes.ContentFacts do
   @moduledoc """
-  The components and the icons a page's or a note's `content` names, worked out when it is written
-  — reading either works out nothing:
+  The components, the icons and the classes a page's or a note's `content` names, worked out when
+  it is written — reading either works out nothing:
 
     * `content_components` — the names its markers give
       (`MishkaCmsCore.Runtime.ContentComponents.names/1`), `nil` when it names none. A site's
@@ -9,6 +9,10 @@ defmodule MishkaDocument.Resources.Changes.ContentFacts do
     * `content_icons` — the icon classes it names, in a marker's attribute or in its HTML
       (`MishkaCmsCore.Runtime.ContentComponents.icons/1`), `nil` when it names none. The site's
       stylesheet carries a rule for each — see `MishkaDocument.Plugins.ContentComponents`.
+    * `content_classes` — the classes it writes: its HTML's class lists, a marker's `class` and
+      `*_class` attributes, and the attributes its component takes a class string in
+      (`MishkaCmsCore.Runtime.ContentComponents.site_classes/2`), `nil` when it writes none. The
+      site's stylesheet is built with each — see `MishkaDocument.Plugins.ContentComponents`.
 
   Worked out in a `before_action` hook, which runs after every change an action lists — the
   `guardedstruct` sanitizer and `MishkaDocument.Resources.Changes.HighlightCode` included — so they
@@ -17,11 +21,11 @@ defmodule MishkaDocument.Resources.Changes.ContentFacts do
 
   ## The stylesheet
 
-  A write that makes a name or an icon live on its site — an approved page or note names it now and
-  did not before, and no other approved page or note of the site names it — rebuilds the site's
-  stylesheet, through `MishkaCmsCore.Runtime.Compilers.TailwindCompiler.schedule/1`. The job is
-  enqueued in the write's own transaction, so a write rolled back asks for nothing. A name or an
-  icon dropped, or a page sent back to review, rebuilds nothing.
+  A write that makes a name, an icon or a class live on its site — an approved page or note names it
+  now and did not before, and no other approved page or note of the site names it — rebuilds the
+  site's stylesheet, through `MishkaCmsCore.Runtime.Compilers.TailwindCompiler.schedule/1`. The job
+  is enqueued in the write's own transaction, so a write rolled back asks for nothing. A name, an
+  icon or a class dropped, or a page sent back to review, rebuilds nothing.
 
   ## Usage
 
@@ -34,14 +38,14 @@ defmodule MishkaDocument.Resources.Changes.ContentFacts do
 
   require Ash.Query
 
-  alias MishkaCmsCore.Runtime.Compilers.TailwindCompiler
+  alias MishkaCmsCore.Runtime.Compilers.{SitemapCompiler, TailwindCompiler}
   alias MishkaCmsCore.Runtime.ContentComponents
 
   # Where a site's text is drawn from: a page's own, and its notes'.
   @drawn [MishkaDocument.Section, MishkaDocument.Note]
 
   # What a site's stylesheet is built from, each a list an approved page or note makes live.
-  @styled [:content_components, :content_icons]
+  @styled [:content_components, :content_icons, :content_classes]
 
   @impl true
   def change(changeset, _opts, _context) do
@@ -62,7 +66,14 @@ defmodule MishkaDocument.Resources.Changes.ContentFacts do
       :content_icons,
       stored(ContentComponents.icons(content))
     )
+    |> Ash.Changeset.force_change_attribute(
+      :content_classes,
+      stored(ContentComponents.site_classes(content, site_of(changeset)))
+    )
   end
+
+  defp site_of(changeset),
+    do: Ash.Changeset.get_attribute(changeset, :site_id) || changeset.tenant
 
   defp stored([]), do: nil
   defp stored(found), do: found
@@ -76,15 +87,21 @@ defmodule MishkaDocument.Resources.Changes.ContentFacts do
     {:ok, record}
   end
 
-  defp unstyled?(was, record, fact),
-    do: was |> newly_live(record, fact) |> Enum.any?(&(not named_elsewhere?(record, fact, &1)))
+  defp unstyled?(was, record, fact) do
+    case newly_live(was, record, fact) do
+      [] -> false
+      live -> not named_elsewhere?(record, fact, live)
+    end
+  end
 
   @doc """
   What `record` makes live of `fact` that `was` did not — its component names
-  (`:content_components`, the default) or its icons (`:content_icons`): what an approved page or
-  note lists, less what it listed while approved before the write.
+  (`:content_components`, the default), its icons (`:content_icons`) or its classes
+  (`:content_classes`): what an approved page or note lists, less what it listed while approved
+  before the write.
   """
-  @spec newly_live(map(), map(), :content_components | :content_icons) :: [String.t()]
+  @spec newly_live(map(), map(), :content_components | :content_icons | :content_classes) ::
+          [String.t()]
   def newly_live(was, record, fact \\ :content_components),
     do: live(record, fact) -- live(was, fact)
 
@@ -100,16 +117,38 @@ defmodule MishkaDocument.Resources.Changes.ContentFacts do
 
   defp live(_record, _fact), do: []
 
+  # Whether every one of `values` is named by another approved page or note: the rows naming any of
+  # them, read until each is found.
+  #
   # READ AS THE SYSTEM, as the site's stylesheet is built: a page locked to some readers draws its
-  # components and icons for them, so it is styled whoever reads it.
-  defp named_elsewhere?(record, fact, value) do
-    Enum.any?(@drawn, fn resource ->
-      resource
-      |> Ash.Query.for_read(:public_list, %{}, tenant: record.site_id, authorize?: false)
-      |> Ash.Query.filter(has(^ref(fact), ^value))
-      |> other_than(record)
-      |> Ash.exists?(tenant: record.site_id, authorize?: false)
+  # components, icons and classes for them, so it is styled whoever reads it.
+  defp named_elsewhere?(record, fact, values) do
+    @drawn
+    |> Enum.reduce_while(MapSet.new(values), fn resource, unnamed ->
+      case unnamed_after(resource, record, fact, unnamed) do
+        [] -> {:halt, []}
+        left -> {:cont, MapSet.new(left)}
+      end
     end)
+    |> Enum.empty?()
+  end
+
+  defp unnamed_after(resource, record, fact, unnamed) do
+    resource
+    |> Ash.Query.for_read(:public_list, %{}, tenant: record.site_id, authorize?: false)
+    |> Ash.Query.filter(intersects(^ref(fact), ^MapSet.to_list(unnamed)))
+    |> Ash.Query.select([fact])
+    |> other_than(record)
+    |> SitemapCompiler.stream_rows(tenant: record.site_id, authorize?: false)
+    |> Enum.reduce_while(unnamed, fn row, unnamed ->
+      left = MapSet.difference(unnamed, MapSet.new(Map.get(row, fact) || []))
+
+      case MapSet.size(left) do
+        0 -> {:halt, left}
+        _some -> {:cont, left}
+      end
+    end)
+    |> MapSet.to_list()
   end
 
   defp other_than(%{resource: resource} = query, %{__struct__: resource, id: id}),
