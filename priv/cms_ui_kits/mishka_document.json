@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -432,7 +432,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  phx-hook={copy_hook()}\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_document == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_document != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @section == nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={landing_pages(@sections) != []}\n      data-role=\"doc-landing-items\"\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              landing_pages(@sections),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n\n    <section\n      :for={group <- landing_groups(@sections)}\n      id={\"#{@id}-group-#{group.id}\"}\n      data-role=\"doc-landing-group\"\n      class=\"mt-6\"\n    >\n      <h2\n        data-role=\"doc-landing-group-title\"\n        class=\"text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n      >\n        {group.title}\n      </h2>\n\n      <ul class=\"mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2\">\n        <li\n          :for={\n            {page, href} <-\n              page_links(\n                group_pages(@sections, group),\n                @sections,\n                @doc_base,\n                @document,\n                @lang_param,\n                version_query(@version, @latest, @version_param)\n              )\n          }\n          id={\"#{@id}-root-#{page.id}\"}\n        >\n          <.link\n            :if={href}\n            navigate={href}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n          >\n            {page.title}\n          </.link>\n\n          <span\n            :if={is_nil(href)}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n          >\n            {page.title}\n          </span>\n        </li>\n      </ul>\n    </section>\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != [] or (@crumb_current and @show_breadcrumb)}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n\n      <span :if={@crumb_current} data-role=\"doc-section-crumb\" aria-current=\"page\">\n        {@section.title}\n      </span>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <%!-- A callout an author places in a page's text is drawn by rich_content below, so this block\n    names it for the site's stylesheet: component_name=\"doc-callout\" --%>\n    <%!-- The page's own text takes these styles, and a note's the same: an element with no class, and\n    nothing with a class between it and the body. A component drawn in the text carries classes, so\n    none of them reach its markup. --%>\n    <div\n      data-role=\"doc-section-body\"\n      class={[\n        \"prose prose-sm max-w-none leading-relaxed\",\n        \"[&_a:not([class],&_[class]_*)]:underline\",\n        \"[&_h2:not([class],&_[class]_*)]:mb-2 [&_h2:not([class],&_[class]_*)]:mt-5\",\n        \"[&_h2:not([class],&_[class]_*)]:text-lg [&_h2:not([class],&_[class]_*)]:font-bold\",\n        \"[&_h3:not([class],&_[class]_*)]:mt-4 [&_h3:not([class],&_[class]_*)]:font-semibold\",\n        \"[&_img:not([class],&_[class]_*)]:rounded-lg\",\n        \"[&_li:not([class],&_[class]_*)]:ml-5\",\n        \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n        \"[&_p:not([class],&_[class]_*)]:mb-3\"\n      ]}\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div :if={@show_notes and @notes != []} data-role=\"doc-section-notes\" class=\"mt-6 space-y-5\">\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class={[\n            \"prose prose-sm max-w-none leading-relaxed\",\n            \"[&_a:not([class],&_[class]_*)]:underline\",\n            \"[&_li:not([class],&_[class]_*)]:ml-5\",\n            \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n            \"[&_p:not([class],&_[class]_*)]:mb-3\",\n            \"[&_code:not([class],&_[class]_*)]:rounded [&_code:not([class],&_[class]_*)]:bg-[#f0efea] [&_code:not([class],&_[class]_*)]:px-1\"\n          ]}\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  phx-hook={copy_hook()}\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_document == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_document != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @section == nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={landing_pages(@sections) != []}\n      data-role=\"doc-landing-items\"\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              landing_pages(@sections),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n\n    <section\n      :for={group <- landing_groups(@sections)}\n      id={\"#{@id}-group-#{group.id}\"}\n      data-role=\"doc-landing-group\"\n      class=\"mt-6\"\n    >\n      <h2\n        data-role=\"doc-landing-group-title\"\n        class=\"text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n      >\n        {group.title}\n      </h2>\n\n      <ul class=\"mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2\">\n        <li\n          :for={\n            {page, href} <-\n              page_links(\n                group_pages(@sections, group),\n                @sections,\n                @doc_base,\n                @document,\n                @lang_param,\n                version_query(@version, @latest, @version_param)\n              )\n          }\n          id={\"#{@id}-root-#{page.id}\"}\n        >\n          <.link\n            :if={href}\n            navigate={href}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n          >\n            {page.title}\n          </.link>\n\n          <span\n            :if={is_nil(href)}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n          >\n            {page.title}\n          </span>\n        </li>\n      </ul>\n    </section>\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != [] or (@crumb_current and @show_breadcrumb)}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n\n      <span :if={@crumb_current} data-role=\"doc-section-crumb\" aria-current=\"page\">\n        {@section.title}\n      </span>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <%!-- A callout and an example an author places in a page's text are drawn by rich_content below,\n    so this block names them for the site's stylesheet: component_name=\"doc-callout\"\n    component_name=\"doc-example\" --%>\n    <%!-- The page's own text takes these styles, and a note's the same: an element with no class, and\n    nothing with a class between it and the body. A component drawn in the text carries classes, so\n    none of them reach its markup. --%>\n    <div\n      data-role=\"doc-section-body\"\n      class={[\n        \"prose prose-sm max-w-none leading-relaxed\",\n        \"[&_a:not([class],&_[class]_*)]:underline\",\n        \"[&_h2:not([class],&_[class]_*)]:mb-2 [&_h2:not([class],&_[class]_*)]:mt-5\",\n        \"[&_h2:not([class],&_[class]_*)]:text-lg [&_h2:not([class],&_[class]_*)]:font-bold\",\n        \"[&_h3:not([class],&_[class]_*)]:mt-4 [&_h3:not([class],&_[class]_*)]:font-semibold\",\n        \"[&_img:not([class],&_[class]_*)]:rounded-lg\",\n        \"[&_li:not([class],&_[class]_*)]:ml-5\",\n        \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n        \"[&_p:not([class],&_[class]_*)]:mb-3\"\n      ]}\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div :if={@show_notes and @notes != []} data-role=\"doc-section-notes\" class=\"mt-6 space-y-5\">\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class={[\n            \"prose prose-sm max-w-none leading-relaxed\",\n            \"[&_a:not([class],&_[class]_*)]:underline\",\n            \"[&_li:not([class],&_[class]_*)]:ml-5\",\n            \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n            \"[&_p:not([class],&_[class]_*)]:mb-3\",\n            \"[&_code:not([class],&_[class]_*)]:rounded [&_code:not([class],&_[class]_*)]:bg-[#f0efea] [&_code:not([class],&_[class]_*)]:px-1\"\n          ]}\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
       "attrs": [
         {
           "name": "workspace",
@@ -905,7 +905,8 @@
       "permissions": [],
       "dependencies": [
         "doc-notice",
-        "doc-callout"
+        "doc-callout",
+        "doc-example"
       ],
       "examples": [],
       "extra": {
@@ -2534,6 +2535,241 @@
         "ui_kit": "mishka_document"
       },
       "site_id": null
+    },
+    {
+      "name": "doc-example",
+      "description": "A function component: a live example inside a page's text, drawn in a frame of its own under the site's stylesheet, that an author places with the content editor as [[component doc-example title=\"…\"]] around the example's own component markers [[/component]]. A toolbar over the frame draws it light or dark, at a desktop's, a tablet's or a phone's width, and left to right or right to left.",
+      "type": "media",
+      "format": "heex",
+      "stateful": false,
+      "active": true,
+      "precompile": false,
+      "required": false,
+      "priority": 0,
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-example\"\n  data-frame-theme={@theme}\n  data-frame-device={@device}\n  data-frame-dir={@dir}\n  phx-hook={@id && example_hook()}\n  class=\"group/example my-5 overflow-hidden rounded-[14px] border border-[#ecebe6] bg-white text-[#1b1a18]\"\n>\n  <%= case example_document(render_slot(@inner_block), @theme, @dir) do %>\n    <% {:ok, document} -> %>\n      <div\n        data-role=\"doc-example-head\"\n        class=\"flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#ecebe6] bg-[#fbfbf9] px-3 py-2\"\n      >\n        <p\n          :if={trimmed(@title) != \"\"}\n          data-role=\"doc-example-title\"\n          class=\"min-w-0 text-xs font-semibold leading-snug text-[#3a382f]\"\n        >\n          {@title}\n        </p>\n\n        <div\n          data-role=\"doc-example-toolbar\"\n          role=\"toolbar\"\n          aria-label={@toolbar_label}\n          class=\"ms-auto flex flex-wrap items-center gap-2\"\n        >\n          <div data-role=\"doc-example-group\" data-group=\"theme\" role=\"group\" class=\"flex items-center gap-1\">\n            <button\n              :for={{value, label} <- [{\"light\", @light_text}, {\"dark\", @dark_text}]}\n              type=\"button\"\n              data-role=\"doc-example-option\"\n              data-action=\"theme\"\n              data-value={value}\n              aria-pressed={to_string(value == @theme)}\n              title={label}\n              class={option_class()}\n            >\n              <svg\n                data-role=\"doc-example-icon\"\n                aria-hidden=\"true\"\n                viewBox=\"0 0 24 24\"\n                fill=\"none\"\n                stroke=\"currentColor\"\n                stroke-width=\"1.6\"\n                class=\"size-4\"\n              >\n                <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d={icon_path(value)} />\n              </svg>\n              <span data-role=\"doc-example-option-text\" class=\"sr-only\">{label}</span>\n            </button>\n          </div>\n\n          <div data-role=\"doc-example-group\" data-group=\"device\" role=\"group\" class=\"flex items-center gap-1\">\n            <button\n              :for={\n                {value, label} <- [\n                  {\"desktop\", @desktop_text},\n                  {\"tablet\", @tablet_text},\n                  {\"mobile\", @mobile_text}\n                ]\n              }\n              type=\"button\"\n              data-role=\"doc-example-option\"\n              data-action=\"device\"\n              data-value={value}\n              aria-pressed={to_string(value == @device)}\n              title={label}\n              class={option_class()}\n            >\n              <svg\n                data-role=\"doc-example-icon\"\n                aria-hidden=\"true\"\n                viewBox=\"0 0 24 24\"\n                fill=\"none\"\n                stroke=\"currentColor\"\n                stroke-width=\"1.6\"\n                class=\"size-4\"\n              >\n                <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d={icon_path(value)} />\n              </svg>\n              <span data-role=\"doc-example-option-text\" class=\"sr-only\">{label}</span>\n            </button>\n          </div>\n\n          <div data-role=\"doc-example-group\" data-group=\"dir\" role=\"group\" class=\"flex items-center gap-1\">\n            <button\n              :for={{value, label} <- [{\"ltr\", @ltr_text}, {\"rtl\", @rtl_text}]}\n              type=\"button\"\n              data-role=\"doc-example-option\"\n              data-action=\"dir\"\n              data-value={value}\n              aria-pressed={to_string(value == @dir)}\n              class={option_class()}\n            >\n              <span data-role=\"doc-example-option-text\">{label}</span>\n            </button>\n          </div>\n        </div>\n      </div>\n\n      <div\n        data-role=\"doc-example-stage\"\n        class=\"overflow-x-auto bg-white group-data-[frame-theme=dark]/example:bg-[#18171c]\"\n      >\n        <iframe\n          data-role=\"doc-example-frame\"\n          srcdoc={document}\n          sandbox=\"allow-same-origin\"\n          loading=\"lazy\"\n          title={frame_title(@title, @frame_label)}\n          class=\"mx-auto block w-full max-w-none border-0 bg-transparent group-data-[frame-device=tablet]/example:w-[768px] group-data-[frame-device=mobile]/example:w-[375px]\"\n        ></iframe>\n      </div>\n    <% :stateful -> %>\n      <p\n        :if={trimmed(@title) != \"\"}\n        data-role=\"doc-example-title\"\n        class=\"border-b border-[#ecebe6] bg-[#fbfbf9] px-3 py-2 text-xs font-semibold leading-snug text-[#3a382f]\"\n      >\n        {@title}\n      </p>\n\n      <p data-role=\"doc-example-unavailable\" class=\"px-4 py-3 text-sm leading-relaxed text-[#8a877f]\">\n        {@stateful_text}\n      </p>\n  <% end %>\n</div>",
+      "body": null,
+      "attrs": [
+        {
+          "name": "id",
+          "type": "string",
+          "opts": {
+            "default": null,
+            "doc": "The id the toolbar's hook is mounted under. A page's text gives an example one from its place in the text; drawn without one, the frame keeps the colours, width and direction it was set with."
+          }
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "opts": {
+            "default": null,
+            "doc": "A line over the frame saying what the example shows, which is also the frame's name for a screen reader. Left empty, none is drawn."
+          }
+        },
+        {
+          "name": "theme",
+          "type": "string",
+          "opts": {
+            "default": "dark",
+            "doc": "The colours the example is first drawn in. The frame's page carries it as data-theme, which is what the site's dark styles key on.",
+            "values": [
+              "light",
+              "dark"
+            ]
+          }
+        },
+        {
+          "name": "device",
+          "type": "string",
+          "opts": {
+            "default": "desktop",
+            "doc": "The width the example is first drawn at: the page's whole width, a tablet's 768 pixels or a phone's 375.",
+            "values": [
+              "desktop",
+              "tablet",
+              "mobile"
+            ]
+          }
+        },
+        {
+          "name": "dir",
+          "type": "string",
+          "opts": {
+            "default": "ltr",
+            "doc": "The direction the example is first drawn in: left to right, or right to left.",
+            "values": [
+              "ltr",
+              "rtl"
+            ]
+          }
+        },
+        {
+          "name": "frame_label",
+          "type": "string",
+          "opts": {
+            "default": "Example",
+            "doc": "The frame's name for a screen reader when the example has no title."
+          }
+        },
+        {
+          "name": "toolbar_label",
+          "type": "string",
+          "opts": {
+            "default": "Preview",
+            "doc": "The name of the toolbar over the frame, for a screen reader."
+          }
+        },
+        {
+          "name": "light_text",
+          "type": "string",
+          "opts": {
+            "default": "Light",
+            "doc": "What the button that draws the example in its light colours is called."
+          }
+        },
+        {
+          "name": "dark_text",
+          "type": "string",
+          "opts": {
+            "default": "Dark",
+            "doc": "What the button that draws the example in its dark colours is called."
+          }
+        },
+        {
+          "name": "desktop_text",
+          "type": "string",
+          "opts": {
+            "default": "Desktop",
+            "doc": "What the button that draws the example at the page's whole width is called."
+          }
+        },
+        {
+          "name": "tablet_text",
+          "type": "string",
+          "opts": {
+            "default": "Tablet",
+            "doc": "What the button that draws the example at a tablet's width is called."
+          }
+        },
+        {
+          "name": "mobile_text",
+          "type": "string",
+          "opts": {
+            "default": "Mobile",
+            "doc": "What the button that draws the example at a phone's width is called."
+          }
+        },
+        {
+          "name": "ltr_text",
+          "type": "string",
+          "opts": {
+            "default": "LTR",
+            "doc": "What the button that draws the example left to right says."
+          }
+        },
+        {
+          "name": "rtl_text",
+          "type": "string",
+          "opts": {
+            "default": "RTL",
+            "doc": "What the button that draws the example right to left says."
+          }
+        },
+        {
+          "name": "stateful_text",
+          "type": "string",
+          "opts": {
+            "default": "This example holds a component that keeps state, which a frame cannot draw.",
+            "doc": "What is drawn in place of the frame when the example holds a component that keeps state: LiveView draws such a component on the page, and the frame is drawn from the example's HTML."
+          }
+        },
+        {
+          "name": "rest",
+          "type": "global",
+          "opts": {}
+        }
+      ],
+      "slots": [
+        {
+          "name": "inner_block",
+          "opts": {
+            "doc": "The example: the markers of the components it is made of, drawn inside the frame.",
+            "required": false
+          },
+          "attrs": []
+        }
+      ],
+      "helpers": [
+        {
+          "name": "trimmed",
+          "args": "value",
+          "code": "case value do\n  binary when is_binary(binary) -> String.trim(binary)\n  nil -> \"\"\n  other -> to_string(other)\nend\n"
+        },
+        {
+          "name": "example_document",
+          "args": "rendered, theme, dir",
+          "code": "# THE PAGE THE FRAME DRAWS (`frame_page/3`), the example's HTML in it, as `{:ok, page}`; and\n# `:stateful` when the example holds a component that keeps state, which LiveView draws on the\n# page and nothing turns into HTML.\ncase holds_live_component?(rendered) do\n  true ->\n    :stateful\n\n  false ->\n    html = rendered |> Phoenix.HTML.Safe.to_iodata() |> IO.iodata_to_binary()\n    {:ok, frame_page(html, theme, dir)}\nend\n"
+        },
+        {
+          "name": "holds_live_component?",
+          "args": "part",
+          "code": "# WHETHER A COMPONENT THAT KEEPS STATE IS ANYWHERE IN A RENDER: LiveView draws one as a\n# `Phoenix.LiveView.Component` in the render's tree, which turning the render into HTML refuses.\ncase part do\n  %Phoenix.LiveView.Component{} ->\n    true\n\n  %Phoenix.LiveView.Rendered{dynamic: dynamic} ->\n    Enum.any?(dynamic.(false), &holds_live_component?/1)\n\n  %Phoenix.LiveView.Comprehension{entries: entries} ->\n    Enum.any?(entries, fn {_key, _vars, render} ->\n      Enum.any?(render.(%{}, false), &holds_live_component?/1)\n    end)\n\n  _html ->\n    false\nend\n"
+        },
+        {
+          "name": "frame_page",
+          "args": "html, theme, dir",
+          "code": "# THE FRAME'S OWN PAGE: the example's HTML as its body, under the site's stylesheet\n# (`stylesheet_link/0`), with the theme as `<html data-theme>` — what the site's dark styles key\n# on — and the direction as `<html dir>`. It holds no script. `data-role=\"doc-example-page\"` is\n# what the hook tells it by from the empty page a frame holds until its srcdoc loads.\nIO.iodata_to_binary([\n  \"<!doctype html>\",\n  ~s(<html data-role=\"doc-example-page\" data-theme=\"),\n  escaped(theme),\n  ~s(\" dir=\"),\n  escaped(dir),\n  ~s(\">),\n  ~s(<head><meta charset=\"utf-8\">),\n  ~s(<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">),\n  stylesheet_link(),\n  \"</head>\",\n  ~s(<body data-role=\"doc-example-body\" class=\"m-0 space-y-4 bg-transparent p-5 text-[#1b1a18] dark:text-[#ece6ff]\">),\n  html,\n  \"</body></html>\"\n])\n"
+        },
+        {
+          "name": "stylesheet_link",
+          "args": "",
+          "code": "# THE SITE'S OWN STYLESHEET, the one the page around the frame links, read for the site this page\n# is rendered for. Nothing before the site's first compile, when it has none to link.\nwith %{name: name} <-\n       MishkaCmsCore.Runtime.States.SiteState.get!(MishkaCmsCore.Runtime.Translations.site()),\n     href when is_binary(href) <- MishkaCmsCore.Runtime.Compilers.Shared.site_css_href(name) do\n  [~s(<link rel=\"stylesheet\" href=\"), escaped(href), ~s(\">)]\nelse\n  _no_stylesheet -> \"\"\nend\n"
+        },
+        {
+          "name": "escaped",
+          "args": "value",
+          "code": "value\n|> to_string()\n|> Phoenix.HTML.html_escape()\n|> Phoenix.HTML.safe_to_string()\n"
+        },
+        {
+          "name": "frame_title",
+          "args": "title, label",
+          "code": "# THE FRAME'S NAME FOR A SCREEN READER: the example's title, else `frame_label`.\ncase trimmed(title) do\n  \"\" -> label\n  named -> named\nend\n"
+        },
+        {
+          "name": "option_class",
+          "args": "",
+          "code": "# ONE BUTTON OF THE TOOLBAR, drawn pressed while `aria-pressed` is \"true\" — the attribute the hook\n# moves from button to button.\n[\n  \"inline-flex h-7 min-w-7 cursor-pointer items-center justify-center gap-1 rounded-md border px-1.5\",\n  \"border-[#ecebe6] bg-white text-[11px] font-semibold uppercase tracking-[0.04em] text-[#6d6a63]\",\n  \"hover:border-[#5b57d6] hover:text-[#5b57d6]\",\n  \"aria-pressed:border-[#5b57d6] aria-pressed:bg-[#f2f1fc] aria-pressed:text-[#5b57d6]\"\n]\n"
+        },
+        {
+          "name": "icon_path",
+          "args": "value",
+          "code": "# THE OUTLINE A CHOICE IS DRAWN WITH, on a 24 by 24 grid: a sun, a moon, a screen, a tablet and a\n# phone.\ncase value do\n  \"light\" ->\n    \"M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z\"\n\n  \"dark\" ->\n    \"M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z\"\n\n  \"desktop\" ->\n    \"M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25\"\n\n  \"tablet\" ->\n    \"M10.5 19.5h3m-6.75 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-15a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 4.5v15a2.25 2.25 0 0 0 2.25 2.25Z\"\n\n  _mobile ->\n    \"M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3\"\nend\n"
+        },
+        {
+          "name": "example_hook",
+          "args": "",
+          "code": "# THE NAME THE BROWSER KNOWS THIS KIT'S `doc-example` HOOK BY, the hook that answers the toolbar\n# over the frame and keeps the frame as tall as its example. It is installed with these\n# components, so it is this site's hook when they are — `MishkaDocExample` on a site named mishka —\n# and `GlobalDocExample` when they were installed for every site. The name comes from the rule the\n# site's JavaScript is built with, so the two cannot disagree.\nMishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name(\n  %{name: \"doc-example\", is_global: is_nil(site_id())},\n  site_name()\n)\n"
+        },
+        {
+          "name": "site_id",
+          "args": "",
+          "code": "__MODULE__.__component_information__([:private, :site_id])\n"
+        },
+        {
+          "name": "site_name",
+          "args": "",
+          "code": "# THE SITE'S NAME, NOT ITS ID, because that is what the hook's name is built from.\n__MODULE__.__component_information__([:private, :site])\n"
+        }
+      ],
+      "permissions": [],
+      "dependencies": [],
+      "examples": [
+        "<.component component_name=\"doc-example\" site=\"Global\" title=\"A tip\" theme=\"light\">\n  <.component component_name=\"doc-callout\" site=\"Global\" tone=\"tip\">\n    Run <code>mix setup</code> first.\n  </.component>\n</.component>"
+      ],
+      "extra": {
+        "icon": "frame",
+        "ui_kit": "mishka_document"
+      },
+      "site_id": null
     }
   ],
   "icons": [],
@@ -2545,6 +2781,19 @@
       "priority": 50,
       "active": true,
       "content": "// Copies a documentation code block's code when the button on its window is pressed.\n//\n// `doc-section` mounts this on its own root, outside the page's text, and draws every code block of\n// that text in a `[data-role=\"doc-code\"]` window with a `[data-role=\"doc-code-copy\"]` button. One\n// listener on the root answers every button inside it, so a button a later render draws is answered\n// as well as the first.\n//\n// The code is the text of the window's `<code>` — or of its `<pre>` when it holds none — written with\n// the Clipboard API, or through a textarea and `execCommand(\"copy\")` where that API is missing or\n// refused. Once it is copied the button carries `data-copied=\"true\"` for COPIED_FOR milliseconds,\n// for a stylesheet to draw, and the window's `[data-role=\"doc-code-status\"]` reads the button's\n// `data-copied-text` out to a screen reader. No class and no style attribute is written.\nconst COPIED_FOR = 1200;\n\nconst BUTTON = '[data-role=\"doc-code-copy\"]';\nconst WINDOW = '[data-role=\"doc-code\"]';\nconst STATUS = '[data-role=\"doc-code-status\"]';\n\nfunction copyThroughSelection(text) {\n  const area = document.createElement(\"textarea\");\n  const focused = document.activeElement;\n  let copied = false;\n\n  area.value = text;\n  area.setAttribute(\"readonly\", \"\");\n  area.setAttribute(\"aria-hidden\", \"true\");\n  area.style.position = \"fixed\";\n  area.style.top = \"0\";\n  area.style.left = \"0\";\n  area.style.opacity = \"0\";\n  area.style.pointerEvents = \"none\";\n  document.body.appendChild(area);\n  area.select();\n\n  try {\n    copied = document.execCommand(\"copy\");\n  } catch (_refused) {\n    copied = false;\n  }\n\n  area.remove();\n  if (focused && typeof focused.focus === \"function\") focused.focus({ preventScroll: true });\n\n  return copied;\n}\n\nfunction copyText(text) {\n  if (navigator.clipboard && typeof navigator.clipboard.writeText === \"function\") {\n    return navigator.clipboard.writeText(text).then(\n      () => true,\n      () => copyThroughSelection(text),\n    );\n  }\n\n  return Promise.resolve(copyThroughSelection(text));\n}\n\nconst DocCodeCopy = {\n  mounted() {\n    this.timers = new Map();\n\n    this.onClick = (event) => {\n      const button = event.target instanceof Element ? event.target.closest(BUTTON) : null;\n      if (button && this.el.contains(button)) this.copy(button);\n    };\n\n    this.el.addEventListener(\"click\", this.onClick);\n  },\n\n  destroyed() {\n    this.el.removeEventListener(\"click\", this.onClick);\n    this.timers.forEach((timer) => clearTimeout(timer));\n    this.timers.clear();\n  },\n\n  copy(button) {\n    const frame = button.closest(WINDOW);\n    const code = frame && (frame.querySelector(\"pre code\") || frame.querySelector(\"pre\"));\n    if (!code) return;\n\n    copyText(code.textContent).then((copied) => {\n      if (copied) this.flash(button, frame);\n    });\n  },\n\n  flash(button, frame) {\n    const status = frame.querySelector(STATUS);\n\n    clearTimeout(this.timers.get(button));\n    button.setAttribute(\"data-copied\", \"true\");\n    if (status) status.textContent = button.getAttribute(\"data-copied-text\") || \"\";\n\n    this.timers.set(\n      button,\n      setTimeout(() => {\n        this.timers.delete(button);\n        button.removeAttribute(\"data-copied\");\n        if (status) status.textContent = \"\";\n      }, COPIED_FOR),\n    );\n  },\n};\n\nexport default DocCodeCopy;\n",
+      "permissions": [],
+      "extra": {
+        "ui_kit": "mishka_document"
+      },
+      "site_id": null
+    },
+    {
+      "name": "doc-example",
+      "description": "Switches a documentation example's frame, drawn by doc-example, between light and dark, its desktop, tablet and phone widths and its two directions, and keeps the frame as tall as the example in it.",
+      "format": "js",
+      "priority": 50,
+      "active": true,
+      "content": "// Switches a documentation example's frame between its colours, widths and directions, and keeps the\n// frame as tall as the example drawn in it.\n//\n// `doc-example` mounts this on its own root and draws a toolbar of `[data-role=\"doc-example-option\"]`\n// buttons, each naming what it switches in `data-action` — theme, device or dir — and the choice in\n// `data-value`, over a `[data-role=\"doc-example-frame\"]` iframe. The frame's page is the example's\n// HTML under the site's stylesheet: same-origin and without a script of its own, so this hook reads\n// and dresses it from outside.\n//\n// One listener on the root answers every button. A press writes the choice onto the root as\n// `data-frame-theme`, `data-frame-device` or `data-frame-dir`, and `aria-pressed` onto that\n// action's buttons, through the hook's own JS commands, which a LiveView patch keeps. The frame's\n// page takes the theme as `<html data-theme>` and the direction as `<html dir>`; its width is the\n// stylesheet's, keyed on the root's `data-frame-device`.\n//\n// The frame's height is its `height` attribute — an attribute, not a style, so no CSP refuses it —\n// set to its page's height when the page loads, when its fonts arrive, when the frame's width\n// changes and after every choice. A link pressed inside the frame leads the page itself there,\n// never the frame.\nconst OPTION = '[data-role=\"doc-example-option\"]';\nconst FRAME = '[data-role=\"doc-example-frame\"]';\nconst PAGE = \"doc-example-page\";\n\nconst CHOICES = {\n  theme: [\"light\", \"dark\"],\n  device: [\"desktop\", \"tablet\", \"mobile\"],\n  dir: [\"ltr\", \"rtl\"],\n};\n\nconst DocExample = {\n  mounted() {\n    this.dressed = new WeakSet();\n\n    this.onClick = (event) => {\n      const option = event.target instanceof Element ? event.target.closest(OPTION) : null;\n\n      if (option && this.el.contains(option)) {\n        this.choose(option.getAttribute(\"data-action\"), option.getAttribute(\"data-value\"));\n      }\n    };\n\n    this.onLoad = () => this.dress();\n    this.onFollow = (event) => this.follow(event);\n    this.resizes = typeof ResizeObserver === \"function\" ? new ResizeObserver(() => this.fit()) : null;\n\n    this.el.addEventListener(\"click\", this.onClick);\n    this.attach();\n  },\n\n  updated() {\n    this.attach();\n  },\n\n  destroyed() {\n    this.el.removeEventListener(\"click\", this.onClick);\n    this.detach();\n    if (this.resizes) this.resizes.disconnect();\n  },\n\n  // The frame this root holds now, listened to; a render that drew another one hands it over.\n  attach() {\n    const frame = this.el.querySelector(FRAME);\n    if (frame === this.frame) return;\n\n    this.detach();\n    this.frame = frame;\n    if (!frame) return;\n\n    frame.addEventListener(\"load\", this.onLoad);\n    if (this.resizes) this.resizes.observe(frame);\n    this.dress();\n  },\n\n  detach() {\n    if (!this.frame) return;\n\n    this.frame.removeEventListener(\"load\", this.onLoad);\n    if (this.resizes) this.resizes.unobserve(this.frame);\n    this.frame = null;\n  },\n\n  choose(action, value) {\n    if (!(CHOICES[action] || []).includes(value)) return;\n\n    const js = this.js();\n    js.setAttribute(this.el, `data-frame-${action}`, value);\n\n    this.el.querySelectorAll(`${OPTION}[data-action=\"${action}\"]`).forEach((option) => {\n      js.setAttribute(option, \"aria-pressed\", String(option.getAttribute(\"data-value\") === value));\n    });\n\n    this.dress();\n  },\n\n  // The frame's page once it is the example's; until its srcdoc has loaded a frame holds an empty one.\n  page() {\n    const page = this.frame && this.frame.contentDocument;\n    const root = page && page.documentElement;\n\n    return root && root.getAttribute(\"data-role\") === PAGE && page.body ? page : null;\n  },\n\n  dress() {\n    const page = this.page();\n    if (!page) return;\n\n    const root = page.documentElement;\n    const theme = this.el.getAttribute(\"data-frame-theme\");\n    const dir = this.el.getAttribute(\"data-frame-dir\");\n\n    if (CHOICES.theme.includes(theme)) root.setAttribute(\"data-theme\", theme);\n    if (CHOICES.dir.includes(dir)) root.setAttribute(\"dir\", dir);\n\n    if (!this.dressed.has(page)) {\n      this.dressed.add(page);\n      page.addEventListener(\"click\", this.onFollow);\n      if (page.fonts) page.fonts.ready.then(() => this.fit());\n    }\n\n    this.fit();\n  },\n\n  fit() {\n    const page = this.page();\n    if (!page) return;\n\n    const height = Math.ceil(\n      Math.max(page.documentElement.getBoundingClientRect().height, page.body.scrollHeight),\n    );\n\n    if (height > 0 && this.frame.getAttribute(\"height\") !== String(height)) {\n      this.js().setAttribute(this.frame, \"height\", String(height));\n    }\n  },\n\n  follow(event) {\n    const target = event.target;\n    const link = target && typeof target.closest === \"function\" ? target.closest(\"a[href]\") : null;\n    if (!link || event.defaultPrevented) return;\n\n    event.preventDefault();\n    const url = new URL(link.getAttribute(\"href\"), window.location.href);\n\n    if (link.getAttribute(\"target\") === \"_blank\") {\n      window.open(url.href, \"_blank\", \"noopener\");\n    } else if (url.origin === window.location.origin) {\n      this.js().navigate(url.pathname + url.search + url.hash);\n    } else {\n      window.location.assign(url.href);\n    }\n  },\n};\n\nexport default DocExample;\n",
       "permissions": [],
       "extra": {
         "ui_kit": "mishka_document"

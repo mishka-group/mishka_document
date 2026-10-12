@@ -776,6 +776,328 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # AN EXAMPLE IS PLACED INSIDE A PAGE'S TEXT around the markers of the components it shows, and
+  # drawn in a frame of its own: the components' HTML is the frame's page, under the site's
+  # stylesheet, with a toolbar over it that the kit's hook answers.
+  describe "doc-example in a page's text" do
+    # THE RUNTIME DRAWS A MARKER'S COMPONENT ONLY BY A NAME `SiteState` KNOWS for the site, which a
+    # booted site holds for every component it has and this suite's hand-saved one does not.
+    defp example_page!(site, content, inside \\ ["doc-callout"]) do
+      for name <- ["doc-example" | inside] do
+        :ok = SiteState.put_component(site.id, name)
+        on_exit(fn -> SiteState.delete_component(site.id, name) end)
+      end
+
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Examples",
+        slug: "examples",
+        order_position: 9,
+        content: content
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "examples"}
+        })
+
+      view
+      |> render_async(@async)
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([data-role="doc-section-body"]))
+    end
+
+    # The frame's own page, as the browser reads it out of `srcdoc`.
+    defp framed(example) do
+      [page] =
+        example
+        |> LazyHTML.query(~s([data-role="doc-example-frame"]))
+        |> LazyHTML.attribute("srcdoc")
+
+      LazyHTML.from_document(page)
+    end
+
+    defp pressed(example) do
+      example
+      |> LazyHTML.query(~s([data-role="doc-example-option"]))
+      |> Enum.map(fn option ->
+        [action] = LazyHTML.attribute(option, "data-action")
+        [value] = LazyHTML.attribute(option, "data-value")
+        [pressed] = LazyHTML.attribute(option, "aria-pressed")
+        {action, value, pressed}
+      end)
+    end
+
+    test "draws a marker around a component as a frame whose page is that component",
+         %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s(<p>Before.</p>[[component doc-example title="A tip"]]) <>
+            ~s([[component doc-callout tone="tip"]]Use <code>mix</code>[[/component]]) <>
+            "[[/component]]"
+        )
+
+      assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+      assert [id] = LazyHTML.attribute(example, "id")
+      assert id =~ ~r/\Aone-body-\d+\z/
+      assert LazyHTML.attribute(example, "data-frame-theme") == ["dark"]
+      assert LazyHTML.attribute(example, "data-frame-device") == ["desktop"]
+      assert LazyHTML.attribute(example, "data-frame-dir") == ["ltr"]
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-title"]))
+             |> LazyHTML.text()
+             |> String.trim() == "A tip"
+
+      assert [frame] = Enum.to_list(LazyHTML.query(example, ~s([data-role="doc-example-frame"])))
+      assert LazyHTML.attribute(frame, "sandbox") == ["allow-same-origin"]
+      assert LazyHTML.attribute(frame, "loading") == ["lazy"]
+      assert LazyHTML.attribute(frame, "title") == ["A tip"]
+
+      page = framed(example)
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("data-theme") == ["dark"]
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("dir") == ["ltr"]
+
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("data-role") == [
+               "doc-example-page"
+             ]
+
+      assert page |> LazyHTML.query("script") |> Enum.count() == 0
+
+      callout =
+        LazyHTML.query(page, ~s(body[data-role="doc-example-body"] > [data-role="doc-callout"]))
+
+      assert LazyHTML.attribute(callout, "data-tone") == ["tip"]
+
+      assert callout
+             |> LazyHTML.query(~s([data-role="doc-callout-body"] > code))
+             |> LazyHTML.text() == "mix"
+
+      # The callout is the frame's, and only the frame's: the page around it draws none.
+      assert body |> LazyHTML.query(~s([data-role="doc-callout"])) |> Enum.count() == 0
+      assert body |> LazyHTML.query("p:not([data-role])") |> LazyHTML.text() == "Before."
+    end
+
+    test "draws its toolbar with the choices it was set with pressed", %{site: site} do
+      body =
+        example_page!(
+          site,
+          "[[component doc-example]][[component doc-callout]]Plain.[[/component]][[/component]]"
+        )
+
+      example = LazyHTML.query(body, ~s([data-role="doc-example"]))
+
+      assert pressed(example) == [
+               {"theme", "light", "false"},
+               {"theme", "dark", "true"},
+               {"device", "desktop", "true"},
+               {"device", "tablet", "false"},
+               {"device", "mobile", "false"},
+               {"dir", "ltr", "true"},
+               {"dir", "rtl", "false"}
+             ]
+
+      toolbar = LazyHTML.query(example, ~s([data-role="doc-example-toolbar"][role="toolbar"]))
+      assert LazyHTML.attribute(toolbar, "aria-label") == ["Preview"]
+
+      assert toolbar
+             |> LazyHTML.query(~s(button[type="button"][data-role="doc-example-option"]))
+             |> Enum.count() == 7
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-option-text"]))
+             |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim())) ==
+               ~w(Light Dark Desktop Tablet Mobile LTR RTL)
+
+      assert example |> LazyHTML.query(~s([data-role="doc-example-title"])) |> Enum.count() == 0
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-frame"]))
+             |> LazyHTML.attribute("title") == ["Example"]
+    end
+
+    test "takes the colours, width and direction the marker sets, and only the declared ones",
+         %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s([[component doc-example theme="light" device="mobile" dir="rtl"]]) <>
+            "[[component doc-callout]]One.[[/component]][[/component]]" <>
+            ~s([[component doc-example theme="purple" device="watch" dir="up"]]) <>
+            "[[component doc-callout]]Two.[[/component]][[/component]]"
+        )
+
+      assert [set, refused] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+
+      assert LazyHTML.attribute(set, "data-frame-theme") == ["light"]
+      assert LazyHTML.attribute(set, "data-frame-device") == ["mobile"]
+      assert LazyHTML.attribute(set, "data-frame-dir") == ["rtl"]
+
+      assert for({action, value, "true"} <- pressed(set), do: {action, value}) ==
+               [{"theme", "light"}, {"device", "mobile"}, {"dir", "rtl"}]
+
+      assert set |> framed() |> LazyHTML.query("html") |> LazyHTML.attribute("data-theme") ==
+               ["light"]
+
+      assert set |> framed() |> LazyHTML.query("html") |> LazyHTML.attribute("dir") == ["rtl"]
+
+      assert LazyHTML.attribute(refused, "data-frame-theme") == ["dark"]
+      assert LazyHTML.attribute(refused, "data-frame-device") == ["desktop"]
+      assert LazyHTML.attribute(refused, "data-frame-dir") == ["ltr"]
+    end
+
+    # THE FRAME'S PAGE IS AN ATTRIBUTE'S VALUE, escaped as one: a quote or an ampersand in the
+    # example reaches the frame as written and never closes the attribute around it.
+    test "carries the example's text into the frame exactly as it was written", %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s([[component doc-example]]<p>Tom &amp; "Jerry" &lt;b&gt;</p>[[/component]]),
+          []
+        )
+
+      assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+
+      assert example |> framed() |> LazyHTML.query("body > p") |> LazyHTML.text() ==
+               ~s(Tom & "Jerry" <b>)
+
+      assert body |> LazyHTML.query("p") |> Enum.count() == 0
+      assert body |> LazyHTML.query("b") |> Enum.count() == 0
+    end
+
+    # THE FRAME DRAWS THE EXAMPLE AS THE SITE DRAWS IT, so its page links the stylesheet the site's
+    # own pages link — once the site has one.
+    test "links the site's own stylesheet inside the frame's page", %{site: site} do
+      content =
+        "[[component doc-example]][[component doc-callout]]Styled.[[/component]][[/component]]"
+
+      unstyled = example_page!(site, content)
+
+      assert unstyled
+             |> LazyHTML.query(~s([data-role="doc-example"]))
+             |> framed()
+             |> LazyHTML.query(~s(link[rel="stylesheet"]))
+             |> Enum.count() == 0
+
+      :ok =
+        MishkaCmsCore.Runtime.States.AssetsState.save(%{
+          id: site.name,
+          type: "css",
+          value: "body{}",
+          hash: "0123abcd",
+          updated_at: DateTime.utc_now()
+        })
+
+      on_exit(fn -> MishkaCmsCore.Runtime.States.AssetsState.delete(site.name, "css") end)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "examples"}
+        })
+
+      assert view
+             |> drawn(~s([data-role="doc-example"]))
+             |> framed()
+             |> LazyHTML.query(~s(head > link[rel="stylesheet"]))
+             |> LazyHTML.attribute("href") == ["/assets/css/#{site.name}/0123abcd.css"]
+    end
+
+    # A COMPONENT THAT KEEPS STATE IS DRAWN BY LIVEVIEW, ON THE PAGE, and never as HTML a frame could
+    # hold. An example holding one draws a line saying so in place of its frame, and the page around
+    # it is drawn as ever.
+    test "draws a note in place of the frame when its example keeps state", %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s(<p>Before.</p>[[component doc-example title="Contents"]][[component doc-toc /]][[/component]]),
+          ["doc-toc"]
+        )
+
+      assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-unavailable"]))
+             |> LazyHTML.text()
+             |> String.trim() ==
+               "This example holds a component that keeps state, which a frame cannot draw."
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-title"]))
+             |> LazyHTML.text()
+             |> String.trim() == "Contents"
+
+      assert example |> LazyHTML.query(~s([data-role="doc-example-frame"])) |> Enum.count() == 0
+      assert example |> LazyHTML.query(~s([data-role="doc-example-toolbar"])) |> Enum.count() == 0
+      assert example |> LazyHTML.query(~s([data-role="doc-toc"])) |> Enum.count() == 0
+      assert body |> LazyHTML.query("p:not([data-role])") |> LazyHTML.text() == "Before."
+    end
+
+    # THE TOOLBAR IS ANSWERED BY THE KIT'S OWN HOOK, mounted on the example's root, under the name
+    # the site's JavaScript registers the installed row by.
+    test "mounts the kit's example hook on its root", %{site: site} do
+      hook =
+        MishkaCmsCore.Runtime.JsHook
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(name == "doc-example" and site_id == ^site.id)
+        |> Ash.Query.load([:is_global])
+        |> Ash.read_one!()
+
+      assert hook, "installing the kit wrote no doc-example hook for the site"
+      assert hook.active
+
+      body =
+        example_page!(
+          site,
+          "[[component doc-example]][[component doc-callout]]Hooked.[[/component]][[/component]]"
+        )
+
+      registered =
+        MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name(hook, site.name)
+
+      assert registered == String.capitalize(site.name) <> "DocExample"
+
+      assert body
+             |> LazyHTML.query(~s([data-role="doc-example"]))
+             |> LazyHTML.attribute("phx-hook") ==
+               [registered]
+    end
+
+    # A PREVIEW RENDERS CONTENT TO A STRING, with no LiveView to draw on: the example is drawn in its
+    # frame there as well.
+    test "draws the same frame where content is rendered to a string", %{site: site} do
+      for name <- ["doc-example", "doc-callout"] do
+        :ok = SiteState.put_component(site.id, name)
+        on_exit(fn -> SiteState.delete_component(site.id, name) end)
+      end
+
+      html =
+        %{
+          html:
+            ~s([[component doc-example dir="rtl"]][[component doc-callout tone="info"]]Hi[[/component]][[/component]]),
+          site: site.name,
+          id: "preview"
+        }
+        |> MishkaCmsCore.Runtime.ContentComponents.draw(:static)
+        |> Phoenix.HTML.Safe.to_iodata()
+        |> IO.iodata_to_binary()
+        |> LazyHTML.from_fragment()
+
+      example = LazyHTML.query(html, ~s([data-role="doc-example"]))
+      assert LazyHTML.attribute(example, "id") == ["preview-0"]
+
+      page = framed(example)
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("dir") == ["rtl"]
+
+      assert page
+             |> LazyHTML.query(~s([data-role="doc-callout"]))
+             |> LazyHTML.attribute("data-tone") == ["info"]
+    end
+  end
+
   # A GROUP IS ONLY A HEADING IN THE CONTENTS, like a sidebar's NAVIGATION over its pages: it has no
   # page and no address, nothing links to it, and the pages under it are addressed as if it were not
   # there (`MishkaDocument.Address`).

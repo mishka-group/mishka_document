@@ -4,7 +4,7 @@ defmodule MishkaDocument.Kit do
 
   ## What is in the bundle, and why it is a bundle
 
-  `priv/cms_ui_kits/mishka_document.json` carries nine components of two kinds. Each is complete on
+  `priv/cms_ui_kits/mishka_document.json` carries ten components of two kinds. Each is complete on
   its own: its markup, its declarations, and its own code, including the Ash reads it runs. Nothing
   about them lives in Elixir.
 
@@ -14,15 +14,37 @@ defmodule MishkaDocument.Kit do
   `Phoenix.LiveComponent` that resolves the document from the URL itself and runs its own reads, so
   an author can put any of them on any page and each holds what it read.
 
-  ### The four pieces, which are function components
+  ### The five pieces, which are function components
 
-  `doc-workspace-card`, `doc-pager`, `doc-notice` and `doc-callout`. These hold nothing and read
-  nothing: they draw what they are handed. The notice is drawn by all five blocks — it is every
-  skeleton, every empty line and every failed read in this kit — and the card is what
+  `doc-workspace-card`, `doc-pager`, `doc-notice`, `doc-callout` and `doc-example`. These hold
+  nothing and read nothing: they draw what they are handed. The notice is drawn by all five blocks —
+  it is every skeleton, every empty line and every failed read in this kit — and the card is what
   `doc-workspace-list` draws a document with unless the author names a card of their own in its
-  `card` attribute. The callout is placed by an author inside a page's text, with the content
-  editor — `[[component doc-callout tone="tip"]]…[[/component]]` — and drawn by `doc-section`'s
-  `rich_content`, which names it for the site's stylesheet.
+  `card` attribute. The callout and the example are placed by an author inside a page's text, with
+  the content editor — `[[component doc-callout tone="tip"]]…[[/component]]` — and drawn by
+  `doc-section`'s `rich_content`, which names them for the site's stylesheet.
+
+  ### The example
+
+  `[[component doc-example title="…"]]` around the markers of the components an example is made
+  of, then `[[/component]]`. Its `inner_block` is turned into HTML and drawn as the page of an
+  `<iframe srcdoc>`: that page links the site's own stylesheet
+  (`MishkaCmsCore.Runtime.Compilers.Shared.site_css_href/1`, for the site the page is rendered
+  for), carries the example's theme as `<html data-theme>` and its direction as `<html dir>`, and
+  holds no script. The frame is `sandbox="allow-same-origin"` — the hook reads its page from
+  outside — and `loading="lazy"`, named by `title` or `frame_label`.
+
+  `theme` (light, dark; dark by default), `device` (desktop, tablet, mobile; desktop) and `dir`
+  (ltr, rtl; ltr) are what it is first drawn with, carried on its root as `data-frame-theme`,
+  `data-frame-device` and `data-frame-dir`; the frame is the page's whole width, 768 or 375
+  pixels, centred, and scrolls sideways in a narrower page. A toolbar over it —
+  `doc-example-toolbar`, its buttons `doc-example-option` with a `data-action` of theme, device or
+  dir, a `data-value` and `aria-pressed` — switches them. Every element says what it is in its
+  `data-role` for a site's stylesheet to restyle.
+
+  A component that keeps state is drawn by LiveView on the page and is never HTML a frame could
+  hold: an example holding one draws `stateful_text` in place of its frame on a live page. A
+  preview, which draws every component cold into a string, draws it in the frame.
 
   They draw themselves in plain HTML and Tailwind and call no other kit. A site that installed this
   extension and skipped Chelekom renders them; the components a documentation page is made of cannot
@@ -69,7 +91,7 @@ defmodule MishkaDocument.Kit do
   stylesheet to restyle, and what the button says is the block's `copy_text`, `copied_text` and
   `copy_label`. The window is drawn, never stored: a page's text keeps only its code.
 
-  ### The hook
+  ### The hooks
 
   `doc-code-copy` answers those buttons. `doc-section` mounts it on its own root, outside the page's
   text, under the name the site's JavaScript registers it by
@@ -79,6 +101,16 @@ defmodule MishkaDocument.Kit do
   `data-copied="true"` for 1.2 seconds and puts `copied_text` in the window's `doc-code-status`
   live region. It writes no class and no style attribute, so a site's CSP has nothing to refuse.
   Installed with the components, per site.
+
+  The `doc-example` hook answers an example's toolbar. The component of that name mounts it on its
+  own root, under the name `MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`
+  gives it. A press writes
+  the choice onto the root's `data-frame-*` and the buttons' `aria-pressed` through the hook's JS
+  commands, which a LiveView patch keeps, and onto the frame's `<html>`; the frame's width is the
+  stylesheet's, keyed on `data-frame-device`. It keeps the frame as tall as its page through the
+  frame's `height` attribute — when the page loads, its fonts arrive, the frame's width changes and
+  after every choice — and leads a link pressed in the frame to the page itself. No style
+  attribute, no class and no markup is written.
 
   ### The stylesheet
 

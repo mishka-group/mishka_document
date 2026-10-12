@@ -32,7 +32,7 @@ defmodule MishkaDocument.KitTest do
   # so it has no `mount/1`, no `id={@id}` and nothing to aim an event at.
   @live ~w(doc-workspace-list doc-section doc-sidebar doc-toc doc-switcher)
 
-  @functions ~w(doc-workspace-card doc-pager doc-notice doc-callout)
+  @functions ~w(doc-workspace-card doc-pager doc-notice doc-callout doc-example)
 
   @names @live ++ @functions
 
@@ -97,7 +97,7 @@ defmodule MishkaDocument.KitTest do
       assert bundle()["name"] == "mishka_document"
     end
 
-    test "ships exactly the nine components, each of the kind it is listed under" do
+    test "ships exactly the ten components, each of the kind it is listed under" do
       assert Enum.map(components(), & &1["name"]) |> Enum.sort() == Enum.sort(@names)
 
       for component <- components() do
@@ -538,12 +538,16 @@ defmodule MishkaDocument.KitTest do
              "the bundle's directory is not in the package, so a hex install has nothing to read"
     end
 
-    # THE COPY BUTTON ON A CODE WINDOW IS ANSWERED IN THE BROWSER, by the one hook this bundle
-    # ships, which `doc-section` mounts on its root under the name `copy_hook/0` asks the rule the
-    # site's JavaScript is built with for. It writes no style attribute and no markup, which a site's
-    # CSP and a LiveView patch would each undo.
+    test "ships exactly two hooks, one for the code windows and one for the examples" do
+      assert Enum.map(bundle()["js_hooks"], & &1["name"]) == ["doc-code-copy", "doc-example"]
+    end
+
+    # THE COPY BUTTON ON A CODE WINDOW IS ANSWERED IN THE BROWSER, by the hook `doc-section` mounts
+    # on its root under the name `copy_hook/0` asks the rule the site's JavaScript is built with for.
+    # It writes no style attribute and no markup, which a site's CSP and a LiveView patch would each
+    # undo.
     test "ships the hook doc-section mounts for the copy button on its code windows" do
-      assert [hook] = bundle()["js_hooks"]
+      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-code-copy"))
       assert hook["name"] == "doc-code-copy"
       assert hook["format"] == "js"
       assert hook["active"] == true
@@ -564,6 +568,58 @@ defmodule MishkaDocument.KitTest do
                "MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name("
 
       assert copy_hook["code"] =~ ~s(name: "doc-code-copy")
+    end
+
+    # AN EXAMPLE'S TOOLBAR IS ANSWERED IN THE BROWSER, by the hook `doc-example` mounts on its own
+    # root under the name `example_hook/0` asks the same rule for. It moves the choice onto the root
+    # and the buttons through the hook's JS commands, which a LiveView patch keeps, dresses the
+    # frame's page, and sizes the frame through its `height` attribute — never a style, which a
+    # site's CSP may refuse.
+    test "ships the hook doc-example mounts for the toolbar over its frame" do
+      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-example"))
+
+      assert hook["format"] == "js"
+      assert hook["active"] == true
+      assert hook["content"] =~ "export default DocExample;"
+      assert hook["content"] =~ ~s([data-role="doc-example-option"])
+      assert hook["content"] =~ ~s([data-role="doc-example-frame"])
+      assert hook["content"] =~ "js.setAttribute(this.el, `data-frame-${action}`, value)"
+      assert hook["content"] =~ ~s|js.setAttribute(option, "aria-pressed"|
+      assert hook["content"] =~ ~s|root.setAttribute("data-theme", theme)|
+      assert hook["content"] =~ ~s|root.setAttribute("dir", dir)|
+      assert hook["content"] =~ ~s|this.js().setAttribute(this.frame, "height"|
+      assert hook["content"] =~ "new ResizeObserver("
+
+      refute hook["content"] =~
+               ~r/setAttribute\(\s*["']style["']|\.style\b|innerHTML|insertAdjacentHTML|srcdoc\s*=/
+
+      example = Enum.find(components(), &(&1["name"] == "doc-example"))
+      example_hook = Enum.find(example["helpers"], &(&1["name"] == "example_hook"))
+
+      assert example["template"] =~
+               ~r/\A<div\n  id=\{@id\}\n[^>]*phx-hook=\{@id && example_hook\(\)\}/
+
+      assert example_hook["code"] =~
+               "MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name("
+
+      assert example_hook["code"] =~ ~s(name: "doc-example")
+    end
+
+    # THE FRAME IS ALL THE EXAMPLE NEEDS AND NOTHING MORE: its page links the site's stylesheet and
+    # carries no script, and the sandbox grants only the same origin the hook reads it through.
+    test "draws its example in a frame that runs nothing" do
+      example = Enum.find(components(), &(&1["name"] == "doc-example"))
+
+      assert example["template"] =~ ~s(sandbox="allow-same-origin")
+      assert example["template"] =~ ~s(loading="lazy")
+      refute example["template"] =~ "allow-scripts"
+      refute example["template"] =~ ~r/\sstyle=/
+
+      page = Enum.find(example["helpers"], &(&1["name"] == "frame_page"))
+      refute page["code"] =~ "<script"
+
+      link = Enum.find(example["helpers"], &(&1["name"] == "stylesheet_link"))
+      assert link["code"] =~ "MishkaCmsCore.Runtime.Compilers.Shared.site_css_href("
     end
 
     test "puts the id LiveView requires onto every live component's root element" do
@@ -664,17 +720,22 @@ defmodule MishkaDocument.KitTest do
       assert sheet.content =~ ~s([data-role="doc-code-copy"][data-copied] {)
     end
 
-    test "writes the hook the copy buttons are answered by, for the site", %{site: site} do
-      hook =
-        JsHook
-        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
-        |> Ash.Query.filter(name == "doc-code-copy" and site_id == ^site.id)
-        |> Ash.read_one!()
+    test "writes the hooks the copy buttons and the examples are answered by, for the site",
+         %{site: site} do
+      for shipped <- bundle()["js_hooks"] do
+        name = shipped["name"]
 
-      assert hook, "the hook was not installed"
-      assert hook.active
-      assert hook.format == :js
-      assert String.trim(hook.content) == String.trim(hd(bundle()["js_hooks"])["content"])
+        hook =
+          JsHook
+          |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+          |> Ash.Query.filter(name == ^name and site_id == ^site.id)
+          |> Ash.read_one!()
+
+        assert hook, "#{name} was not installed"
+        assert hook.active
+        assert hook.format == :js
+        assert String.trim(hook.content) == String.trim(shipped["content"])
+      end
     end
 
     # LAZY BY DEFAULT, like any other component. `precompile: true` is for a component a site cannot
