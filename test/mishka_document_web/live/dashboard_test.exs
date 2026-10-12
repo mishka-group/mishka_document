@@ -226,6 +226,30 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     refute has_element?(view, "#section-front-page")
   end
 
+  # A GROUP IS ONLY A HEADING, so its card carries no address: a Group chip in place of its slug.
+  test "the Sections screen draws a group as a heading with no address", %{conn: conn} do
+    site = master_site()
+    workspace = create_workspace!(site_id: site.id)
+    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+    create_section!(
+      site_id: site.id,
+      workspace_version_id: version.id,
+      title: "Navigation",
+      slug: "navigation-group",
+      group_heading: true
+    )
+
+    conn = log_in(conn, create_admin("docgroup@example.com"))
+
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document/sections/#{version.id}")
+    render_async(view, 5_000)
+    html = render_async(view, 5_000)
+
+    assert has_element?(view, ~s([data-role="sec-group"]), "Group")
+    refute html =~ "/navigation-group"
+  end
+
   defp archived_issue!(site) do
     issue = create_issue!(site_id: site.id)
     Ash.destroy!(issue, action: :master_destroy, authorize?: false)

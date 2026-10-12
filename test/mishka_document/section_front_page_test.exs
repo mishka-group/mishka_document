@@ -164,6 +164,59 @@ defmodule MishkaDocument.Test.SectionFrontPageTest do
     end
   end
 
+  # A GROUP IS ONLY A HEADING in the contents, and the pages under it are addressed as if it were not
+  # there — so a page's whole address, not only its slug among its siblings, must be its own.
+  describe "a group" do
+    test "is a page marked as one, and not a front page as well", ctx do
+      assert {:ok, %{group_heading: true}} = create(ctx, %{group_heading: true})
+
+      assert {:error, error} = create(ctx, %{group_heading: true, front_page: true})
+
+      assert Enum.any?(
+               messages(error),
+               &(&1 =~ "A page cannot be both its document's front page and a group")
+             )
+    end
+
+    test "leaves no room for two pages at one address", ctx do
+      {:ok, group} = create(ctx, %{group_heading: true, slug: "navigation"})
+      {:ok, _top} = create(ctx, %{slug: "breadcrumb", title: "Breadcrumb"})
+
+      assert {:error, error} =
+               create(ctx, %{slug: "breadcrumb", parent_section_id: group.id})
+
+      assert Enum.any?(
+               messages(error),
+               &(&1 =~ "The page Breadcrumb of this version is read at /breadcrumb too")
+             )
+
+      assert {:ok, _apart} = create(ctx, %{slug: "menu", parent_section_id: group.id})
+    end
+
+    test "and neither does a front page's, nor a page turned into a group", ctx do
+      {:ok, front} = create(ctx, %{front_page: true, slug: "get-started"})
+      {:ok, _install} = create(ctx, %{slug: "install", parent_section_id: front.id})
+
+      assert {:error, _clash} = create(ctx, %{slug: "install"})
+
+      {:ok, chapter} = create(ctx, %{slug: "chapter"})
+      {:ok, _tabs} = create(ctx, %{slug: "tabs", parent_section_id: chapter.id})
+      {:ok, _top_tabs} = create(ctx, %{slug: "tabs", title: "Tabs"})
+
+      assert {:error, error} = write(ctx, chapter, %{group_heading: true})
+      assert Enum.any?(messages(error), &(&1 =~ "is read at /tabs too"))
+    end
+
+    test "and an update is held to it too", ctx do
+      {:ok, group} = create(ctx, %{group_heading: true, slug: "navigation"})
+      {:ok, _top} = create(ctx, %{slug: "breadcrumb"})
+      {:ok, page} = create(ctx, %{slug: "crumbs", parent_section_id: group.id})
+
+      assert {:error, _clash} = write(ctx, page, %{slug: "breadcrumb"})
+      assert {:ok, _renamed} = write(ctx, page, %{slug: "trail"})
+    end
+  end
+
   test "the admin form marks it with a toggle, after Parent Section" do
     field = FormInfo.field(Section, :front_page)
 
@@ -175,6 +228,10 @@ defmodule MishkaDocument.Test.SectionFrontPageTest do
       |> FormInfo.groups()
       |> Enum.find(&(&1.name == :references))
 
-    assert [_, _, :parent_section_id, :front_page | _] = references.fields
+    assert [_, _, :parent_section_id, :front_page, :group_heading | _] = references.fields
+
+    group = FormInfo.field(Section, :group_heading)
+    assert group, "the form has no Group field"
+    assert group.type == :toggle
   end
 end

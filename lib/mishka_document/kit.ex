@@ -52,7 +52,10 @@ defmodule MishkaDocument.Kit do
 
   A version may mark one page at its top as its front page: every block reads that page at the
   document's own address, in place of the landing, links to it there, and files the pages under it
-  directly under that address (`MishkaDocument.Address`).
+  directly under that address (`MishkaDocument.Address`). A page marked as a group is only a heading
+  over the pages under it — in the contents and on the landing — with no page or address of its own:
+  nothing links to it, Previous and Next step over it, and its pages are addressed as if it were not
+  there.
 
   A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
   text is stored through, and drawn with `rich_content/1`, so a component the author placed in them

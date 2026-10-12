@@ -66,11 +66,11 @@ defmodule MishkaDocument.Plugins.PageRecords do
   defp documents(_no_site), do: []
 
   # A version's front page is drawn at its document's address, which the document's own samples
-  # name, so it is no sample of a page.
+  # name, and a group is only a heading, with no page of its own: neither is a sample of a page.
   defp pages(site_id) when is_binary(site_id) do
     Section
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
-    |> Ash.Query.filter(front_page == false)
+    |> Ash.Query.filter(front_page == false and group_heading == false)
     |> Ash.Query.select([:id, :title, :slug, :language, :workspace_version_id])
     |> Ash.Query.load(workspace_version: [workspace: [:slug]])
     |> Ash.Query.sort(updated_at: :desc)
@@ -102,7 +102,14 @@ defmodule MishkaDocument.Plugins.PageRecords do
     Section
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
     |> Ash.Query.filter(workspace_version_id in ^Enum.uniq(version_ids))
-    |> Ash.Query.select([:id, :slug, :parent_section_id, :front_page, :workspace_version_id])
+    |> Ash.Query.select([
+      :id,
+      :slug,
+      :parent_section_id,
+      :front_page,
+      :group_heading,
+      :workspace_version_id
+    ])
     |> Ash.read(tenant: site_id, authorize?: false, page: false)
     |> case do
       {:ok, found} ->

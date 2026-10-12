@@ -769,6 +769,116 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # A GROUP IS ONLY A HEADING IN THE CONTENTS, like a sidebar's NAVIGATION over its pages: it has no
+  # page and no address, nothing links to it, and the pages under it are addressed as if it were not
+  # there (`MishkaDocument.Address`).
+  describe "a document with a group" do
+    test "draws it in the contents as a heading over its pages, always open", %{site: site} do
+      grouped!(site)
+
+      {:ok, contents, _html} =
+        mount_page(site, "doc-sidebar", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "upgrading"}
+        })
+
+      assert text_of(contents, ~s([data-role="doc-sidebar-group"])) == ["Navigation"]
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/mishka/docs/getting-started",
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/menu",
+               "/mishka/docs/upgrading"
+             ]
+
+      refute "/mishka/docs/navigation" in hrefs(contents, "a")
+    end
+
+    test "keeps it in a filtered list while one of its pages matches", %{site: site} do
+      grouped!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-sidebar", %{path: "/mishka/docs", lang_param: "", show_filter: true})
+
+      view |> form(~s(#one form), %{"q" => "crumb"}) |> render_change()
+      assert text_of(view, ~s([data-role="doc-sidebar-group"])) == ["Navigation"]
+      assert text_of(view, ~s([data-role="doc-sidebar-link"])) == ["Breadcrumb"]
+
+      view |> form(~s(#one form), %{"q" => "upgr"}) |> render_change()
+      assert text_of(view, ~s([data-role="doc-sidebar-group"])) == []
+      assert text_of(view, ~s([data-role="doc-sidebar-link"])) == ["Upgrading"]
+
+      view |> form(~s(#one form), %{"q" => "navigation"}) |> render_change()
+      assert text_of(view, ~s([data-role="doc-sidebar-group"])) == []
+    end
+
+    test "lists it on the landing as a heading over its pages", %{site: site} do
+      grouped!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-landing-items"] [data-role="doc-landing-link"])) ==
+               ["Getting started", "Upgrading"]
+
+      assert text_of(view, ~s([data-role="doc-landing-group-title"])) == ["Navigation"]
+
+      assert hrefs(view, ~s([data-role="doc-landing-group"] [data-role="doc-landing-link"])) == [
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/menu"
+             ]
+    end
+
+    test "steps over it from page to page, and names it in the trail as a word", %{site: site} do
+      grouped!(site)
+      attrs = %{path: "/mishka/docs", lang_param: ""}
+
+      {:ok, first, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(attrs, :params, %{"section" => "getting-started"})
+        )
+
+      assert hrefs(first, ~s([data-role="doc-section-next"])) == ["/mishka/docs/breadcrumb"]
+
+      {:ok, crumb, _html} =
+        mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => "breadcrumb"}))
+
+      assert text_of(crumb, ~s([data-role="doc-section-title"])) == ["Breadcrumb"]
+      assert hrefs(crumb, ~s([data-role="doc-section-prev"])) == ["/mishka/docs/getting-started"]
+      assert text_of(crumb, ~s([data-role="doc-section-crumb"])) == ["Navigation"]
+      assert hrefs(crumb, ~s([data-role="doc-section-crumb"])) == []
+    end
+
+    test "has no address: its would-be one is a missing page, and no block takes it for a page",
+         %{site: site} do
+      grouped!(site)
+
+      for section <- ["navigation", "navigation/breadcrumb"] do
+        assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+          mount_page(site, "doc-section", %{
+            path: "/mishka/docs",
+            lang_param: "",
+            params: %{"section" => section}
+          })
+        end
+      end
+
+      attrs = %{path: "/mishka/docs", lang_param: "", params: %{"section" => "navigation"}}
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == []
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", attrs)
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"][aria-current="page"])) == []
+
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == ["/mishka/docs"]
+    end
+  end
+
   # THE PAGE'S OWN TEXT IS STYLED, AND NOTHING A COMPONENT IN IT DRAWS. The body's and a note's
   # rules reach only the content's own elements — the body's children with no class of their own and
   # what sits in those — so a component placed in the text keeps its own look: its `<li>` gets no
@@ -3033,6 +3143,42 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     page!(site, older, title: "Get started", slug: "get-started", order_position: 0)
 
     %{document: document, version: version, front: front}
+  end
+
+  # One manual at /mishka/docs whose contents hold the group "Navigation" between two pages, with
+  # "Breadcrumb" and "Menu" under it.
+  defp grouped!(site) do
+    document = document!(site, name: "Grouped", slug: "grouped", path: "/mishka/docs")
+    version = version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
+
+    page!(site, version, title: "Getting started", slug: "getting-started", order_position: 0)
+
+    group =
+      page!(site, version,
+        title: "Navigation",
+        slug: "navigation",
+        order_position: 1,
+        group_heading: true,
+        content: nil
+      )
+
+    page!(site, version,
+      title: "Breadcrumb",
+      slug: "breadcrumb",
+      order_position: 0,
+      parent_section_id: group.id
+    )
+
+    page!(site, version,
+      title: "Menu",
+      slug: "menu",
+      order_position: 1,
+      parent_section_id: group.id
+    )
+
+    page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 2)
+
+    %{document: document, version: version, group: group}
   end
 
   defp public_versions(site, document) do

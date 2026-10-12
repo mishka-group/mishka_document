@@ -175,6 +175,17 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       assert paths(listed(site)) == ["/product/docs/install", "/product/docs/upgrading"]
     end
 
+    # A GROUP IS ONLY A HEADING, with no address to list, and its pages are listed as if it were not
+    # there.
+    test "lists no group, and the pages under one directly under the address", %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      group = page!(site, version, "navigation", group_heading: true)
+      page!(site, version, "breadcrumb", parent_section_id: group.id)
+
+      assert paths(listed(site)) == ["/product/docs/breadcrumb"]
+    end
+
     test "lists nothing for it once the page at its address is gone", %{site: site} do
       document = document!(site, slug: "product", path: "/product/docs")
       version = version!(site, document, is_latest_for_version: true)

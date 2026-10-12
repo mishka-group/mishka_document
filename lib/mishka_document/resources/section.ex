@@ -71,6 +71,7 @@ defmodule MishkaDocument.Section do
     :workspace_version_id,
     :parent_section_id,
     :front_page,
+    :group_heading,
     :title,
     :slug,
     :content,
@@ -232,7 +233,7 @@ defmodule MishkaDocument.Section do
         # smaller open share and :section_content takes the slack.
         column :section_title do
           static true
-          requires [:id, :title, :slug, :front_page, :breadcrumb_path]
+          requires [:id, :title, :slug, :front_page, :group_heading, :breadcrumb_path]
           label fn -> dgettext("mishka_gervaz", "Section") end
           position :first
           sortable true
@@ -256,6 +257,7 @@ defmodule MishkaDocument.Section do
               title: record.title,
               slug: record.slug,
               front_page?: record.front_page == true,
+              group?: record.group_heading == true,
               path: Enum.join(crumbs, " › ")
             }
 
@@ -270,10 +272,21 @@ defmodule MishkaDocument.Section do
               </div>
               <div class="truncate text-[13.5px] font-semibold text-[#17161a]">{@title}</div>
               <div class="mt-[2px] flex items-center gap-[5px]">
-                <span class="truncate font-['Space_Grotesk'] text-[11px] font-medium text-[#a8a5a0]">
+                <span
+                  :if={@group?}
+                  title={dgettext("mishka_gervaz", "Only a heading in the contents, with no address")}
+                  class="rounded-[5px] bg-[#f4f3ee] px-[6px] py-[1px] text-[9.5px] font-bold uppercase text-[#6d6a63]"
+                >
+                  {dgettext("mishka_gervaz", "Group")}
+                </span>
+                <span
+                  :if={not @group?}
+                  class="truncate font-['Space_Grotesk'] text-[11px] font-medium text-[#a8a5a0]"
+                >
                   /{@slug}
                 </span>
                 <.copy_button
+                  :if={not @group?}
                   id={"section-slug-copy-#{@id}"}
                   value={@slug}
                   label={dgettext("mishka_gervaz", "Copy slug")}
@@ -997,6 +1010,19 @@ defmodule MishkaDocument.Section do
           end
         end
 
+        field :group_heading, :toggle do
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Group") end
+
+            description fn ->
+              dgettext(
+                "mishka_gervaz",
+                "Only a heading in the contents: it has no page of its own, and the pages under it keep their address as if it were not there."
+              )
+            end
+          end
+        end
+
         field :source_section_id, :relation do
           display_field :title
           search_field :title
@@ -1251,6 +1277,7 @@ defmodule MishkaDocument.Section do
             :workspace_version_id,
             :parent_section_id,
             :front_page,
+            :group_heading,
             :source_section_id
           ]
 
@@ -1337,6 +1364,7 @@ defmodule MishkaDocument.Section do
 
     field :order_position, :integer, derives: "validate(optional=[integer, min_len=0])"
     field :front_page, :boolean, derives: "validate(boolean)"
+    field :group_heading, :boolean, derives: "validate(boolean)"
 
     field :change_version, :string,
       derives: "sanitize(trim) validate(optional=[string, max_len=50, semver])"
@@ -1962,6 +1990,28 @@ defmodule MishkaDocument.Section do
         :ok
       end
     end
+
+    # A GROUP HAS NO PAGE OF ITS OWN, so it cannot be the page a document's address draws.
+    validate fn changeset, _context ->
+      if Ash.Changeset.get_attribute(changeset, :front_page) == true and
+           Ash.Changeset.get_attribute(changeset, :group_heading) == true do
+        {:error,
+         field: :group_heading,
+         message:
+           dgettext_noop(
+             "errors",
+             "A page cannot be both its document's front page and a group."
+           )}
+      else
+        :ok
+      end
+    end
+
+    # A PAGE'S WHOLE ADDRESS IS ITS OWN in its version, now that a front page's and a group's slugs
+    # are in none: two pages under two parents may otherwise meet at one address.
+    validate MishkaDocument.Resources.Validations.SectionAddress,
+      on: [:create, :update],
+      only_when_valid?: true
   end
 
   # Multi-tenancy configuration - sections are always site-specific
@@ -2012,6 +2062,16 @@ defmodule MishkaDocument.Section do
       public? true
       default false
       description "Whether the page is drawn at its document's own address instead of under it"
+    end
+
+    # ONLY A HEADING IN THE CONTENTS: no page of its own and no address, and the pages under it are
+    # addressed as if it were not there (`MishkaDocument.Address`).
+    attribute :group_heading, :boolean do
+      allow_nil? false
+      public? true
+      default false
+
+      description "Whether the page is only a heading over the pages under it, with no page of its own"
     end
 
     attribute :change_version, :string do

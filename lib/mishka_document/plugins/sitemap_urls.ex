@@ -15,7 +15,8 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   instead, its pages under it: its front page is a page of the site at a fixed path, which the
   sitemap already lists as one, so only its pages are added here. A version's front page is drawn
   at its document's own address (`MishkaDocument.Address`), so it is listed as that and never under
-  its own slug, which is a missing page. An address is listed only while
+  its own slug, which is a missing page; a group is only a heading, with no address to list. An
+  address is listed only while
   the site serves its page: the page at that exact path is among `pages`, and it answers the
   document's language (`MishkaCmsCore.Runtime.PageEditions.served_languages/2`). A page moved to
   another path, taken down, closed to visitors or marked noindex lists nothing.
@@ -171,8 +172,10 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   defp front(workspace),
     do: %{Languages.capture() => workspace.language, "workspace" => workspace.slug}
 
-  # A page's own address, but none for a front page: its address is its document's, listed with it.
+  # A page's own address, but none for a front page — its address is its document's, listed with it
+  # — and none for a group, which has none.
   defp own_page_address(_site_id, _served, _workspace, %{front_page: true}, _segments), do: []
+  defp own_page_address(_site_id, _served, _workspace, %{group_heading: true}, _segments), do: []
 
   defp own_page_address(site_id, served, workspace, section, segments) do
     page_address(
@@ -259,7 +262,14 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     Section
     |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
     |> Ash.Query.filter(workspace_version_id in ^version_ids)
-    |> Ash.Query.select([:id, :slug, :parent_section_id, :front_page, :workspace_version_id])
+    |> Ash.Query.select([
+      :id,
+      :slug,
+      :parent_section_id,
+      :front_page,
+      :group_heading,
+      :workspace_version_id
+    ])
     |> Ash.read!(actor: nil, tenant: site_id, page: false)
     |> Enum.group_by(& &1.workspace_version_id)
     |> Map.new(fn {version_id, pages} -> {version_id, Address.paths(pages)} end)
@@ -277,6 +287,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       :id,
       :slug,
       :front_page,
+      :group_heading,
       :updated_at,
       :workspace_version_id,
       :permissions,

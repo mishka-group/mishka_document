@@ -24,7 +24,8 @@ defmodule MishkaDocument.Plugins.PageSeo do
   newest published, and the page is the one at the address the `section` capture holds —
   `headless/switch` — read once more for its own text and lock. A version's front page is at the
   document's own address and nowhere under it (`MishkaDocument.Address`), so a `section` naming its
-  slug names nothing.
+  slug names nothing; a group is only a heading in the contents, and nothing is named at its slug
+  either.
 
   ## What it returns
 
@@ -223,7 +224,8 @@ defmodule MishkaDocument.Plugins.PageSeo do
     WorkspaceVersion
     |> Ash.Query.select(@version_fields)
     |> Ash.Query.load(
-      sections: Ash.Query.select(Section, [:id, :slug, :parent_section_id, :front_page])
+      sections:
+        Ash.Query.select(Section, [:id, :slug, :parent_section_id, :front_page, :group_heading])
     )
   end
 

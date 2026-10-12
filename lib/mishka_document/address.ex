@@ -17,6 +17,10 @@ defmodule MishkaDocument.Address do
   its own part of the address is empty, so `/chelekom/docs` is that page, `/chelekom/docs/<its slug>`
   is a missing page, and the pages filed under it sit directly under the document's address.
 
+  A group (`group_heading`) is only a heading in the contents: it has no address at all, and the
+  pages filed under it are addressed as if it were not there — `breadcrumb` under the group
+  `navigation` is `/chelekom/docs/breadcrumb`, and `/chelekom/docs/navigation` is a missing page.
+
   An address is a site path: segments of lower-case letters, digits and dashes, and `:lang` at most
   once, where the site's language goes, as in a page's path. The rules live here because the
   document, its pages, the head and the sitemap all read them, and must agree.
@@ -138,7 +142,8 @@ defmodule MishkaDocument.Address do
 
   @doc """
   A page's own part of its address, root first: the slugs of the pages it is drawn under, then its
-  own, a front page's left out — `[]` for the front page itself. `parent_of` answers the parent each
+  own, a front page's and a group's left out — `[]` for the front page itself. `parent_of` answers
+  the parent each
   page is drawn under, or `nil` at the top — which may not be the parent it names, when that one is
   not published. A parent chain deeper than twenty, which only a loop makes, stops there.
   """
@@ -147,8 +152,8 @@ defmodule MishkaDocument.Address do
 
   @doc """
   Every page's own part of its address among `sections` — the pages of one version a reader is
-  shown, each with its `id`, `slug`, `parent_section_id` and `front_page` — as
-  `%{id => ["headless", "switch"]}`, and `[]` for the front page.
+  shown, each with its `id`, `slug`, `parent_section_id`, `front_page` and `group_heading` — as
+  `%{id => ["headless", "switch"]}`, and `[]` for the front page. A group has none, and is not in it.
 
   A page is under its parent when that parent is among them and walking up from it reaches the top;
   otherwise it is at the top. That is the rule the documentation's blocks draw the contents by, so a
@@ -157,18 +162,23 @@ defmodule MishkaDocument.Address do
   @spec paths([map()]) :: %{optional(term()) => [String.t()]}
   def paths(sections) when is_list(sections) do
     by_id = Map.new(sections, &{&1.id, &1})
-    Map.new(sections, &{&1.id, section_path(&1, fn page -> drawn_under(by_id, page) end)})
+
+    for section <- sections,
+        not group?(section),
+        into: %{},
+        do: {section.id, section_path(section, fn page -> drawn_under(by_id, page) end)}
   end
 
   @doc """
   The page among `sections` whose own part of the address is `segments` — `["headless", "switch"]`,
   or the `"headless/switch"` a `*section` capture holds — or `nil`. Nothing asked, `[]` or `""`, is
-  the front page, when they hold one.
+  the front page, when they hold one. A group is never the page at an address.
   """
   @spec page_at([map()], [String.t()] | String.t()) :: map() | nil
   def page_at(sections, wanted) when is_binary(wanted), do: page_at(sections, segments(wanted))
 
-  def page_at(sections, []) when is_list(sections), do: Enum.find(sections, &front_page?/1)
+  def page_at(sections, []) when is_list(sections),
+    do: Enum.find(sections, &(front_page?(&1) and not group?(&1)))
 
   def page_at(sections, [_ | _] = segments) when is_list(sections) do
     paths = paths(sections)
@@ -180,6 +190,10 @@ defmodule MishkaDocument.Address do
   @doc "Whether a page is its version's front page, drawn at its document's own address."
   @spec front_page?(map()) :: boolean()
   def front_page?(section), do: Map.get(section, :front_page) == true
+
+  @doc "Whether a page is a group: only a heading in the contents, with no page or address of its own."
+  @spec group?(map()) :: boolean()
+  def group?(section), do: Map.get(section, :group_heading) == true
 
   defp drawn_under(by_id, page) do
     case Map.get(by_id, page.parent_section_id) do
@@ -205,7 +219,7 @@ defmodule MishkaDocument.Address do
     do: climb(parent_of.(section), parent_of, own_part(section, path), depth + 1)
 
   defp own_part(section, path) do
-    if front_page?(section), do: path, else: [section.slug | path]
+    if front_page?(section) or group?(section), do: path, else: [section.slug | path]
   end
 
   defp in_docs_base?(segments) do

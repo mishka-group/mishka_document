@@ -566,6 +566,44 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
     end
   end
 
+  # A GROUP IS ONLY A HEADING: nothing is named at its slug, and the pages under it are named as if it
+  # were not there.
+  describe "a document whose contents hold a group" do
+    setup %{site: site} do
+      document = document!(site, slug: "product", name: "Product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      group = page!(site, version, "navigation", title: "Navigation", group_heading: true)
+      page!(site, version, "breadcrumb", title: "Breadcrumb", parent_section_id: group.id)
+      :ok
+    end
+
+    defp in_group(site, params) do
+      Seo.given(
+        %{
+          title: "Document page",
+          path: "/product/docs/*section",
+          language: "en",
+          seo: %{description: nil, schema: []}
+        },
+        site_id: site.id,
+        url: base() <> "/asked/elsewhere",
+        params: params,
+        record: "docs:page"
+      )
+    end
+
+    test "names nothing at the group's slug", %{site: site} do
+      for section <- ["navigation", "navigation/breadcrumb"] do
+        assert answer(in_group(site, %{"section" => section})).title == "Document page"
+      end
+    end
+
+    test "names a page under it directly under the address", %{site: site} do
+      page = answer(in_group(site, %{"section" => "breadcrumb"}))
+      assert {page.title, page.url} == {"Breadcrumb", base() <> "/product/docs/breadcrumb"}
+    end
+  end
+
   describe "who may open it" do
     setup %{site: site} do
       document = document!(site, slug: "members", permissions: ["members:read"])
@@ -810,6 +848,18 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
         MishkaDocument.Plugins.PageRecords.types(site.id)
 
       assert Enum.map(samples, & &1.params["section"]) == ["install"]
+    end
+
+    test "preview no group, and a page under one directly under the document", %{site: site} do
+      document = document!(site, slug: "guide", name: "Guide")
+      version = version!(site, document, is_latest_for_version: true)
+      group = page!(site, version, "navigation", title: "Navigation", group_heading: true)
+      page!(site, version, "breadcrumb", title: "Breadcrumb", parent_section_id: group.id)
+
+      [_documents, %{id: "docs:page", samples: samples}] =
+        MishkaDocument.Plugins.PageRecords.types(site.id)
+
+      assert Enum.map(samples, & &1.params["section"]) == ["breadcrumb"]
     end
   end
 

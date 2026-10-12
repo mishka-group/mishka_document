@@ -291,8 +291,20 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
             <span class="font-['Space_Grotesk'] text-[17px] font-semibold tracking-[-0.01em] text-[#17161a]">
               {@record.title}
             </span>
-            <span dir="ltr" class="font-['Space_Grotesk'] text-[12px] font-semibold text-[#a8a5a0]">
+            <span
+              :if={Map.get(@record, :group_heading) != true}
+              dir="ltr"
+              class="font-['Space_Grotesk'] text-[12px] font-semibold text-[#a8a5a0]"
+            >
               /{@record.slug}
+            </span>
+            <span
+              :if={Map.get(@record, :group_heading) == true}
+              data-role="sec-group"
+              title={dgettext("mishka_gervaz", "Only a heading in the contents, with no address")}
+              class="rounded-md bg-[#f4f3ee] px-2 py-[3px] text-[10px] font-bold uppercase tracking-[0.05em] text-[#6d6a63]"
+            >
+              {dgettext("mishka_gervaz", "Group")}
             </span>
             <span
               :if={Map.get(@record, :front_page) == true}

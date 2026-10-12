@@ -132,6 +132,32 @@ defmodule MishkaDocument.DocumentAddressTest do
       assert Address.front_page?(by_id[1])
       refute Address.front_page?(%{slug: "x"})
     end
+
+    test "address the pages under a group as if it were not there, and the group nowhere" do
+      pages = [
+        %{id: 1, slug: "navigation", parent_section_id: nil, group_heading: true},
+        %{id: 2, slug: "breadcrumb", parent_section_id: 1},
+        %{id: 3, slug: "menus", parent_section_id: 1, group_heading: true},
+        %{id: 4, slug: "dropdown", parent_section_id: 3},
+        %{id: 5, slug: "headless", parent_section_id: nil},
+        %{id: 6, slug: "tabs", parent_section_id: 5}
+      ]
+
+      assert Address.paths(pages) == %{
+               2 => ["breadcrumb"],
+               4 => ["dropdown"],
+               5 => ["headless"],
+               6 => ["headless", "tabs"]
+             }
+
+      assert Address.page_at(pages, "breadcrumb").id == 2
+      assert Address.page_at(pages, "dropdown").id == 4
+      assert Address.page_at(pages, "navigation") == nil
+      assert Address.page_at(pages, "navigation/breadcrumb") == nil
+      assert Address.page_at(pages, "") == nil
+      assert Address.group?(Enum.at(pages, 0))
+      refute Address.group?(Enum.at(pages, 1))
+    end
   end
 
   describe "a document given an address" do

@@ -173,6 +173,7 @@ defmodule MishkaDocument.Dev.Generator do
         content: sequence(:content, &"Test section content #{&1}"),
         order_position: 0,
         front_page: false,
+        group_heading: false,
         change_version: "0.0.1",
         content_review_status: :pending,
         technical_review_status: :pending,
