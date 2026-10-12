@@ -880,89 +880,182 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   end
 
   # THE PAGE'S OWN TEXT IS STYLED, AND NOTHING A COMPONENT IN IT DRAWS. The body's and a note's
-  # rules reach only the content's own elements — the body's children with no class of their own and
-  # what sits in those — so a component placed in the text keeps its own look: its `<li>` gets no
-  # bullet and its `<a>` no underline. Each rule is read off the markup and run as the selector it
-  # compiles to.
+  # rules reach an element with no class and nothing with a class between it and the body: what the
+  # editor writes carries no class, and a component's markup does — so a component drawn at the top,
+  # one whose own root is a heading or a list, and one placed inside a list item keep their own look.
+  # Each rule is read off the markup and run as the selector it compiles to.
   describe "the text of a page" do
-    defp rules(view, role) do
-      [class] =
-        view
-        |> render_async(@async)
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query(~s([data-role="#{role}"]))
-        |> LazyHTML.attribute("class")
-        |> Enum.take(1)
-
-      class
-      |> String.split()
-      |> Enum.filter(&String.starts_with?(&1, "[&"))
-      |> Enum.map(fn rule ->
-        [variant, _utility] = String.split(rule, "]:", parts: 2)
-
-        variant
-        |> String.trim_leading("[")
-        |> String.replace("_", " ")
-        |> String.replace("&", ~s([data-role="#{role}"]))
-      end)
-      |> Enum.uniq()
-    end
-
-    test "styles its own lists and links, and not a component's", %{site: site} do
-      name = "content-list"
+    # A COMPONENT'S MARKUP AS CHELEKOM WRITES IT: every element carries classes of its own. Each is
+    # marked `data-part="component"` too, so a test can tell it from the page's own HTML.
+    defp marked!(site, name, template) do
       :ok = SiteState.put_component(site.id, name)
       on_exit(fn -> SiteState.delete_component(site.id, name) end)
+      create_component!(name: name, site_id: site.id, active: true, template: template)
+    end
 
-      create_component!(
-        name: name,
-        site_id: site.id,
-        active: true,
-        template:
-          ~S|<ul class="m-0" data-role="content-list" data-mark="component"><li class="p-1" data-mark="component"><a class="no-underline" href="/x" data-mark="component">Home</a></li></ul>|,
-        attrs: [],
-        slots: []
-      )
+    defp crumbs!(site),
+      do:
+        marked!(
+          site,
+          "content-crumbs",
+          ~S|<nav data-role="content-crumbs" data-part="component" class="text-sm"><ol data-part="component" class="flex items-center gap-2"><li data-part="component" class="flex items-center"><a data-part="component" href="https://example.com/home" class="text-[#5b57d6]">Home</a></li><li data-part="component" class="flex items-center">Here</li></ol></nav>|
+        )
 
+    defp heading!(site),
+      do:
+        marked!(
+          site,
+          "content-heading",
+          ~S|<h2 data-role="content-heading" data-part="component" class="text-3xl font-black">Drawn heading</h2>|
+        )
+
+    defp listed!(site),
+      do:
+        marked!(
+          site,
+          "content-list",
+          ~S|<ul data-role="content-list" data-part="component" class="m-0"><li data-part="component" class="p-1"><a data-part="component" class="no-underline" href="https://example.com/x">Listed</a></li></ul>|
+        )
+
+    defp linked!(site),
+      do:
+        marked!(
+          site,
+          "content-link",
+          ~S|<a data-role="content-link" data-part="component" class="font-bold" href="https://example.com/drawn">Drawn link</a>|
+        )
+
+    defp text_page!(site, content, note \\ nil) do
       %{version: version} = manual!(site)
 
-      content =
-        ~s(<p>Intro <a href="/a">a link</a>.</p><ul><li>One</li><li>Two</li></ul>) <>
-          "[[component content-list /]]"
-
       page =
-        page!(site, version, title: "Lists", slug: "lists", order_position: 9, content: content)
+        page!(site, version, title: "Text", slug: "text", order_position: 9, content: content)
 
-      note!(site, page, title: "Aside", content: content)
+      if note, do: note!(site, page, title: "Aside", content: note)
 
       {:ok, view, _html} =
-        mount_page(site, "doc-section", %{
-          workspace: "mishka-cms",
-          params: %{"section" => "lists"}
-        })
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", params: %{"section" => "text"}})
 
-      html = view |> render_async(@async) |> LazyHTML.from_fragment()
+      {view, page}
+    end
 
-      assert html |> LazyHTML.query(~s([data-role="content-list"] li)) |> Enum.count() == 2
+    # WHAT EACH CONTENT STYLE ON `role` REACHES: every `[selector]:utility` class of it, read as the
+    # rule Tailwind writes for it — `&` the element, `_` a space — and run over the drawn page. One
+    # `{utility, elements}` per class.
+    defp styled(view, role) do
+      page = view |> render_async(@async) |> LazyHTML.from_fragment()
+      scope = ~s([data-role="#{role}"])
+      [classes | _] = page |> LazyHTML.query(scope) |> LazyHTML.attribute("class")
+
+      for class <- String.split(classes),
+          [_class, selector, utility] <- [Regex.run(~r/\A\[(.+)\]:([^\]]+)\z/, class)] do
+        rule = selector |> String.replace("_", " ") |> String.replace("&", scope)
+        {utility, page |> LazyHTML.query(rule) |> Enum.to_list()}
+      end
+    end
+
+    defp reached(styled, utility),
+      do: for({^utility, elements} <- styled, element <- elements, do: element)
+
+    defp reached_component(styled),
+      do:
+        for(
+          {_utility, elements} <- styled,
+          element <- elements,
+          LazyHTML.attribute(element, "data-part") == ["component"],
+          do: element
+        )
+
+    test "its own list and link take its styles, and a component's list and link do not",
+         %{site: site} do
+      crumbs!(site)
+      listed!(site)
+
+      content =
+        ~s(<p>Read <a href="https://example.com/guide">the guide</a> first.</p>) <>
+          "<ul><li><p>Own item</p></li></ul><ol><li><p>First step</p></li></ol>" <>
+          "<p>[[component content-crumbs /]]</p>[[component content-list /]]"
+
+      {view, _page} = text_page!(site, content, content)
+
+      assert view |> render_async(@async) |> roles("content-crumbs") == 2
 
       for role <- ["doc-section-body", "doc-note-body"] do
-        selectors = rules(view, role)
+        styles = styled(view, role)
 
-        refute Enum.any?(selectors, &String.contains?(&1, ~s|"] |)),
-               "#{role} reaches any descendant of the text"
+        assert styles |> reached("list-disc") |> Enum.map(&LazyHTML.text/1) == ["Own item"]
+        assert styles |> reached("list-decimal") |> Enum.map(&LazyHTML.text/1) == ["First step"]
 
-        for selector <- selectors do
-          assert html |> LazyHTML.query(selector <> "[data-mark]") |> Enum.count() == 0,
-                 "#{role}'s #{selector} reaches into the component's own markup"
-        end
+        assert styles |> reached("ml-5") |> Enum.map(&LazyHTML.text/1) == [
+                 "Own item",
+                 "First step"
+               ]
 
-        list = ~s|[data-role="#{role}"]>ul:not([class])>li|
-        assert list in selectors
-        assert html |> LazyHTML.query(list) |> Enum.count() == 2
+        assert styles |> reached("underline") |> Enum.flat_map(&LazyHTML.attribute(&1, "href")) ==
+                 ["https://example.com/guide"]
 
-        link = ~s|[data-role="#{role}"]>p:not([class])>a|
-        assert link in selectors
-        assert html |> LazyHTML.query(link) |> LazyHTML.text() == "a link"
+        assert reached_component(styles) == [], "#{role} reaches a component's markup"
       end
+    end
+
+    # A COMPONENT IS NOT TEXT WHEREVER IT IS DRAWN: one whose own root is a heading, a list or a link,
+    # and one placed inside a list item, keep the classes they were drawn with.
+    test "a component drawn as a heading, or inside a list item, is left to its own classes",
+         %{site: site} do
+      heading!(site)
+      crumbs!(site)
+      listed!(site)
+      linked!(site)
+
+      {view, _page} =
+        text_page!(
+          site,
+          "<h2>Own heading</h2><p>[[component content-heading /]]</p>" <>
+            "<ul><li><p>Own item</p><p>[[component content-crumbs /]]</p>" <>
+            "<p>[[component content-list /]]</p><p>[[component content-link /]]</p></li></ul>" <>
+            ~s(<blockquote><p>Quoted <a href="https://example.com/source">source</a></p></blockquote>)
+        )
+
+      html = render_async(view, @async)
+      assert roles(html, "content-heading") == 1
+
+      for role <- ["content-crumbs", "content-list", "content-link"] do
+        assert html
+               |> LazyHTML.from_fragment()
+               |> LazyHTML.query(~s(li > [data-role="#{role}"]))
+               |> Enum.count() == 1,
+               "#{role} is not drawn inside the list item"
+      end
+
+      styles = styled(view, "doc-section-body")
+
+      assert styles |> reached("text-lg") |> Enum.map(&LazyHTML.text/1) == ["Own heading"]
+      assert styles |> reached("list-disc") |> Enum.count() == 1
+
+      assert styles |> reached("underline") |> Enum.flat_map(&LazyHTML.attribute(&1, "href")) ==
+               ["https://example.com/source"]
+
+      assert reached_component(styles) == []
+    end
+
+    test "and a callout's own text is styled the same way", %{site: site} do
+      :ok = SiteState.put_component(site.id, "doc-callout")
+      on_exit(fn -> SiteState.delete_component(site.id, "doc-callout") end)
+      crumbs!(site)
+
+      {view, _page} =
+        text_page!(
+          site,
+          ~s([[component doc-callout tone="tip"]]<ul><li><p>Inside</p></li></ul>) <>
+            "<p>[[component content-crumbs /]]</p>[[/component]]"
+        )
+
+      body = styled(view, "doc-section-body")
+      assert reached(body, "list-disc") == []
+
+      callout = styled(view, "doc-callout-body")
+      assert callout |> reached("list-disc") |> Enum.map(&LazyHTML.text/1) == ["Inside"]
+      assert reached_component(callout) == []
     end
   end
 
