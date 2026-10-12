@@ -8,11 +8,16 @@ defmodule MishkaDocument.Resources.Validations.SectionAddress do
   pages under two parents can now meet at one: a top-level `breadcrumb` and a `breadcrumb` filed
   under the group `navigation` are both `/chelekom/docs/breadcrumb`.
 
+  A group with a page of its own is read at its own slug while the pages under it leave that slug
+  out, so a page filed under the group `navigation` with the slug `navigation` meets the group's own
+  page at `/navigation`, and is refused.
+
   Checked on a create, and on an update that changes the slug, the parent, the version, or whether
-  the page is a front page or a group — which moves the pages under it as well, so their addresses
-  are checked too. The version's other pages not archived are read as the system, since the address
-  must be free whether or not the writer may read them. A group has no address and is never
-  refused; two front pages are refused by `unique_front_page_per_version`.
+  the page is a front page, a group or a group with a page — which moves the pages under it as well,
+  so their addresses are checked too. The version's other pages not archived are read as the
+  system, since the address must be free whether or not the writer may read them. A group with no
+  page has no address and is never refused; two front pages are refused by
+  `unique_front_page_per_version`.
 
   Each refusal is written in the Gettext locale of the process the action runs in, `errors` domain
   of `MishkaCmsCore.Gettext`.
@@ -28,7 +33,14 @@ defmodule MishkaDocument.Resources.Validations.SectionAddress do
 
   alias MishkaDocument.{Address, Section}
 
-  @watched [:slug, :parent_section_id, :workspace_version_id, :front_page, :group_heading]
+  @watched [
+    :slug,
+    :parent_section_id,
+    :workspace_version_id,
+    :front_page,
+    :group_heading,
+    :group_page
+  ]
 
   # A parent chain deeper than this, which only a loop makes, stops there.
   @depth 20
@@ -51,7 +63,8 @@ defmodule MishkaDocument.Resources.Validations.SectionAddress do
       title: Ash.Changeset.get_attribute(changeset, :title),
       parent_section_id: Ash.Changeset.get_attribute(changeset, :parent_section_id),
       front_page: Ash.Changeset.get_attribute(changeset, :front_page) == true,
-      group_heading: Ash.Changeset.get_attribute(changeset, :group_heading) == true
+      group_heading: Ash.Changeset.get_attribute(changeset, :group_heading) == true,
+      group_page: Ash.Changeset.get_attribute(changeset, :group_page) == true
     }
 
     pages = [page | others(changeset, page.id)]
@@ -115,7 +128,15 @@ defmodule MishkaDocument.Resources.Validations.SectionAddress do
     Section
     |> Ash.Query.for_read(:read, %{}, tenant: site_id, authorize?: false)
     |> Ash.Query.filter(workspace_version_id == ^version_id)
-    |> Ash.Query.select([:id, :title, :slug, :parent_section_id, :front_page, :group_heading])
+    |> Ash.Query.select([
+      :id,
+      :title,
+      :slug,
+      :parent_section_id,
+      :front_page,
+      :group_heading,
+      :group_page
+    ])
     |> Ash.read(tenant: site_id, authorize?: false, page: false)
     |> case do
       {:ok, found} -> Enum.reject(found, &(&1.id == id))

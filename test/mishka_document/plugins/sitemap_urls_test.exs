@@ -186,6 +186,18 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       assert paths(listed(site)) == ["/product/docs/breadcrumb"]
     end
 
+    test "lists a group with a page of its own at its slug, and its pages as before", %{
+      site: site
+    } do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      group = page!(site, version, "navigation", group_heading: true, group_page: true)
+      page!(site, version, "breadcrumb", parent_section_id: group.id)
+
+      assert Enum.sort(paths(listed(site))) ==
+               ["/product/docs/breadcrumb", "/product/docs/navigation"]
+    end
+
     test "lists nothing for it once the page at its address is gone", %{site: site} do
       document = document!(site, slug: "product", path: "/product/docs")
       version = version!(site, document, is_latest_for_version: true)

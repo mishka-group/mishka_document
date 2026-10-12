@@ -158,6 +158,54 @@ defmodule MishkaDocument.DocumentAddressTest do
       assert Address.group?(Enum.at(pages, 0))
       refute Address.group?(Enum.at(pages, 1))
     end
+
+    test "address a group with a page of its own at its slug, and the pages under it as before" do
+      pages = [
+        %{
+          id: 1,
+          slug: "navigation",
+          parent_section_id: nil,
+          group_heading: true,
+          group_page: true
+        },
+        %{id: 2, slug: "breadcrumb", parent_section_id: 1},
+        %{id: 3, slug: "menus", parent_section_id: 1, group_heading: true, group_page: true},
+        %{id: 4, slug: "dropdown", parent_section_id: 3},
+        %{id: 5, slug: "feedback", parent_section_id: nil, group_heading: true},
+        %{id: 6, slug: "alert", parent_section_id: 5},
+        %{id: 7, slug: "manual", parent_section_id: nil, group_page: true}
+      ]
+
+      assert Address.paths(pages) == %{
+               1 => ["navigation"],
+               2 => ["breadcrumb"],
+               3 => ["menus"],
+               4 => ["dropdown"],
+               6 => ["alert"],
+               7 => ["manual"]
+             }
+
+      assert Address.page_at(pages, "navigation").id == 1
+      assert Address.page_at(pages, "menus").id == 3
+      assert Address.page_at(pages, "breadcrumb").id == 2
+      assert Address.page_at(pages, "navigation/breadcrumb") == nil
+      assert Address.page_at(pages, "navigation/menus") == nil
+      assert Address.page_at(pages, "feedback") == nil
+      assert Address.page_at(pages, "") == nil
+
+      by_id = Map.new(pages, &{&1.id, &1})
+      parent_of = &Map.get(by_id, &1.parent_section_id)
+
+      assert Address.section_path(by_id[3], parent_of) == ["menus"]
+      assert Address.section_path(by_id[4], parent_of) == ["dropdown"]
+
+      assert Address.group_page?(by_id[1])
+      refute Address.group_page?(by_id[5])
+      refute Address.group_page?(by_id[7])
+      assert Address.addressed?(by_id[1])
+      refute Address.addressed?(by_id[5])
+      assert Address.addressed?(by_id[7])
+    end
   end
 
   describe "a document given an address" do

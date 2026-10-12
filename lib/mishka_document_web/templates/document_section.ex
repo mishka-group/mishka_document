@@ -42,6 +42,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   import MishkaCmsCore.CoreComponents, only: [show_form_modal: 2]
 
   alias MishkaCmsCore.Localized
+  alias MishkaDocument.Address
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
   alias Phoenix.LiveView.AsyncResult
@@ -292,19 +293,32 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
               {@record.title}
             </span>
             <span
-              :if={Map.get(@record, :group_heading) != true}
+              :if={Address.addressed?(@record)}
               dir="ltr"
               class="font-['Space_Grotesk'] text-[12px] font-semibold text-[#a8a5a0]"
             >
               /{@record.slug}
             </span>
             <span
-              :if={Map.get(@record, :group_heading) == true}
+              :if={not Address.addressed?(@record)}
               data-role="sec-group"
               title={dgettext("mishka_gervaz", "Only a heading in the contents, with no address")}
               class="rounded-md bg-[#f4f3ee] px-2 py-[3px] text-[10px] font-bold uppercase tracking-[0.05em] text-[#6d6a63]"
             >
               {dgettext("mishka_gervaz", "Group")}
+            </span>
+            <span
+              :if={Address.group_page?(@record)}
+              data-role="sec-group-page"
+              title={
+                dgettext(
+                  "mishka_gervaz",
+                  "A heading in the contents with a page of its own at its slug"
+                )
+              }
+              class="rounded-md bg-[#f4f3ee] px-2 py-[3px] text-[10px] font-bold uppercase tracking-[0.05em] text-[#6d6a63]"
+            >
+              {dgettext("mishka_gervaz", "Group page")}
             </span>
             <span
               :if={Map.get(@record, :front_page) == true}

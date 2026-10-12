@@ -15,7 +15,8 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   instead, its pages under it: its front page is a page of the site at a fixed path, which the
   sitemap already lists as one, so only its pages are added here. A version's front page is drawn
   at its document's own address (`MishkaDocument.Address`), so it is listed as that and never under
-  its own slug, which is a missing page; a group is only a heading, with no address to list. An
+  its own slug, which is a missing page; a group is only a heading, with no address to list, unless
+  it has a page of its own (`group_page`), listed at its slug. An
   address is listed only while
   the site serves its page: the page at that exact path is among `pages`, and it answers the
   document's language (`MishkaCmsCore.Runtime.PageEditions.served_languages/2`). A page moved to
@@ -173,9 +174,18 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     do: %{Languages.capture() => workspace.language, "workspace" => workspace.slug}
 
   # A page's own address, but none for a front page — its address is its document's, listed with it
-  # — and none for a group, which has none.
+  # — and none for a group with no page of its own, which has none.
   defp own_page_address(_site_id, _served, _workspace, %{front_page: true}, _segments), do: []
-  defp own_page_address(_site_id, _served, _workspace, %{group_heading: true}, _segments), do: []
+
+  defp own_page_address(
+         _site_id,
+         _served,
+         _workspace,
+         %{group_heading: true, group_page: page?},
+         _
+       )
+       when page? != true,
+       do: []
 
   defp own_page_address(site_id, served, workspace, section, segments) do
     page_address(
@@ -268,6 +278,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       :parent_section_id,
       :front_page,
       :group_heading,
+      :group_page,
       :workspace_version_id
     ])
     |> Ash.read!(actor: nil, tenant: site_id, page: false)
@@ -288,6 +299,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       :slug,
       :front_page,
       :group_heading,
+      :group_page,
       :updated_at,
       :workspace_version_id,
       :permissions,
