@@ -102,6 +102,36 @@ defmodule MishkaDocument.DocumentAddressTest do
       assert Address.page_at(pages, "switch") == nil
       assert Address.page_at(pages, "") == nil
     end
+
+    test "draw a front page at the document's own address, and the pages under it directly under that" do
+      pages = [
+        %{id: 1, slug: "get-started", parent_section_id: nil, front_page: true},
+        %{id: 2, slug: "install", parent_section_id: 1, front_page: false},
+        %{id: 3, slug: "headless", parent_section_id: nil, front_page: false},
+        %{id: 4, slug: "switch", parent_section_id: 3, front_page: false}
+      ]
+
+      assert Address.paths(pages) == %{
+               1 => [],
+               2 => ["install"],
+               3 => ["headless"],
+               4 => ["headless", "switch"]
+             }
+
+      assert Address.page_at(pages, []).id == 1
+      assert Address.page_at(pages, "").id == 1
+      assert Address.page_at(pages, "install").id == 2
+      assert Address.page_at(pages, "get-started") == nil
+      assert Address.page_at(pages, "get-started/install") == nil
+
+      by_id = Map.new(pages, &{&1.id, &1})
+      parent_of = &Map.get(by_id, &1.parent_section_id)
+
+      assert Address.section_path(by_id[1], parent_of) == []
+      assert Address.section_path(by_id[2], parent_of) == ["install"]
+      assert Address.front_page?(by_id[1])
+      refute Address.front_page?(%{slug: "x"})
+    end
   end
 
   describe "a document given an address" do

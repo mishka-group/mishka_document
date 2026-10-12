@@ -70,6 +70,7 @@ defmodule MishkaDocument.Section do
   @admin_fields [
     :workspace_version_id,
     :parent_section_id,
+    :front_page,
     :title,
     :slug,
     :content,
@@ -96,6 +97,8 @@ defmodule MishkaDocument.Section do
 
     # Database-level optimization for archived records
     base_filter_sql "(archived_at IS NULL)"
+
+    identity_wheres_to_sql unique_front_page_per_version: "front_page = true"
 
     references do
       reference :site, on_delete: :delete
@@ -229,7 +232,7 @@ defmodule MishkaDocument.Section do
         # smaller open share and :section_content takes the slack.
         column :section_title do
           static true
-          requires [:id, :title, :slug, :breadcrumb_path]
+          requires [:id, :title, :slug, :front_page, :breadcrumb_path]
           label fn -> dgettext("mishka_gervaz", "Section") end
           position :first
           sortable true
@@ -252,6 +255,7 @@ defmodule MishkaDocument.Section do
               id: record.id,
               title: record.title,
               slug: record.slug,
+              front_page?: record.front_page == true,
               path: Enum.join(crumbs, " › ")
             }
 
@@ -274,6 +278,13 @@ defmodule MishkaDocument.Section do
                   value={@slug}
                   label={dgettext("mishka_gervaz", "Copy slug")}
                 />
+                <span
+                  :if={@front_page?}
+                  title={dgettext("mishka_gervaz", "Drawn at the document's own address")}
+                  class="rounded-[5px] bg-[#f2f1fc] px-[6px] py-[1px] text-[9.5px] font-bold uppercase text-[#4f4bcc]"
+                >
+                  {dgettext("mishka_gervaz", "Front page")}
+                </span>
               </div>
             </div>
             """
@@ -973,6 +984,19 @@ defmodule MishkaDocument.Section do
           end
         end
 
+        field :front_page, :toggle do
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Front page") end
+
+            description fn ->
+              dgettext(
+                "mishka_gervaz",
+                "Drawn at the document's own address instead of under it. One page per version, and only a page with no parent."
+              )
+            end
+          end
+        end
+
         field :source_section_id, :relation do
           display_field :title
           search_field :title
@@ -1222,7 +1246,13 @@ defmodule MishkaDocument.Section do
         end
 
         group :references do
-          fields [:workspace, :workspace_version_id, :parent_section_id, :source_section_id]
+          fields [
+            :workspace,
+            :workspace_version_id,
+            :parent_section_id,
+            :front_page,
+            :source_section_id
+          ]
 
           ui do
             label fn -> dgettext("mishka_gervaz", "References") end
@@ -1306,6 +1336,7 @@ defmodule MishkaDocument.Section do
     field :content, :string, derives: "sanitize(html5) validate(optional=[string])"
 
     field :order_position, :integer, derives: "validate(optional=[integer, min_len=0])"
+    field :front_page, :boolean, derives: "validate(boolean)"
 
     field :change_version, :string,
       derives: "sanitize(trim) validate(optional=[string, max_len=50, semver])"
@@ -1915,6 +1946,22 @@ defmodule MishkaDocument.Section do
               label: dgettext_noop("errors", "section"),
               in: :other_version},
              only_when_valid?: true
+
+    # A FRONT PAGE IS DRAWN AT ITS DOCUMENT'S OWN ADDRESS (`MishkaDocument.Address`), so it is a page
+    # at the top: one filed under another would be drawn in two places.
+    validate fn changeset, _context ->
+      front_page? = Ash.Changeset.get_attribute(changeset, :front_page) == true
+      parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
+
+      if front_page? and not is_nil(parent_id) do
+        {:error,
+         field: :front_page,
+         message:
+           dgettext_noop("errors", "Only a page with no parent may be its document's front page.")}
+      else
+        :ok
+      end
+    end
   end
 
   # Multi-tenancy configuration - sections are always site-specific
@@ -1955,6 +2002,16 @@ defmodule MishkaDocument.Section do
       default 0
       constraints min: 0
       description "Position for ordering sections"
+    end
+
+    # DRAWN AT ITS DOCUMENT'S OWN ADDRESS, in place of the document's landing: its own part of the
+    # address is empty and the pages under it sit directly under the document's
+    # (`MishkaDocument.Address`).
+    attribute :front_page, :boolean do
+      allow_nil? false
+      public? true
+      default false
+      description "Whether the page is drawn at its document's own address instead of under it"
     end
 
     attribute :change_version, :string do
@@ -2433,6 +2490,20 @@ defmodule MishkaDocument.Section do
 
       all_tenants? true
       nils_distinct? false
+    end
+
+    # ONE FRONT PAGE A VERSION, among its pages not archived — `base_filter_sql` joins the index's
+    # `where`.
+    identity :unique_front_page_per_version, [:workspace_version_id, :site_id] do
+      description "Ensures a workspace version has at most one front page"
+      where expr(front_page == true)
+
+      message dgettext_noop(
+                "errors",
+                "Another page of this version is already its front page."
+              )
+
+      all_tenants? true
     end
 
     identity :unique_language_per_group, [:language, :language_group_id, :site_id] do

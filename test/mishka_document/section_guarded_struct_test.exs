@@ -16,6 +16,7 @@ defmodule MishkaDocument.Test.SectionGuardedStructTest do
                  :slug,
                  :content,
                  :order_position,
+                 :front_page,
                  :change_version,
                  :content_review_status,
                  :technical_review_status,
@@ -83,6 +84,13 @@ defmodule MishkaDocument.Test.SectionGuardedStructTest do
                  Section.__guarded_change__(%{
                    permissions: ["  DOCS:READ  ", "Docs:Read", "DOCS:WRITE", ""]
                  })
+      end
+
+      test "front_page: a boolean, and nothing else" do
+        assert {:ok, %{front_page: true}} = Section.__guarded_change__(%{front_page: true})
+
+        assert {:error, [%{field: :front_page, action: :boolean}]} =
+                 Section.__guarded_change__(%{front_page: "yes"})
       end
 
       test "permissions: non-list is rejected" do

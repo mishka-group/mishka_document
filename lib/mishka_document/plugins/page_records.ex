@@ -12,8 +12,10 @@ defmodule MishkaDocument.Plugins.PageRecords do
   use Gettext, backend: MishkaCmsCore.Gettext
   use MishkaInstaller.Event.Hook, event: "runtime:page:records", initial: %{priority: 50}
 
+  require Ash.Query
+
   alias MishkaCmsCore.Runtime.Languages
-  alias MishkaDocument.{Section, Workspace}
+  alias MishkaDocument.{Address, Section, Workspace}
 
   @samples 8
 
@@ -63,22 +65,27 @@ defmodule MishkaDocument.Plugins.PageRecords do
 
   defp documents(_no_site), do: []
 
+  # A version's front page is drawn at its document's address, which the document's own samples
+  # name, so it is no sample of a page.
   defp pages(site_id) when is_binary(site_id) do
     Section
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
-    |> Ash.Query.select([:title, :slug, :language, :workspace_version_id])
-    |> Ash.Query.load([:breadcrumb_path, workspace_version: [workspace: [:slug]]])
+    |> Ash.Query.filter(front_page == false)
+    |> Ash.Query.select([:id, :title, :slug, :language, :workspace_version_id])
+    |> Ash.Query.load(workspace_version: [workspace: [:slug]])
     |> Ash.Query.sort(updated_at: :desc)
     |> Ash.read(tenant: site_id, authorize?: false, page: [limit: @samples])
     |> case do
       {:ok, %{results: rows}} ->
+        paths = addresses(site_id, Enum.map(rows, & &1.workspace_version_id))
+
         for %{slug: slug, language: language} = row <- rows,
             %{workspace: %{slug: workspace}} <- [row.workspace_version],
             is_binary(slug) and is_binary(workspace),
             do:
               sample(row.title, language, %{
                 "workspace" => workspace,
-                "section" => address_under(row.breadcrumb_path, slug)
+                "section" => paths |> Map.get(row.id, [slug]) |> Enum.join("/")
               })
 
       _unreadable ->
@@ -88,15 +95,27 @@ defmodule MishkaDocument.Plugins.PageRecords do
 
   defp pages(_no_site), do: []
 
-  # A page's own part of its address — the slugs of the pages it is filed under, then its own —
-  # which is what a `*section` capture holds (`MishkaDocument.Address`).
-  defp address_under(parents, slug) when is_list(parents),
-    do: Enum.map_join(parents, "/", &Map.get(&1, "slug")) |> join_slug(slug)
+  # Each page's own part of its address among its version's approved pages — the slugs of the pages
+  # it is drawn under, then its own — which is what a `*section` capture holds
+  # (`MishkaDocument.Address`).
+  defp addresses(site_id, version_ids) do
+    Section
+    |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
+    |> Ash.Query.filter(workspace_version_id in ^Enum.uniq(version_ids))
+    |> Ash.Query.select([:id, :slug, :parent_section_id, :front_page, :workspace_version_id])
+    |> Ash.read(tenant: site_id, authorize?: false, page: false)
+    |> case do
+      {:ok, found} ->
+        found
+        |> Enum.group_by(& &1.workspace_version_id)
+        |> Enum.reduce(%{}, fn {_version_id, tree}, paths ->
+          Map.merge(paths, Address.paths(tree))
+        end)
 
-  defp address_under(_no_parents, slug), do: slug
-
-  defp join_slug("", slug), do: slug
-  defp join_slug(parents, slug), do: parents <> "/" <> slug
+      _unreadable ->
+        %{}
+    end
+  end
 
   defp sample(name, language, captures),
     do: %{

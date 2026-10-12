@@ -13,6 +13,10 @@ defmodule MishkaDocument.Address do
   that share its parent, so the same name may be used under two parents — `/chelekom/docs/tabs` and
   `/chelekom/docs/headless/tabs` are two pages.
 
+  A version's front page (`front_page`, a page at the top) is drawn at the document's own address:
+  its own part of the address is empty, so `/chelekom/docs` is that page, `/chelekom/docs/<its slug>`
+  is a missing page, and the pages filed under it sit directly under the document's address.
+
   An address is a site path: segments of lower-case letters, digits and dashes, and `:lang` at most
   once, where the site's language goes, as in a page's path. The rules live here because the
   document, its pages, the head and the sitemap all read them, and must agree.
@@ -134,16 +138,17 @@ defmodule MishkaDocument.Address do
 
   @doc """
   A page's own part of its address, root first: the slugs of the pages it is drawn under, then its
-  own. `parent_of` answers the parent each page is drawn under, or `nil` at the top — which may not
-  be the parent it names, when that one is not published. A parent chain deeper than twenty, which
-  only a loop makes, stops there.
+  own, a front page's left out — `[]` for the front page itself. `parent_of` answers the parent each
+  page is drawn under, or `nil` at the top — which may not be the parent it names, when that one is
+  not published. A parent chain deeper than twenty, which only a loop makes, stops there.
   """
   @spec section_path(map(), (map() -> map() | nil)) :: [String.t()]
   def section_path(section, parent_of), do: climb(section, parent_of, [], 0)
 
   @doc """
   Every page's own part of its address among `sections` — the pages of one version a reader is
-  shown, each with its `id`, `slug` and `parent_section_id` — as `%{id => ["headless", "switch"]}`.
+  shown, each with its `id`, `slug`, `parent_section_id` and `front_page` — as
+  `%{id => ["headless", "switch"]}`, and `[]` for the front page.
 
   A page is under its parent when that parent is among them and walking up from it reaches the top;
   otherwise it is at the top. That is the rule the documentation's blocks draw the contents by, so a
@@ -157,10 +162,13 @@ defmodule MishkaDocument.Address do
 
   @doc """
   The page among `sections` whose own part of the address is `segments` — `["headless", "switch"]`,
-  or the `"headless/switch"` a `*section` capture holds — or `nil`.
+  or the `"headless/switch"` a `*section` capture holds — or `nil`. Nothing asked, `[]` or `""`, is
+  the front page, when they hold one.
   """
   @spec page_at([map()], [String.t()] | String.t()) :: map() | nil
   def page_at(sections, wanted) when is_binary(wanted), do: page_at(sections, segments(wanted))
+
+  def page_at(sections, []) when is_list(sections), do: Enum.find(sections, &front_page?/1)
 
   def page_at(sections, [_ | _] = segments) when is_list(sections) do
     paths = paths(sections)
@@ -168,6 +176,10 @@ defmodule MishkaDocument.Address do
   end
 
   def page_at(_sections, _nothing_asked), do: nil
+
+  @doc "Whether a page is its version's front page, drawn at its document's own address."
+  @spec front_page?(map()) :: boolean()
+  def front_page?(section), do: Map.get(section, :front_page) == true
 
   defp drawn_under(by_id, page) do
     case Map.get(by_id, page.parent_section_id) do
@@ -190,7 +202,11 @@ defmodule MishkaDocument.Address do
   defp climb(_section, _parent_of, path, depth) when depth >= 20, do: path
 
   defp climb(section, parent_of, path, depth),
-    do: climb(parent_of.(section), parent_of, [section.slug | path], depth + 1)
+    do: climb(parent_of.(section), parent_of, own_part(section, path), depth + 1)
+
+  defp own_part(section, path) do
+    if front_page?(section), do: path, else: [section.slug | path]
+  end
 
   defp in_docs_base?(segments) do
     base = MishkaDocument.Provision.docs_base() |> segments() |> Enum.reject(&(&1 == @lang))

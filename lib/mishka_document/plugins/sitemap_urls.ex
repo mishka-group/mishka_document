@@ -13,7 +13,9 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   (`MishkaDocument.Address.paths/1`) — at the address the site's URL mode gives that language
   (`MishkaCmsCore.Runtime.Languages.url/3`). A document with an address of its own is listed there
   instead, its pages under it: its front page is a page of the site at a fixed path, which the
-  sitemap already lists as one, so only its pages are added here. An address is listed only while
+  sitemap already lists as one, so only its pages are added here. A version's front page is drawn
+  at its document's own address (`MishkaDocument.Address`), so it is listed as that and never under
+  its own slug, which is a missing page. An address is listed only while
   the site serves its page: the page at that exact path is among `pages`, and it answers the
   document's language (`MishkaCmsCore.Runtime.PageEditions.served_languages/2`). A page moved to
   another path, taken down, closed to visitors or marked noindex lists nothing.
@@ -132,16 +134,12 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
         workspace = shown[section.workspace_version_id]
         own = paths |> Map.get(section.workspace_version_id, %{}) |> Map.get(section.id)
 
-        {page_address(
+        {own_page_address(
            site_id,
            served,
            workspace,
-           own || [section.slug],
-           section.updated_at,
-           PageEditions.listed?(
-             %{section | permissions: section.effective_permissions},
-             workspace
-           )
+           section,
+           own || [section.slug]
          ),
          Map.update!(
            changed,
@@ -172,6 +170,20 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
 
   defp front(workspace),
     do: %{Languages.capture() => workspace.language, "workspace" => workspace.slug}
+
+  # A page's own address, but none for a front page: its address is its document's, listed with it.
+  defp own_page_address(_site_id, _served, _workspace, %{front_page: true}, _segments), do: []
+
+  defp own_page_address(site_id, served, workspace, section, segments) do
+    page_address(
+      site_id,
+      served,
+      workspace,
+      segments,
+      section.updated_at,
+      PageEditions.listed?(%{section | permissions: section.effective_permissions}, workspace)
+    )
+  end
 
   defp own_address?(%{path: own}), do: is_binary(own) and own != ""
 
@@ -247,7 +259,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     Section
     |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
     |> Ash.Query.filter(workspace_version_id in ^version_ids)
-    |> Ash.Query.select([:id, :slug, :parent_section_id, :workspace_version_id])
+    |> Ash.Query.select([:id, :slug, :parent_section_id, :front_page, :workspace_version_id])
     |> Ash.read!(actor: nil, tenant: site_id, page: false)
     |> Enum.group_by(& &1.workspace_version_id)
     |> Map.new(fn {version_id, pages} -> {version_id, Address.paths(pages)} end)
@@ -261,7 +273,15 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     Section
     |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
     |> Ash.Query.filter(workspace_version_id in ^version_ids)
-    |> Ash.Query.select([:id, :slug, :updated_at, :workspace_version_id, :permissions, :seo_tags])
+    |> Ash.Query.select([
+      :id,
+      :slug,
+      :front_page,
+      :updated_at,
+      :workspace_version_id,
+      :permissions,
+      :seo_tags
+    ])
     |> Ash.Query.load(:effective_permissions)
     |> SitemapCompiler.stream_rows(actor: nil, tenant: site_id)
   end

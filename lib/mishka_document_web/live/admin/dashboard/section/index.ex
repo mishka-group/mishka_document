@@ -57,6 +57,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       |> assign(:version_ids, [])
       |> assign(:selected_version, nil)
       |> assign(:selected_version_id, workspace_version_id)
+      |> assign(:front_page, nil)
       |> assign(:url_state, nil)
       |> assign(:show_note_form, false)
       |> assign(:editing_note_id, nil)
@@ -102,6 +103,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
         |> assign(:selected_version, selected_version)
         |> assign(:selected_version_id, version_from_path)
         |> assign(:workspace_version_id, version_from_path)
+        |> load_front_page_async()
       else
         socket
       end
@@ -428,7 +430,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       pubsub_notification: notification
     )
 
-    {:noreply, socket}
+    {:noreply, load_front_page_async(socket)}
   end
 
   @impl true
@@ -477,6 +479,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
         |> assign(:selected_version, selected_version)
         |> assign(:selected_version_id, if(selected_version, do: selected_version.id, else: nil))
         |> assign(:workspace_loading, AsyncResult.ok(socket.assigns.workspace_loading, workspace))
+        |> load_front_page_async()
 
       socket =
         if workspace_id do
@@ -500,6 +503,14 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
        AsyncResult.failed(socket.assigns.workspace_loading, reason)
      )}
   end
+
+  @impl true
+  def handle_async(:load_front_page, {:ok, front_page}, socket),
+    do: {:noreply, assign(socket, :front_page, front_page)}
+
+  @impl true
+  def handle_async(:load_front_page, {:exit, _reason}, socket),
+    do: {:noreply, assign(socket, :front_page, nil)}
 
   @impl true
   def handle_async(:load_activity_logs, {:ok, logs}, socket) do
@@ -780,6 +791,27 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       end
     end)
   end
+
+  # THE PAGE THE SELECTED VERSION DRAWS AT ITS DOCUMENT'S OWN ADDRESS, for the Site Information panel,
+  # which a master alone is shown.
+  defp load_front_page_async(%{assigns: %{master_user?: true, selected_version_id: id}} = socket)
+       when is_binary(id) do
+    current_user = socket.assigns.current_user
+
+    MishkaGervaz.Messages.start_async(socket, :load_front_page, fn ->
+      MishkaDocument.Section
+      |> Ash.Query.for_read(:master_read, %{}, actor: current_user)
+      |> Ash.Query.filter(workspace_version_id == ^id and front_page == true)
+      |> Ash.Query.select([:id, :title, :slug])
+      |> Ash.read(page: [limit: 1])
+      |> case do
+        {:ok, %{results: [front_page | _]}} -> front_page
+        _none -> nil
+      end
+    end)
+  end
+
+  defp load_front_page_async(socket), do: socket
 
   defp load_workspace_version(%User{site_id: nil} = user, id) do
     case Ash.get(MishkaDocument.WorkspaceVersion, id, action: :master_get, actor: user) do

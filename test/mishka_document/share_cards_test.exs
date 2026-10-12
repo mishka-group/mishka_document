@@ -88,6 +88,29 @@ defmodule MishkaDocument.ShareCardsTest do
 
       assert {:record, "docs:page", %{"section" => "start/steps"}} = ShareCards.target(steps)
     end
+
+    # A FRONT PAGE IS DRAWN AT ITS DOCUMENT'S ADDRESS, whose card is the document's.
+    test "a front page has no card of its own, and a page under it is under the document",
+         %{site: site, version: version} do
+      front =
+        create_section!(
+          [site_id: site.id, workspace_version_id: version.id, slug: "start", front_page: true] ++
+            approved()
+        )
+
+      steps =
+        create_section!(
+          [
+            site_id: site.id,
+            workspace_version_id: version.id,
+            slug: "steps",
+            parent_section_id: front.id
+          ] ++ approved()
+        )
+
+      assert ShareCards.target(front) == nil
+      assert {:record, "docs:page", %{"section" => "steps"}} = ShareCards.target(steps)
+    end
   end
 
   test "each plugin looks at its own record's card after it is saved, and only while it is shown",

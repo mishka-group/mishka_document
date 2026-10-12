@@ -512,6 +512,60 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
     end
   end
 
+  # A VERSION'S FRONT PAGE IS DRAWN AT ITS DOCUMENT'S OWN ADDRESS, and the head there stays the
+  # document's: the address is the document's, whichever page it draws. Its slug under the address
+  # names nothing, and the pages filed under it are named directly under the address.
+  describe "a document whose version has a front page" do
+    setup %{site: site} do
+      document = document!(site, slug: "product", name: "Product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", title: "Get started", front_page: true)
+      page!(site, version, "install", title: "Install", parent_section_id: front.id)
+      :ok
+    end
+
+    defp fronted(site, path, params, record) do
+      Seo.given(
+        %{
+          title: "Document page",
+          path: path,
+          language: "en",
+          seo: %{description: nil, schema: []}
+        },
+        site_id: site.id,
+        url: base() <> "/asked/elsewhere",
+        params: params,
+        record: record
+      )
+    end
+
+    test "keeps the document's head at the document's address", %{site: site} do
+      front = answer(fronted(site, "/product/docs", %{}, "docs:document"))
+
+      assert {front.title, front.url} == {"Product", base() <> "/product/docs"}
+    end
+
+    test "names nothing at the address with the front page's slug after it", %{site: site} do
+      given =
+        fronted(site, "/product/docs/*section", %{"section" => "get-started"}, "docs:page")
+
+      assert answer(given).title == "Document page"
+    end
+
+    test "names a page filed under it directly under the address", %{site: site} do
+      page =
+        answer(fronted(site, "/product/docs/*section", %{"section" => "install"}, "docs:page"))
+
+      assert {page.title, page.url} == {"Install", base() <> "/product/docs/install"}
+
+      assert crumbs(page) == [
+               {1, "Documentation", base() <> "/docs"},
+               {2, "Product", base() <> "/product/docs"},
+               {3, "Install", base() <> "/product/docs/install"}
+             ]
+    end
+  end
+
   describe "who may open it" do
     setup %{site: site} do
       document = document!(site, slug: "members", permissions: ["members:read"])
@@ -743,6 +797,19 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
              ] = MishkaDocument.Plugins.PageRecords.types(site.id)
 
       assert Enum.any?(documents, &(&1.params["workspace"] == "guide"))
+    end
+
+    test "preview a page at the address it is read at, and no front page as a page of its own",
+         %{site: site} do
+      document = document!(site, slug: "guide", name: "Guide")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", title: "Get started", front_page: true)
+      page!(site, version, "install", title: "Install", parent_section_id: front.id)
+
+      [_documents, %{id: "docs:page", samples: samples}] =
+        MishkaDocument.Plugins.PageRecords.types(site.id)
+
+      assert Enum.map(samples, & &1.params["section"]) == ["install"]
     end
   end
 

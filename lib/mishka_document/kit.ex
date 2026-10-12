@@ -47,6 +47,10 @@ defmodule MishkaDocument.Kit do
   `doc-switcher` offers the document's other versions and its other languages, each leading back to
   the same page.
 
+  A version may mark one page at its top as its front page: every block reads that page at the
+  document's own address, in place of the landing, links to it there, and files the pages under it
+  directly under that address (`MishkaDocument.Address`).
+
   A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
   text is stored through, and drawn with `rich_content/1`, so a component the author placed in them
   with the content editor is drawn there as that component (`MishkaCmsCore.Runtime.ContentComponents`),

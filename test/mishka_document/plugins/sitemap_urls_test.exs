@@ -163,6 +163,18 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       assert paths(listed(site)) == ["/product/docs/install", "/product/docs/install/steps"]
     end
 
+    # ITS FRONT PAGE IS THE ADDRESS ITSELF, which the sitemap already lists as a page of the site.
+    test "lists no front page of its own, and the pages under it directly under the address",
+         %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", front_page: true)
+      page!(site, version, "install", parent_section_id: front.id)
+      page!(site, version, "upgrading")
+
+      assert paths(listed(site)) == ["/product/docs/install", "/product/docs/upgrading"]
+    end
+
     test "lists nothing for it once the page at its address is gone", %{site: site} do
       document = document!(site, slug: "product", path: "/product/docs")
       version = version!(site, document, is_latest_for_version: true)
@@ -199,6 +211,25 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
       assert Enum.find(urls, &(&1.path == english(mode, "/docs/guide/install"))).lastmod ==
                install.updated_at
+    end
+
+    # A FRONT PAGE IS DRAWN AT ITS DOCUMENT'S ADDRESS, so it is listed as that address and dates
+    # it, and never under its own slug, which is a missing page.
+    test "lists a front page at its document's address alone, which it dates", %{
+      site: site,
+      mode: mode
+    } do
+      document = document!(site, slug: "guide")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", front_page: true)
+      page!(site, version, "install", parent_section_id: front.id)
+
+      urls = listed(site)
+
+      assert paths(urls) == [english(mode, "/docs/guide"), english(mode, "/docs/guide/install")]
+
+      dated = Enum.find(urls, &(&1.path == english(mode, "/docs/guide"))).lastmod
+      assert DateTime.compare(dated, front.updated_at) != :lt
     end
 
     test "shows the version an editor marked latest over a newer published one", %{

@@ -22,15 +22,18 @@ defmodule MishkaDocument.Plugins.PageSeo do
   address is read there and nowhere else, so `/docs/<its slug>` names nothing. For one of its pages it brings its published versions and, in each, the approved
   pages as a tree; the version shown is the one `?v=` names, else the one marked latest, else the
   newest published, and the page is the one at the address the `section` capture holds —
-  `headless/switch` — read once more for its own text and lock.
+  `headless/switch` — read once more for its own text and lock. A version's front page is at the
+  document's own address and nowhere under it (`MishkaDocument.Address`), so a `section` naming its
+  slug names nothing.
 
   ## What it returns
 
   Every value is a default: what the page sets in its own SEO — a title, a description, a tag,
   structured data — wins, and may name the variables below, `{{doc.title}} · {{workspace.name}}`.
 
-    * `title`, `description` — the document's name and description on its front page; the page's
-      title and the start of its text on one of its pages;
+    * `title`, `description` — the document's name and description on its front page, whether it
+      draws the page its version marks as its front page there or the landing; the page's title and
+      the start of its text on one of its pages;
     * `type` — `"article"`;
     * `tags` — the document's or the page's own `seo_tags`; a page that holds no robots meta of its
       own takes its document's, as a CMS page takes its layout's;
@@ -219,7 +222,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
   defp versions do
     WorkspaceVersion
     |> Ash.Query.select(@version_fields)
-    |> Ash.Query.load(sections: Ash.Query.select(Section, [:id, :slug, :parent_section_id]))
+    |> Ash.Query.load(
+      sections: Ash.Query.select(Section, [:id, :slug, :parent_section_id, :front_page])
+    )
   end
 
   # The version a reader is shown — the one `asked` names, else the one marked latest, else the

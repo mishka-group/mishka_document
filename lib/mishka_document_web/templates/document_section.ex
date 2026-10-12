@@ -294,6 +294,14 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
             <span dir="ltr" class="font-['Space_Grotesk'] text-[12px] font-semibold text-[#a8a5a0]">
               /{@record.slug}
             </span>
+            <span
+              :if={Map.get(@record, :front_page) == true}
+              data-role="sec-front-page"
+              title={dgettext("mishka_gervaz", "Drawn at the document's own address")}
+              class="rounded-md bg-[#f2f1fc] px-2 py-[3px] text-[10px] font-bold uppercase tracking-[0.05em] text-[#4f4bcc]"
+            >
+              {dgettext("mishka_gervaz", "Front page")}
+            </span>
           </div>
 
           <div

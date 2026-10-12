@@ -561,6 +561,135 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # A VERSION'S FRONT PAGE IS DRAWN AT ITS DOCUMENT'S OWN ADDRESS, in place of the landing: every
+  # block reads it there, every link to it is that address with no trailing slash, the pages filed
+  # under it sit directly under the address, and the address with its slug after it is a missing
+  # page (`MishkaDocument.Address`).
+  describe "a document with a front page" do
+    test "draws it at the document's own address, in place of the landing", %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Get started"]
+      assert text_of(view, ~s([data-role="doc-section-landing"])) == []
+      assert [body] = text_of(view, ~s([data-role="doc-section-body"]))
+      assert body =~ "Welcome."
+      assert hrefs(view, ~s([data-role="doc-section-next"])) == ["/mishka/docs/install"]
+    end
+
+    test "marks it as the page being read in the contents, linked at the address", %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+      attrs = %{path: "/mishka/docs", lang_param: "", params: %{}}
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", Map.put(attrs, :expand_all, true))
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/mishka/docs",
+               "/mishka/docs/install",
+               "/mishka/docs/upgrading"
+             ]
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"][aria-current="page"])) == [
+               "/mishka/docs"
+             ]
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == ["Why", "How"]
+
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == [
+               "/mishka/docs",
+               "/mishka/docs?v=0.9.0"
+             ]
+    end
+
+    test "files the pages under it directly under the address, and leads back to it",
+         %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "install"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Install"]
+      assert hrefs(view, ~s([data-role="doc-section-crumb"])) == ["/mishka/docs"]
+      assert hrefs(view, ~s([data-role="doc-section-prev"])) == ["/mishka/docs"]
+      assert hrefs(view, ~s([data-role="doc-section-next"])) == ["/mishka/docs/upgrading"]
+    end
+
+    test "has no address of its own under the document's", %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+
+      for section <- ["get-started", "get-started/install"] do
+        assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+          mount_page(site, "doc-section", %{
+            path: "/mishka/docs",
+            lang_param: "",
+            params: %{"section" => section}
+          })
+        end
+      end
+
+      {:ok, toc, _html} =
+        mount_page(site, "doc-toc", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "get-started"}
+        })
+
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == []
+    end
+
+    test "is linked at /docs/<slug> for a document with no address", %{site: site} do
+      fronted!(site, [])
+
+      attrs = %{
+        doc_base: "/docs",
+        lang_param: "",
+        params: %{"workspace" => "fronted"}
+      }
+
+      {:ok, view, _html} = mount_page(site, "doc-section", attrs)
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Get started"]
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", Map.put(attrs, :expand_all, true))
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/docs/fronted",
+               "/docs/fronted/install",
+               "/docs/fronted/upgrading"
+             ]
+
+      {:ok, child, _html} =
+        mount_page(site, "doc-section", put_in(attrs, [:params, "section"], "install"))
+
+      assert hrefs(child, ~s([data-role="doc-section-crumb"])) == ["/docs/fronted"]
+    end
+
+    test "and a version with none keeps the landing", %{site: site} do
+      %{front: front} = fronted!(site, path: "/mishka/docs")
+
+      front
+      |> Ash.Changeset.for_update(:update, %{front_page: false},
+        tenant: site.id,
+        authorize?: false
+      )
+      |> Ash.update!()
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-landing-title"])) == ["Fronted"]
+      assert text_of(view, ~s([data-role="doc-section-title"])) == []
+    end
+  end
+
   describe "they compile" do
     # WHICH KIND EACH ONE IS COMES OUT OF THE BUNDLE, not out of a list here. The kit holds both
     # now — blocks that read and hold what they read, and the function components they draw their
@@ -2610,6 +2739,38 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     page!(site, older, title: "Installation", slug: "installation", order_position: 0)
 
     %{document: document, version: version}
+  end
+
+  # One manual whose latest version marks "Get started" as its front page, with "Install" filed under
+  # it, and an older version with no front page.
+  defp fronted!(site, opts) do
+    document = document!(site, Keyword.merge([name: "Fronted", slug: "fronted"], opts))
+    version = version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
+
+    front =
+      page!(site, version,
+        title: "Get started",
+        slug: "get-started",
+        order_position: 0,
+        front_page: true,
+        content: "<p>Welcome.</p><h2>Why</h2><p>One.</p><h2>How</h2><p>Two.</p>"
+      )
+
+    page!(site, version,
+      title: "Install",
+      slug: "install",
+      order_position: 0,
+      parent_section_id: front.id
+    )
+
+    page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 1)
+
+    older =
+      version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+    page!(site, older, title: "Get started", slug: "get-started", order_position: 0)
+
+    %{document: document, version: version, front: front}
   end
 
   defp public_versions(site, document) do
