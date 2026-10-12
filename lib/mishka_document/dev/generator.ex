@@ -442,6 +442,7 @@ defmodule MishkaDocument.Dev.Generator do
             slug = base |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
             "#{slug}-#{i}"
           end),
+        path: nil,
         description:
           StreamData.repeatedly(fn ->
             name = Enum.random(@workspace_names)
@@ -524,6 +525,8 @@ defmodule MishkaDocument.Dev.Generator do
             "<h2>#{title}</h2>\n<p>This section covers #{String.downcase(title)} in detail with practical examples and step-by-step instructions.</p>\n<p>Follow these guidelines to ensure correct implementation and avoid common pitfalls.</p>"
           end),
         order_position: StreamData.integer(0..100),
+        front_page: false,
+        group_heading: false,
         change_version: "1.0.0",
         content_review_status: StreamData.member_of([:pending, :approved, :rejected]),
         technical_review_status: StreamData.member_of([:pending, :approved, :rejected]),
