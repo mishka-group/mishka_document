@@ -63,7 +63,7 @@ defmodule MishkaDocument.MixProject do
       {:makeup_css, "~> 0.2"},
       {:ash_events, "~> 0.8"},
       {:guarded_struct, "~> 0.1"},
-      {:mishka_installer, "~> 0.1"},
+      {:mishka_installer, "~> 0.1.13"},
       {:igniter, "~> 0.8", only: [:dev, :test]},
       {:mishka_cms_core, path: "../mishka_cms_core"},
       {:mishka_gervaz, path: "../mishka_gervaz"}
