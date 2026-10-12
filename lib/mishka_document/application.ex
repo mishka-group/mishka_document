@@ -54,6 +54,12 @@ defmodule MishkaDocument.Application do
     MishkaDocument.Plugins.SectionShareCard
   ]
 
+  # Names the components the site's documentation draws in its text, so its stylesheet carries them
+  # (a `runtime:compile:content_components` plugin).
+  @runtime_plugins [
+    MishkaDocument.Plugins.ContentComponents
+  ]
+
   # Each code block of a page being written is lexed in a task of its own under this supervisor — see
   # `MishkaDocument.Resources.Changes.HighlightCode`.
   @highlight_supervisor {Task.Supervisor, name: MishkaDocument.HighlightSupervisor}
@@ -67,7 +73,8 @@ defmodule MishkaDocument.Application do
     do:
       @dashboard_widgets ++
         @settings_plugins ++
-        @sidebar_menus ++ @provision_plugins ++ @seo_plugins ++ @share_card_plugins
+        @sidebar_menus ++
+        @provision_plugins ++ @seo_plugins ++ @share_card_plugins ++ @runtime_plugins
 
   @impl true
   def start(_type, _args) do

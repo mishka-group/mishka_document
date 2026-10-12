@@ -1471,8 +1471,10 @@ defmodule MishkaDocument.Section do
         end
       end
 
-      # Highlights the code blocks of the sanitized content, before the row is written.
+      # Highlights the code blocks of the sanitized content, before the row is written, and stores
+      # the components it names.
       change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :create}
@@ -1522,6 +1524,7 @@ defmodule MishkaDocument.Section do
       end
 
       change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :create}
@@ -1579,6 +1582,7 @@ defmodule MishkaDocument.Section do
              )
 
       change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :update}
@@ -1622,6 +1626,7 @@ defmodule MishkaDocument.Section do
              )
 
       change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :update}
@@ -2044,6 +2049,14 @@ defmodule MishkaDocument.Section do
       public? true
       constraints trim?: true
       description "The page's own text, as HTML, its code blocks highlighted"
+    end
+
+    # WORKED OUT WITH THE CONTENT, never written by hand nor on a read —
+    # `MishkaDocument.Resources.Changes.ContentFacts`.
+    attribute :content_components, {:array, :string} do
+      allow_nil? true
+      public? false
+      description "The components the content's markers name, nil when it names none"
     end
 
     attribute :order_position, :integer do
