@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -432,7 +432,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_document == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_document != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @section == nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={@sections != []}\n      data-role=\"doc-landing-items\"\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              roots(@sections),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != []}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <div\n      data-role=\"doc-section-body\"\n      class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-4 [&_h3]:font-semibold [&_img]:rounded-lg [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div :if={@show_notes and @notes != []} data-role=\"doc-section-notes\" class=\"mt-6 space-y-5\">\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_code]:rounded [&_code]:bg-[#f0efea] [&_code]:px-1 [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_document == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_document != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @section == nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={@sections != []}\n      data-role=\"doc-landing-items\"\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              roots(@sections),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != [] or (@crumb_current and @show_breadcrumb)}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n\n      <span :if={@crumb_current} data-role=\"doc-section-crumb\" aria-current=\"page\">\n        {@section.title}\n      </span>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <%!-- A callout an author places in a page's text is drawn by rich_content below, so this block\n    names it for the site's stylesheet: component_name=\"doc-callout\" --%>\n    <div\n      data-role=\"doc-section-body\"\n      class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-4 [&_h3]:font-semibold [&_img]:rounded-lg [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div :if={@show_notes and @notes != []} data-role=\"doc-section-notes\" class=\"mt-6 space-y-5\">\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class=\"prose prose-sm max-w-none leading-relaxed [&_a]:underline [&_code]:rounded [&_code]:bg-[#f0efea] [&_code]:px-1 [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3\"\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
       "attrs": [
         {
           "name": "workspace",
@@ -512,6 +512,14 @@
           "opts": {
             "default": true,
             "doc": "Draw the trail of parent pages above the title."
+          }
+        },
+        {
+          "name": "crumb_current",
+          "type": "boolean",
+          "opts": {
+            "default": false,
+            "doc": "End the trail with the page itself, as a word marked as the current page, so a page at the top of its document has a trail too."
           }
         },
         {
@@ -827,7 +835,8 @@
       ],
       "permissions": [],
       "dependencies": [
-        "doc-notice"
+        "doc-notice",
+        "doc-callout"
       ],
       "examples": [],
       "extra": {
@@ -1635,7 +1644,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-switcher\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-switcher-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-switcher-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <p\n    :if={@show_banner and @older}\n    data-role=\"doc-switcher-banner\"\n    class=\"mb-3 flex flex-wrap items-center gap-2 rounded-[12px] border border-[#f0dfb4] bg-[#fbf1dc] px-3 py-2 text-xs text-[#8a5514]\"\n  >\n    <span data-role=\"doc-switcher-banner-text\">{@banner_text}</span>\n\n    <.link\n      :if={@latest_href}\n      navigate={@latest_href}\n      data-role=\"doc-switcher-latest\"\n      class=\"font-bold underline\"\n    >\n      {@banner_link_text}\n    </.link>\n  </p>\n\n  <div :if={not @loading and not @failed} class=\"flex flex-wrap items-start gap-4\">\n    <details :if={@version_links != []} data-role=\"doc-switcher-versions\" class=\"min-w-[9rem]\">\n      <summary\n        data-role=\"doc-switcher-versions-summary\"\n        class=\"cursor-pointer rounded-[10px] border border-[#ecebe6] bg-white px-3 py-1.5 text-sm font-semibold\"\n      >\n        {@version_text}: {(@version && @version.version_number) || \"-\"}\n      </summary>\n\n      <ul class=\"mt-1 space-y-0.5 rounded-[10px] border border-[#ecebe6] bg-white p-1\">\n        <li :for={entry <- @version_links} id={\"#{@id}-version-#{entry.version.id}\"}>\n          <.link\n            navigate={entry.href}\n            data-role=\"doc-switcher-version\"\n            data-version={entry.version.version_number}\n            data-selected={to_string(entry.current)}\n            aria-current={(entry.current && \"true\") || nil}\n            class={[\n              \"flex items-center gap-2 rounded-[8px] px-2 py-1 text-sm hover:bg-[#f2f1fc]\",\n              (entry.current && \"font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n            ]}\n          >\n            <span>{entry.version.version_number}</span>\n\n            <span\n              :if={entry.version.status != :stable}\n              data-role=\"doc-switcher-status\"\n              class=\"rounded-full bg-[#f0efea] px-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a877f]\"\n            >\n              {entry.version.status}\n            </span>\n\n            <span\n              :if={entry.latest}\n              data-role=\"doc-switcher-latest-badge\"\n              class=\"rounded-full bg-[#eaf6ee] px-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#2f7a45]\"\n            >\n              {@latest_text}\n            </span>\n          </.link>\n        </li>\n      </ul>\n    </details>\n\n    <div :if={@variants != []} data-role=\"doc-switcher-languages\" class=\"min-w-[9rem]\">\n      <span class=\"block text-[11px] font-bold uppercase tracking-[0.08em] text-[#8a877f]\">\n        {@language_text}\n      </span>\n\n      <div class=\"mt-1 flex flex-wrap gap-1\">\n        <.link\n          :for={entry <- @variants}\n          navigate={entry.href}\n          id={\"#{@id}-language-#{entry.workspace.id}\"}\n          data-role=\"doc-switcher-language\"\n          data-language={entry.workspace.language}\n          data-selected={to_string(entry.current)}\n          aria-current={(entry.current && \"true\") || nil}\n          class={[\n            \"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.08em]\",\n            (entry.current && \"bg-[#f2f1fc] text-[#5b57d6]\") || \"text-[#8a877f] hover:text-[#5b57d6]\"\n          ]}\n        >\n          {entry.workspace.language}\n        </.link>\n      </div>\n    </div>\n  </div>\n</div>\n",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-switcher\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-switcher-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-switcher-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <p\n    :if={@show_banner and @older}\n    data-role=\"doc-switcher-banner\"\n    class=\"mb-3 flex flex-wrap items-center gap-2 rounded-[12px] border border-[#f0dfb4] bg-[#fbf1dc] px-3 py-2 text-xs text-[#8a5514]\"\n  >\n    <span data-role=\"doc-switcher-banner-text\">{@banner_text}</span>\n\n    <.link\n      :if={@latest_href}\n      navigate={@latest_href}\n      data-role=\"doc-switcher-latest\"\n      class=\"font-bold underline\"\n    >\n      {@banner_link_text}\n    </.link>\n  </p>\n\n  <div :if={not @loading and not @failed} class=\"flex flex-wrap items-start gap-4\">\n    <details :if={@version_links != []} data-role=\"doc-switcher-versions\" class=\"min-w-[9rem]\">\n      <summary\n        data-role=\"doc-switcher-versions-summary\"\n        class=\"cursor-pointer rounded-[10px] border border-[#ecebe6] bg-white px-3 py-1.5 text-sm font-semibold\"\n      >\n        {version_summary(@version_text, @version)}\n      </summary>\n\n      <ul class=\"mt-1 space-y-0.5 rounded-[10px] border border-[#ecebe6] bg-white p-1\">\n        <li :for={entry <- @version_links} id={\"#{@id}-version-#{entry.version.id}\"}>\n          <.link\n            navigate={entry.href}\n            data-role=\"doc-switcher-version\"\n            data-version={entry.version.version_number}\n            data-selected={to_string(entry.current)}\n            aria-current={(entry.current && \"true\") || nil}\n            class={[\n              \"flex items-center gap-2 rounded-[8px] px-2 py-1 text-sm hover:bg-[#f2f1fc]\",\n              (entry.current && \"font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n            ]}\n          >\n            <span>{entry.version.version_number}</span>\n\n            <span\n              :if={entry.version.status != :stable}\n              data-role=\"doc-switcher-status\"\n              class=\"rounded-full bg-[#f0efea] px-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a877f]\"\n            >\n              {entry.version.status}\n            </span>\n\n            <span\n              :if={entry.latest}\n              data-role=\"doc-switcher-latest-badge\"\n              class=\"rounded-full bg-[#eaf6ee] px-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#2f7a45]\"\n            >\n              {@latest_text}\n            </span>\n          </.link>\n        </li>\n      </ul>\n    </details>\n\n    <div :if={@variants != []} data-role=\"doc-switcher-languages\" class=\"min-w-[9rem]\">\n      <span class=\"block text-[11px] font-bold uppercase tracking-[0.08em] text-[#8a877f]\">\n        {@language_text}\n      </span>\n\n      <div class=\"mt-1 flex flex-wrap gap-1\">\n        <.link\n          :for={entry <- @variants}\n          navigate={entry.href}\n          id={\"#{@id}-language-#{entry.workspace.id}\"}\n          data-role=\"doc-switcher-language\"\n          data-language={entry.workspace.language}\n          data-selected={to_string(entry.current)}\n          aria-current={(entry.current && \"true\") || nil}\n          class={[\n            \"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.08em]\",\n            (entry.current && \"bg-[#f2f1fc] text-[#5b57d6]\") || \"text-[#8a877f] hover:text-[#5b57d6]\"\n          ]}\n        >\n          {entry.workspace.language}\n        </.link>\n      </div>\n    </div>\n  </div>\n</div>\n",
       "attrs": [
         {
           "name": "show",
@@ -1735,7 +1744,7 @@
           "type": "string",
           "opts": {
             "default": "Version",
-            "doc": "What the version switch is called."
+            "doc": "What the version switch is called. Left empty, it shows the version number alone."
           }
         },
         {
@@ -1878,6 +1887,11 @@
           "name": "version_query",
           "args": "version, latest, version_param",
           "code": "# THE VERSION IS IN THE URL ONLY WHILE IT IS NOT THE LATEST ONE. Carrying ?v=0.0.6 around a document\n# whose latest version is 0.0.6 pins every link a reader shares to a number that will be old next\n# week, and the same page then reads as an archived one.\nkey = trimmed(version_param)\n\ncase {version, latest} do\n  {nil, _no_versions} -> %{}\n  {_asked, nil} -> %{}\n  {%{id: same}, %{id: same}} -> %{}\n  {%{version_number: number}, _older} when key != \"\" -> %{key => to_string(number)}\n  _no_key_to_write_it_under -> %{}\nend\n"
+        },
+        {
+          "name": "version_summary",
+          "args": "version_text, version",
+          "code": "number = to_string((version && version.version_number) || \"-\")\n\ncase trimmed(version_text) do\n  \"\" -> number\n  _named -> \"#{version_text}: #{number}\"\nend\n"
         },
         {
           "name": "text_direction",
@@ -2364,6 +2378,83 @@
       "permissions": [],
       "dependencies": [],
       "examples": [],
+      "extra": {
+        "icon": "info",
+        "ui_kit": "mishka_document"
+      },
+      "site_id": null
+    },
+    {
+      "name": "doc-callout",
+      "description": "A function component: a callout inside a page's text — a note, a tip, a warning — that an author places with the content editor, as [[component doc-callout tone=\"tip\"]]…[[/component]] around a line or around paragraphs and lists. Its box is coloured by its tone; it draws only what it is handed.",
+      "type": "feedback",
+      "format": "heex",
+      "stateful": false,
+      "active": true,
+      "precompile": false,
+      "required": false,
+      "priority": 0,
+      "template": "<aside\n  {@rest}\n  data-role=\"doc-callout\"\n  data-tone={@tone}\n  class={[\"my-4 rounded-[14px] border px-4 py-3 text-sm leading-relaxed\", tone_class(@tone)]}\n>\n  <p :if={trimmed(@title) != \"\"} data-role=\"doc-callout-title\" class=\"mb-1 font-bold leading-snug\">\n    {@title}\n  </p>\n\n  <div\n    data-role=\"doc-callout-body\"\n    class=\"[&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:mb-2 [&>ol]:mb-2 [&>ul>li]:ml-5 [&>ul>li]:list-disc [&>ol>li]:ml-5 [&>ol>li]:list-decimal [&>a]:underline [&>p>a]:underline [&>ul>li>a]:underline [&>ol>li>a]:underline [&>code]:rounded [&>code]:bg-white/70 [&>code]:px-1 [&>p>code]:rounded [&>p>code]:bg-white/70 [&>p>code]:px-1\"\n  >\n    {render_slot(@inner_block)}\n  </div>\n</aside>",
+      "body": null,
+      "attrs": [
+        {
+          "name": "tone",
+          "type": "string",
+          "opts": {
+            "default": "note",
+            "doc": "What kind of callout it is, and the colour of its box.",
+            "values": [
+              "note",
+              "info",
+              "tip",
+              "success",
+              "warning",
+              "danger"
+            ]
+          }
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "opts": {
+            "default": null,
+            "doc": "A line in bold above what the callout says. Left empty, none is drawn."
+          }
+        },
+        {
+          "name": "rest",
+          "type": "global",
+          "opts": {}
+        }
+      ],
+      "slots": [
+        {
+          "name": "inner_block",
+          "opts": {
+            "doc": "What the callout says: a line of text, or paragraphs and lists.",
+            "required": false
+          },
+          "attrs": []
+        }
+      ],
+      "helpers": [
+        {
+          "name": "trimmed",
+          "args": "value",
+          "code": "case value do\n  binary when is_binary(binary) -> String.trim(binary)\n  nil -> \"\"\n  other -> to_string(other)\nend\n"
+        },
+        {
+          "name": "tone_class",
+          "args": "tone",
+          "code": "# ONE COLOUR A TONE, and a tone this does not know is drawn as a note.\ncase tone do\n  \"info\" -> \"border-[#cfe0f5] bg-[#f1f6fd] text-[#1f4f8a]\"\n  \"tip\" -> \"border-[#dcdbf5] bg-[#f2f1fc] text-[#3f3ba8]\"\n  \"success\" -> \"border-[#cce9da] bg-[#eef8f2] text-[#1f6b45]\"\n  \"warning\" -> \"border-[#f0dfb4] bg-[#fbf1dc] text-[#8a5514]\"\n  \"danger\" -> \"border-[#f0d6d6] bg-[#fdf7f7] text-[#9a3b3b]\"\n  _note -> \"border-[#ecebe6] bg-[#fbfbf9] text-[#3a382f]\"\nend\n"
+        }
+      ],
+      "permissions": [],
+      "dependencies": [],
+      "examples": [
+        "<.component component_name=\"doc-callout\" site=\"Global\" tone=\"tip\" title=\"Before you start\">\n  Run <code>mix deps.get</code> once the dependency is in <code>mix.exs</code>.\n</.component>",
+        "<.component component_name=\"doc-callout\" site=\"Global\" tone=\"warning\" title=\"Breaking change\">\n  <p>The <code>kind</code> attribute was renamed in 2.0.</p>\n  <ul>\n    <li>Rename it to <code>tone</code>.</li>\n    <li>Pick one of the six tones.</li>\n  </ul>\n</.component>"
+      ],
       "extra": {
         "icon": "info",
         "ui_kit": "mishka_document"

@@ -4,7 +4,7 @@ defmodule MishkaDocument.Kit do
 
   ## What is in the bundle, and why it is a bundle
 
-  `priv/cms_ui_kits/mishka_document.json` carries eight components of two kinds. Each is complete on
+  `priv/cms_ui_kits/mishka_document.json` carries nine components of two kinds. Each is complete on
   its own: its markup, its declarations, and its own code, including the Ash reads it runs. Nothing
   about them lives in Elixir.
 
@@ -14,12 +14,15 @@ defmodule MishkaDocument.Kit do
   `Phoenix.LiveComponent` that resolves the document from the URL itself and runs its own reads, so
   an author can put any of them on any page and each holds what it read.
 
-  ### The three pieces, which are function components
+  ### The four pieces, which are function components
 
-  `doc-workspace-card`, `doc-pager` and `doc-notice`. These hold nothing and read nothing: they draw
-  what the block above hands them. The notice is drawn by all five blocks — it is every skeleton,
-  every empty line and every failed read in this kit — and the card is what `doc-workspace-list`
-  draws a document with unless the author names a card of their own in its `card` attribute.
+  `doc-workspace-card`, `doc-pager`, `doc-notice` and `doc-callout`. These hold nothing and read
+  nothing: they draw what they are handed. The notice is drawn by all five blocks — it is every
+  skeleton, every empty line and every failed read in this kit — and the card is what
+  `doc-workspace-list` draws a document with unless the author names a card of their own in its
+  `card` attribute. The callout is placed by an author inside a page's text, with the content
+  editor — `[[component doc-callout tone="tip"]]…[[/component]]` — and drawn by `doc-section`'s
+  `rich_content`, which names it for the site's stylesheet.
 
   They draw themselves in plain HTML and Tailwind and call no other kit. A site that installed this
   extension and skipped Chelekom renders them; the components a documentation page is made of cannot

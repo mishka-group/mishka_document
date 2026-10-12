@@ -32,7 +32,7 @@ defmodule MishkaDocument.KitTest do
   # so it has no `mount/1`, no `id={@id}` and nothing to aim an event at.
   @live ~w(doc-workspace-list doc-section doc-sidebar doc-toc doc-switcher)
 
-  @functions ~w(doc-workspace-card doc-pager doc-notice)
+  @functions ~w(doc-workspace-card doc-pager doc-notice doc-callout)
 
   @names @live ++ @functions
 
@@ -97,7 +97,7 @@ defmodule MishkaDocument.KitTest do
       assert bundle()["name"] == "mishka_document"
     end
 
-    test "ships exactly the eight components, each of the kind it is listed under" do
+    test "ships exactly the nine components, each of the kind it is listed under" do
       assert Enum.map(components(), & &1["name"]) |> Enum.sort() == Enum.sort(@names)
 
       for component <- components() do
@@ -422,7 +422,7 @@ defmodule MishkaDocument.KitTest do
     test "and the ones with a fixed set of answers offer that set" do
       for component <- components(),
           attr <- component["attrs"],
-          attr["name"] in ~w(sort show) do
+          attr["name"] in ~w(sort show tone) do
         values = attr["opts"]["values"]
 
         assert is_list(values) and values != [],

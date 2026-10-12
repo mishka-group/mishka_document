@@ -690,6 +690,181 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # A CALLOUT IS PLACED INSIDE A PAGE'S TEXT, as the content editor stores it: a marker inside a
+  # paragraph around a line, or a marker on its own around paragraphs and lists. `rich_content`
+  # draws it as `doc-callout`, in the tone the marker names.
+  describe "doc-callout in a page's text" do
+    # THE RUNTIME DRAWS A MARKER'S COMPONENT ONLY BY A NAME `SiteState` KNOWS for the site, which a
+    # booted site holds for every component it has and this suite's hand-saved one does not.
+    defp callout_page!(site, content) do
+      :ok = SiteState.put_component(site.id, "doc-callout")
+      on_exit(fn -> SiteState.delete_component(site.id, "doc-callout") end)
+
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Callouts",
+        slug: "callouts",
+        order_position: 9,
+        content: content
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "callouts"}
+        })
+
+      view
+      |> render_async(@async)
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([data-role="doc-section-body"]))
+    end
+
+    test "draws a marker inside a paragraph as the callout, around its line", %{site: site} do
+      body =
+        callout_page!(
+          site,
+          ~s(<p>Before.</p><p>[[component doc-callout tone="tip"]]Use <code>mix</code>[[/component]]</p>)
+        )
+
+      assert [callout] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-callout"])))
+      assert LazyHTML.attribute(callout, "data-tone") == ["tip"]
+      assert LazyHTML.query(callout, ~s([data-role="doc-callout-title"])) |> Enum.count() == 0
+
+      assert callout
+             |> LazyHTML.query(~s([data-role="doc-callout-body"] > code))
+             |> LazyHTML.text() == "mix"
+
+      assert LazyHTML.query(body, ~s(p [data-role="doc-callout"])) |> Enum.count() == 0
+    end
+
+    test "draws a marker on its own around paragraphs and a list", %{site: site} do
+      body =
+        callout_page!(
+          site,
+          ~s([[component doc-callout tone="warning" title="Heads up"]]) <>
+            "<p>One.</p><ul><li>Two.</li><li>Three.</li></ul>[[/component]]"
+        )
+
+      assert [callout] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-callout"])))
+      assert LazyHTML.attribute(callout, "data-tone") == ["warning"]
+
+      assert callout
+             |> LazyHTML.query(~s([data-role="doc-callout-title"]))
+             |> LazyHTML.text()
+             |> String.trim() == "Heads up"
+
+      inner = LazyHTML.query(callout, ~s([data-role="doc-callout-body"]))
+      assert inner |> LazyHTML.query("p") |> LazyHTML.text() == "One."
+      assert inner |> LazyHTML.query("ul > li") |> Enum.count() == 2
+    end
+
+    test "is a note when the marker names no tone", %{site: site} do
+      body = callout_page!(site, "<p>[[component doc-callout]]Plain.[[/component]]</p>")
+
+      assert body
+             |> LazyHTML.query(~s([data-role="doc-callout"]))
+             |> LazyHTML.attribute("data-tone") == ["note"]
+    end
+  end
+
+  # THE TRAIL CAN END WITH THE PAGE ITSELF, as a word marked as the current page — and then a page
+  # at the top of its document has a trail too. Left off, the trail is the pages above it alone.
+  describe "doc-section's crumb_current" do
+    test "ends the trail with the page being read", %{site: site} do
+      addressed!(site)
+
+      base = %{path: "/mishka/docs", lang_param: "", crumb_current: true}
+
+      {:ok, nested, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(base, :params, %{"section" => "installation/from-source"})
+        )
+
+      assert text_of(nested, ~s([data-role="doc-section-crumb"])) == [
+               "Installation",
+               "From source"
+             ]
+
+      assert hrefs(nested, ~s([data-role="doc-section-crumb"])) == ["/mishka/docs/installation"]
+
+      assert text_of(nested, ~s([data-role="doc-section-crumb"][aria-current="page"])) == [
+               "From source"
+             ]
+
+      {:ok, top, _html} =
+        mount_page(site, "doc-section", Map.put(base, :params, %{"section" => "upgrading"}))
+
+      assert text_of(top, ~s([data-role="doc-section-breadcrumb"])) == ["Upgrading"]
+
+      assert text_of(top, ~s([data-role="doc-section-crumb"][aria-current="page"])) == [
+               "Upgrading"
+             ]
+    end
+
+    test "is the front page alone on the front page, and no trail on the landing", %{site: site} do
+      %{front: front} = fronted!(site, path: "/mishka/docs")
+      attrs = %{path: "/mishka/docs", lang_param: "", crumb_current: true, params: %{}}
+
+      {:ok, view, _html} = mount_page(site, "doc-section", attrs)
+
+      assert text_of(view, ~s([data-role="doc-section-crumb"][aria-current="page"])) == [
+               "Get started"
+             ]
+
+      assert hrefs(view, ~s([data-role="doc-section-crumb"])) == []
+
+      front
+      |> Ash.Changeset.for_update(:update, %{front_page: false},
+        tenant: site.id,
+        authorize?: false
+      )
+      |> Ash.update!()
+
+      {:ok, landing, _html} = mount_page(site, "doc-section", attrs)
+      assert text_of(landing, ~s([data-role="doc-section-breadcrumb"])) == []
+    end
+
+    test "left off, a page at the top has no trail and a nested one ends above it", %{site: site} do
+      addressed!(site)
+      base = %{path: "/mishka/docs", lang_param: ""}
+
+      {:ok, top, _html} =
+        mount_page(site, "doc-section", Map.put(base, :params, %{"section" => "upgrading"}))
+
+      assert text_of(top, ~s([data-role="doc-section-breadcrumb"])) == []
+
+      {:ok, nested, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(base, :params, %{"section" => "installation/from-source"})
+        )
+
+      assert text_of(nested, ~s([data-role="doc-section-crumb"])) == ["Installation"]
+      assert text_of(nested, ~s([aria-current="page"])) == []
+    end
+  end
+
+  describe "doc-switcher's version_text" do
+    test "names the version switch, and left empty leaves the number alone", %{site: site} do
+      addressed!(site)
+      attrs = %{path: "/mishka/docs", lang_param: "", show: "version"}
+
+      {:ok, named, _html} = mount_page(site, "doc-switcher", attrs)
+
+      assert text_of(named, ~s([data-role="doc-switcher-versions-summary"])) == [
+               "Version: 1.0.0"
+             ]
+
+      {:ok, bare, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :version_text, ""))
+      assert text_of(bare, ~s([data-role="doc-switcher-versions-summary"])) == ["1.0.0"]
+    end
+  end
+
   describe "they compile" do
     # WHICH KIND EACH ONE IS COMES OUT OF THE BUNDLE, not out of a list here. The kit holds both
     # now — blocks that read and hold what they read, and the function components they draw their
