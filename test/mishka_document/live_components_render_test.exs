@@ -2877,8 +2877,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert cut |> drawn(~s([data-role="doc-code-foot"] b)) |> Enum.count() == 0
     end
 
-    # A NOTE IS STORED AS BASIC HTML, which keeps no class, so its code block names no language; its
-    # window still carries the button.
+    # A NOTE IS STORED AS A PAGE'S TEXT IS, so its code block keeps its language, and its window
+    # carries the button.
     test "and draws a note's code blocks in windows as well", %{site: site} do
       %{pages: [_first, installation | _rest]} = manual!(site)
 
@@ -2893,7 +2893,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           params: %{"section" => "installation"}
         })
 
-      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code-lang"])) == [""]
+      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code-lang"])) == [
+               "bash"
+             ]
 
       assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code"] > pre > code)) ==
                ["mix setup"]
