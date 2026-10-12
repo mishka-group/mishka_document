@@ -455,6 +455,9 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
           "/admin/dashboard/document/sections/#{version.id}"
         )
 
+      # The activity feed is read by a task the loaded workspace starts, so it is awaited in a second
+      # pass, once the first has drawn the workspace.
+      render_async(view, 5_000)
       render_async(view, 5_000)
       assert has_element?(view, "span", "Updated Jul 3, 2025")
       assert has_element?(view, "[data-role=seccard][id$='#{section.id}']", "Mar 9, 2024")
