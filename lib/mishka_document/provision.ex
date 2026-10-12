@@ -64,7 +64,11 @@ defmodule MishkaDocument.Provision do
 
       /:lang/docs                        every document the site publishes
       /:lang/docs/:workspace             one document's front page and its contents
-      /:lang/docs/:workspace/:section    one page of it, with its notes
+      /:lang/docs/:workspace/*section    one page of it, with its notes — headless/switch for the
+                                         page switch filed under headless (`MishkaDocument.Address`)
+
+  A document given an address of its own is read there instead, on two pages of the same design
+  written when the address is set — see `ensure_address!/3`.
 
   No static route in the host application's router answers any of them — the hand-written marketing
   the user keeps now sits under `mish-`, `/mish-chelekom/docs` and
@@ -142,7 +146,7 @@ defmodule MishkaDocument.Provision do
   # in later carries the language the reader already has.
   @docs "/:lang/docs"
   @document "#{@docs}/:workspace"
-  @document_page "#{@document}/:section"
+  @document_page "#{@document}/*section"
 
   @typedoc "See `MishkaCmsCore.Runtime.ExtensionProvision.report/0`."
   @type report :: ExtensionProvision.report()
@@ -222,6 +226,112 @@ defmodule MishkaDocument.Provision do
   """
   @spec bundle_version() :: String.t() | nil
   def bundle_version, do: ExtensionProvision.bundle_version(manifest())
+
+  @doc """
+  The base the documents with no address of their own are read under, by their slug:
+  `/:lang/docs`. A document's own address may not be under it (`MishkaDocument.Address.check/1`).
+  """
+  @spec docs_base() :: String.t()
+  def docs_base, do: @docs
+
+  @doc """
+  Gives a document at `address` the two pages it is read at — its front page, and every page of it
+  (`MishkaDocument.Address.page_paths/1`) — on `site`, where the site has no page at that path yet.
+  A page the site already has at either path, its own design among them, is left as it is.
+
+  Written as `opts[:actor]`, who needs what `MishkaCmsCore.Runtime.ExtensionProvision.required/1`
+  names; leave it out and the system writes. Returns the report `ensure!/3` gives.
+  """
+  @spec ensure_address!(map() | String.t(), String.t(), keyword()) :: report()
+  def ensure_address!(site, address, opts \\ []) do
+    paths = Map.values(MishkaDocument.Address.page_paths(address))
+
+    if held?(site_id_of(site), paths),
+      do: %{
+        version: bundle_version(),
+        permissions: [],
+        components: [],
+        pages: [],
+        snippets: [],
+        renamed_pages: [],
+        skipped_pages: paths
+      },
+      else: ExtensionProvision.ensure!(address_manifest(address), site, %{}, opts)
+  end
+
+  @doc """
+  The names `actor` is missing to give a document at `address` its pages on `site_id` — `[]` when
+  the site already has a page at both paths, so nothing would be written.
+  """
+  @spec address_permissions_missing(String.t(), String.t(), map() | nil) :: [String.t()]
+  def address_permissions_missing(site_id, address, actor) do
+    paths = Map.values(MishkaDocument.Address.page_paths(address))
+
+    if held?(site_id, paths),
+      do: [],
+      else: ExtensionProvision.missing(address_manifest(address), actor)
+  end
+
+  defp site_id_of(%{id: site_id}), do: site_id
+  defp site_id_of(site_id) when is_binary(site_id), do: site_id
+
+  # Whether the site already has a page at every one of these paths.
+  defp held?(site_id, paths) do
+    held = site_id |> held_paths(paths) |> MapSet.new()
+    Enum.all?(paths, &MapSet.member?(held, &1))
+  end
+
+  # THE PATHS OF THE SITE THAT A PAGE ALREADY ANSWERS, as the system: whether a page is there decides
+  # what is asked of the writer, and has to be known whether or not they may read pages.
+  defp held_paths(site_id, paths) do
+    require Ash.Query
+
+    MishkaCmsCore.Runtime.Page
+    |> Ash.Query.for_read(:master_read, %{}, authorize?: false)
+    |> Ash.Query.filter(site_id == ^site_id and path in ^paths)
+    |> Ash.Query.select([:path])
+    |> Ash.read(authorize?: false, page: [limit: length(paths)])
+    |> case do
+      {:ok, %{results: rows}} -> Enum.map(rows, & &1.path)
+      _unreadable -> []
+    end
+  end
+
+  defp address_manifest(address) do
+    %{
+      app: :mishka_document,
+      bundle_path: Kit.bundle_path(),
+      section: @section,
+      pages: &address_page_attrs_for(&1, address)
+    }
+  end
+
+  defp address_page_attrs_for(%{name: site_name}, address) do
+    paths = MishkaDocument.Address.page_paths(address)
+
+    [
+      %{
+        name: "Document " <> address,
+        title: "Document",
+        path: paths.document,
+        description: nil,
+        extra: %{"record" => "docs:document"},
+        format: :heex,
+        template: document(site_name, address),
+        active: true
+      },
+      %{
+        name: "Document page " <> address,
+        title: "Document page",
+        path: paths.page,
+        description: nil,
+        extra: %{"record" => "docs:page"},
+        format: :heex,
+        template: document(site_name, address),
+        active: true
+      }
+    ]
+  end
 
   @doc "The paths of the sample pages, in the order they are created."
   @spec page_paths() :: [String.t()]
@@ -344,17 +454,17 @@ defmodule MishkaDocument.Provision do
   # `params` is what carries `:workspace`, `:section` and `?v=` to all three blocks, which read them
   # by name out of that one map. The language is the one key taken out of it, for the reason the
   # moduledoc gives.
-  defp document(site) do
+  defp document(site, address \\ nil) do
     """
     <div class="min-h-screen bg-[#f6f5f2] text-[#1b1a18]">
-    #{indent(header(site, :switcher), 2)}
+    #{indent(header(site, {:switcher, address}), 2)}
 
       <main class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 py-8 lg:grid-cols-[240px_minmax(0,1fr)_200px]">
         <.component
           component_name="doc-sidebar"
           site="#{site}"
           id="doc-contents"
-          current_user={assigns[:current_user]}
+          current_user={assigns[:current_user]}#{serves(address, 10)}
           heading="Contents"
           lang={@page.language}
           doc_base="#{@docs}"
@@ -366,7 +476,7 @@ defmodule MishkaDocument.Provision do
           component_name="doc-section"
           site="#{site}"
           id="doc-page"
-          current_user={assigns[:current_user]}
+          current_user={assigns[:current_user]}#{serves(address, 10)}
           lang={@page.language}
           doc_base="#{@docs}"
           params={Map.drop(@query_params, ["lang"])}
@@ -376,7 +486,7 @@ defmodule MishkaDocument.Provision do
           component_name="doc-toc"
           site="#{site}"
           id="doc-on-this-page"
-          current_user={assigns[:current_user]}
+          current_user={assigns[:current_user]}#{serves(address, 10)}
           heading="On this page"
           lang={@page.language}
           doc_base="#{@docs}"
@@ -464,13 +574,13 @@ defmodule MishkaDocument.Provision do
     """
   end
 
-  defp offered(site, :switcher) do
+  defp offered(site, {:switcher, address}) do
     """
     <.component
       component_name="doc-switcher"
       site="#{site}"
       id="doc-switcher"
-      current_user={assigns[:current_user]}
+      current_user={assigns[:current_user]}#{serves(address, 6)}
       show="both"
       lang={@page.language}
       doc_base="#{@docs}"
@@ -479,6 +589,13 @@ defmodule MishkaDocument.Provision do
     />
     """
   end
+
+  # A PAGE AT A DOCUMENT'S OWN ADDRESS NAMES IT, so every block reads that document rather than one
+  # a slug in the URL names, and writes no `?lang=`: the address is one edition's, and says which.
+  defp serves(nil, _indent), do: ""
+
+  defp serves(address, indent),
+    do: "\n" <> String.duplicate(" ", indent) <> ~s|path="#{address}" lang_param=""|
 
   # ONE OF THE ADDRESSES ABOVE AS A URL A READER COULD HAVE TYPED, written as the `site_path/2` the
   # template calls: the `lang` capture filled in with the language this page is being read in, at

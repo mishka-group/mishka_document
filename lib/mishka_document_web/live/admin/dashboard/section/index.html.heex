@@ -95,6 +95,25 @@
                 )}
               </span>
             </div>
+
+            <%!-- The plugins' actions for this document — see `MishkaDocumentWeb.AdminActions`. --%>
+            <div
+              :if={@admin_actions != []}
+              id="document-admin-actions"
+              class="mt-4 flex flex-wrap items-center gap-2"
+            >
+              <button
+                :for={action <- @admin_actions}
+                type="button"
+                id={"#{AdminActions.component_id(action)}-open"}
+                phx-click="open_admin_action"
+                phx-value-id={action.id}
+                class="flex h-9 items-center gap-2 rounded-[11px] border border-[#ecebe6] bg-white px-3.5 text-[12.5px] font-semibold text-[#5c5a54] transition-colors hover:bg-[#f7f6f3]"
+              >
+                <.icon :if={action.icon} name={action.icon} class="size-[15px]" />
+                {action.label}
+              </button>
+            </div>
           </div>
 
           <div
@@ -168,6 +187,19 @@
         current_user={@current_user}
         record_id={@editing_note_id}
         defaults={%{section_id: @note_section_id, site_id: @workspace && @workspace.site_id}}
+      />
+    </.modal>
+
+    <.modal
+      :if={@admin_action}
+      id="document-admin-action-modal"
+      show
+      on_cancel={JS.push("close_admin_action")}
+    >
+      <.live_component
+        module={@admin_action.component}
+        id={AdminActions.component_id(@admin_action)}
+        {AdminActions.assigns(@admin_action, @admin_context, @current_user)}
       />
     </.modal>
 
@@ -395,6 +427,28 @@
                 class="mt-[3px] font-['Space_Grotesk'] text-[12.5px] font-semibold text-[#1b1a18] rtl:text-right"
               >
                 /{@workspace.slug}
+              </div>
+            </div>
+            <div :if={@workspace.path}>
+              <div class="text-[10px] font-bold uppercase tracking-[0.05em] text-[#a8a5a0]">
+                {gettext("Address")}
+              </div>
+              <div
+                dir="ltr"
+                class="mt-[3px] font-['Space_Grotesk'] text-[12.5px] font-semibold text-[#1b1a18] rtl:text-right"
+              >
+                {@workspace.path}
+              </div>
+            </div>
+            <div :if={@front_page} id="section-front-page">
+              <div class="text-[10px] font-bold uppercase tracking-[0.05em] text-[#a8a5a0]">
+                {gettext("Front page")}
+              </div>
+              <div class="mt-[3px] text-[12.5px] font-semibold text-[#1b1a18]">
+                {@front_page.title}
+              </div>
+              <div class="mt-[2px] text-[11px] font-medium text-[#a8a5a0]">
+                {gettext("Drawn at the document's own address")}
               </div>
             </div>
             <div>

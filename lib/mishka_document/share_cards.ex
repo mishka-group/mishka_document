@@ -6,7 +6,11 @@ defmodule MishkaDocument.ShareCards do
 
     * a document (`MishkaDocument.Workspace`), while it is active — its front page, `"docs:document"`
     * a page (`MishkaDocument.Section`), while both its reviews approve it and its document is
-      active — `"docs:page"`, under its document's slug
+      active — `"docs:page"`, under its document's slug, at its own part of the address: the slugs
+      of the pages it is drawn under among its version's approved pages, then its own
+      (`MishkaDocument.Address`). A version's front page shows none of its own: it is drawn at its
+      document's address, whose card is the document's. A group shows none: it is only a heading
+      in the contents, with no page of its own.
 
   The after-save plugins (`MishkaDocument.Plugins.WorkspaceShareCard`,
   `MishkaDocument.Plugins.SectionShareCard`) hand it to `ShareCard.refresh/3`, and each record's
@@ -16,11 +20,14 @@ defmodule MishkaDocument.ShareCards do
   require Ash.Query
 
   alias MishkaCmsCore.Runtime.Languages
-  alias MishkaDocument.{Section, Workspace, WorkspaceVersion}
+  alias MishkaDocument.{Address, Section, Workspace, WorkspaceVersion}
 
   @spec target(struct()) :: MishkaCmsCore.Runtime.ShareCard.target() | nil
   def target(%Workspace{status: :active, slug: slug, language: language}) when is_binary(slug),
     do: {:record, "docs:document", captures(%{"workspace" => slug}, language)}
+
+  def target(%Section{front_page: true}), do: nil
+  def target(%Section{group_heading: true}), do: nil
 
   def target(
         %Section{
@@ -36,7 +43,7 @@ defmodule MishkaDocument.ShareCards do
 
       document ->
         {:record, "docs:page",
-         captures(%{"workspace" => document, "section" => slug}, section.language)}
+         captures(%{"workspace" => document, "section" => address_of(section)}, section.language)}
     end
   end
 
@@ -56,6 +63,26 @@ defmodule MishkaDocument.ShareCards do
   end
 
   defp active_document(_section), do: nil
+
+  # The slugs of the pages a page is drawn under, then its own, as a `*section` capture holds them:
+  # its place among its version's approved pages, read as the system, as `PageSeo` reads them.
+  defp address_of(%{id: id, workspace_version_id: version_id, site_id: site_id} = section) do
+    pages =
+      Section
+      |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
+      |> Ash.Query.filter(workspace_version_id == ^version_id and id != ^id)
+      |> Ash.Query.select([:id, :slug, :parent_section_id, :front_page, :group_heading])
+      |> Ash.read(tenant: site_id, authorize?: false, page: false)
+      |> case do
+        {:ok, found} -> found
+        _unreadable -> []
+      end
+
+    [section | pages]
+    |> Address.paths()
+    |> Map.fetch!(id)
+    |> Enum.join("/")
+  end
 
   defp captures(captures, language) when is_binary(language),
     do: Map.put(captures, Languages.capture(), language)

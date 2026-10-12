@@ -149,6 +149,54 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
     document
   end
 
+  # A DOCUMENT WITH AN ADDRESS OF ITS OWN is listed there, its pages under it — never under /docs,
+  # which would list one page at two addresses. Its front page is a page of the site at a fixed path,
+  # which the sitemap lists as one, so only its pages are added here.
+  describe "a document with an address of its own" do
+    test "lists its pages under the address, each under the pages it is filed under",
+         %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      install = page!(site, version, "install")
+      page!(site, version, "steps", parent_section_id: install.id)
+
+      assert paths(listed(site)) == ["/product/docs/install", "/product/docs/install/steps"]
+    end
+
+    # ITS FRONT PAGE IS THE ADDRESS ITSELF, which the sitemap already lists as a page of the site.
+    test "lists no front page of its own, and the pages under it directly under the address",
+         %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", front_page: true)
+      page!(site, version, "install", parent_section_id: front.id)
+      page!(site, version, "upgrading")
+
+      assert paths(listed(site)) == ["/product/docs/install", "/product/docs/upgrading"]
+    end
+
+    # A GROUP IS ONLY A HEADING, with no address to list, and its pages are listed as if it were not
+    # there.
+    test "lists no group, and the pages under one directly under the address", %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      group = page!(site, version, "navigation", group_heading: true)
+      page!(site, version, "breadcrumb", parent_section_id: group.id)
+
+      assert paths(listed(site)) == ["/product/docs/breadcrumb"]
+    end
+
+    test "lists nothing for it once the page at its address is gone", %{site: site} do
+      document = document!(site, slug: "product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      page!(site, version, "install")
+
+      pages = Enum.reject(handed(site), &(&1.path == "/product/docs/*section"))
+
+      assert paths(listed(site, pages)) == []
+    end
+  end
+
   describe "a published document" do
     test "is listed at its front page and each approved page of the version marked latest",
          %{site: site, mode: mode} do
@@ -174,6 +222,25 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
       assert Enum.find(urls, &(&1.path == english(mode, "/docs/guide/install"))).lastmod ==
                install.updated_at
+    end
+
+    # A FRONT PAGE IS DRAWN AT ITS DOCUMENT'S ADDRESS, so it is listed as that address and dates
+    # it, and never under its own slug, which is a missing page.
+    test "lists a front page at its document's address alone, which it dates", %{
+      site: site,
+      mode: mode
+    } do
+      document = document!(site, slug: "guide")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", front_page: true)
+      page!(site, version, "install", parent_section_id: front.id)
+
+      urls = listed(site)
+
+      assert paths(urls) == [english(mode, "/docs/guide"), english(mode, "/docs/guide/install")]
+
+      dated = Enum.find(urls, &(&1.path == english(mode, "/docs/guide"))).lastmod
+      assert DateTime.compare(dated, front.updated_at) != :lt
     end
 
     test "shows the version an editor marked latest over a newer published one", %{
@@ -339,7 +406,7 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
                [
                  english(mode, "/docs/guide"),
                  english(mode, "/docs/guide/open"),
-                 english(mode, "/docs/guide/open-child")
+                 english(mode, "/docs/guide/open/open-child")
                ]
     end
   end

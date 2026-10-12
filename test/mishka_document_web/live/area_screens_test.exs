@@ -31,9 +31,13 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
 
   @workspace "admin:dashboard:document:workspace"
   @section "admin:dashboard:document:section"
+  # What setting the documentation up writes: its pages, its components, the stylesheet its code
+  # blocks are coloured by, the hook their copy buttons are answered by, and the site's settings.
   @provision [
     "admin:dashboard:runtime:page",
     "admin:dashboard:runtime:component",
+    "admin:dashboard:runtime:stylesheet",
+    "admin:dashboard:runtime:js_hook",
     "admin:dashboard:runtime:site"
   ]
 
@@ -451,6 +455,9 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
           "/admin/dashboard/document/sections/#{version.id}"
         )
 
+      # The activity feed is read by a task the loaded workspace starts, so it is awaited in a second
+      # pass, once the first has drawn the workspace.
+      render_async(view, 5_000)
       render_async(view, 5_000)
       assert has_element?(view, "span", "Updated Jul 3, 2025")
       assert has_element?(view, "[data-role=seccard][id$='#{section.id}']", "Mar 9, 2024")

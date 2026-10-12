@@ -24,10 +24,14 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   alias MishkaCmsCore.Runtime.LiveViewHelpers
   alias MishkaCmsCore.Runtime.States.{SettingsState, SiteState}
   alias MishkaCmsCore.Runtime.Translations
+  alias MishkaDocument.Test.Plugins.PageExtras
+  alias MishkaInstaller.Event.{Event, EventHandler, ModuleStateCompiler}
 
   require Ash.Query
 
   @moduletag :integration
+
+  @extras_event "document:page:extras"
 
   # A UNIQUE SITE NAME PER TEST, and it is not tidiness. A component's runtime module is named from
   # a hash of (component name, SITE NAME) and is cached in the VM's code table for the rest of the
@@ -254,6 +258,13 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
   end
 
+  defp drawn(view, selector) do
+    view
+    |> render_async(@async)
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(selector)
+  end
+
   defp hrefs(view, selector) do
     view
     |> render_async(@async)
@@ -392,6 +403,1129 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       end
 
     %{document: document, version: version, pages: pages}
+  end
+
+  # A DOCUMENT WITH AN ADDRESS OF ITS OWN is read there by every block a page at that address holds,
+  # and nowhere else: its slug under /docs names nothing. Every link written to it or to a page of it
+  # is under that address — never /docs/<slug> — with no ?lang=, since the address is one edition's. A page's address holds the pages it is filed
+  # under (`MishkaDocument.Address`).
+  describe "a document with an address of its own" do
+    test "is read at it, and every link to a page of it is under it", %{site: site} do
+      addressed!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "installation/from-source"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["From source"]
+      assert hrefs(view, ~s([data-role="doc-section-crumb"])) == ["/mishka/docs/installation"]
+      assert hrefs(view, ~s([data-role="doc-section-prev"])) == ["/mishka/docs/installation"]
+      assert hrefs(view, ~s([data-role="doc-section-next"])) == ["/mishka/docs/upgrading"]
+    end
+
+    test "draws its front page at the address, its pages under it", %{site: site} do
+      addressed!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-landing-title"])) == ["Mishka CMS"]
+
+      assert hrefs(view, ~s([data-role="doc-landing-link"])) == [
+               "/mishka/docs/installation",
+               "/mishka/docs/upgrading"
+             ]
+    end
+
+    test "is listed and linked at its address, with no language written onto it",
+         %{site: site} do
+      addressed!(site)
+
+      {:ok, list, _html} = mount_page(site, "doc-workspace-list", %{per_page: 10})
+      assert hrefs(list, ~s([data-role="doc-list-title"])) == ["/mishka/docs"]
+
+      {:ok, contents, _html} =
+        mount_page(site, "doc-sidebar", %{path: "/mishka/docs", lang_param: "", expand_all: true})
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/mishka/docs/installation",
+               "/mishka/docs/installation/from-source",
+               "/mishka/docs/upgrading"
+             ]
+    end
+
+    test "keeps a page filed under another inside its parent's address, in every block",
+         %{site: site} do
+      addressed!(site)
+
+      attrs = %{
+        path: "/mishka/docs",
+        lang_param: "",
+        params: %{"section" => "installation/from-source"}
+      }
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", attrs)
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"][aria-current="page"])) == [
+               "/mishka/docs/installation/from-source"
+             ]
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == ["Clone", "Build"]
+
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+
+      # The older version has no "From source", so its entry leads to its front page.
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == [
+               "/mishka/docs/installation/from-source",
+               "/mishka/docs?v=0.9.0"
+             ]
+    end
+
+    test "answers a page filed under another only at its whole address", %{site: site} do
+      addressed!(site)
+
+      assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "from-source"}
+        })
+      end
+    end
+
+    test "and an address no document is read at is a missing page", %{site: site} do
+      addressed!(site)
+
+      assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+        mount_page(site, "doc-section", %{path: "/nothing/here", lang_param: "", params: %{}})
+      end
+    end
+
+    test "but a document an author pinned wins over the address", %{site: site} do
+      addressed!(site)
+      document!(site, name: "Other", slug: "other")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          path: "/nothing/here",
+          params: %{}
+        })
+
+      assert text_of(view, ~s([data-role="doc-landing-title"])) == ["Mishka CMS"]
+    end
+
+    test "is a missing page at /docs/<its slug>, and the blocks beside it draw none of it",
+         %{site: site} do
+      addressed!(site)
+
+      under_base = %{
+        workspace_param: "workspace",
+        section_param: "section",
+        lang_param: "",
+        doc_base: "/docs",
+        params: %{"workspace" => "mishka-cms", "section" => "installation"}
+      }
+
+      assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+        mount_page(site, "doc-section", under_base)
+      end
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", under_base)
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == []
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", under_base)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == []
+
+      {:ok, switch, _html} =
+        mount_page(site, "doc-switcher", Map.put(under_base, :show, "version"))
+
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == []
+    end
+
+    test "tells apart two pages of the same name under two parents", %{site: site} do
+      %{version: version} = addressed!(site)
+      page!(site, version, title: "Tabs", slug: "tabs", order_position: 2)
+      headless = page!(site, version, title: "Headless", slug: "headless", order_position: 3)
+
+      page!(site, version,
+        title: "Headless tabs",
+        slug: "tabs",
+        order_position: 0,
+        parent_section_id: headless.id
+      )
+
+      for {address, title} <- [{"tabs", "Tabs"}, {"headless/tabs", "Headless tabs"}] do
+        {:ok, view, _html} =
+          mount_page(site, "doc-section", %{
+            path: "/mishka/docs",
+            lang_param: "",
+            params: %{"section" => address}
+          })
+
+        assert text_of(view, ~s([data-role="doc-section-title"])) == [title]
+      end
+    end
+  end
+
+  # A VERSION'S FRONT PAGE IS DRAWN AT ITS DOCUMENT'S OWN ADDRESS, in place of the landing: every
+  # block reads it there, every link to it is that address with no trailing slash, the pages filed
+  # under it sit directly under the address, and the address with its slug after it is a missing
+  # page (`MishkaDocument.Address`).
+  describe "a document with a front page" do
+    test "draws it at the document's own address, in place of the landing", %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Get started"]
+      assert text_of(view, ~s([data-role="doc-section-landing"])) == []
+      assert [body] = text_of(view, ~s([data-role="doc-section-body"]))
+      assert body =~ "Welcome."
+      assert hrefs(view, ~s([data-role="doc-section-next"])) == ["/mishka/docs/install"]
+    end
+
+    test "marks it as the page being read in the contents, linked at the address", %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+      attrs = %{path: "/mishka/docs", lang_param: "", params: %{}}
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", Map.put(attrs, :expand_all, true))
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/mishka/docs",
+               "/mishka/docs/install",
+               "/mishka/docs/upgrading"
+             ]
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"][aria-current="page"])) == [
+               "/mishka/docs"
+             ]
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == ["Why", "How"]
+
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == [
+               "/mishka/docs",
+               "/mishka/docs?v=0.9.0"
+             ]
+    end
+
+    test "files the pages under it directly under the address, and leads back to it",
+         %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "install"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Install"]
+      assert hrefs(view, ~s([data-role="doc-section-crumb"])) == ["/mishka/docs"]
+      assert hrefs(view, ~s([data-role="doc-section-prev"])) == ["/mishka/docs"]
+      assert hrefs(view, ~s([data-role="doc-section-next"])) == ["/mishka/docs/upgrading"]
+    end
+
+    test "has no address of its own under the document's", %{site: site} do
+      fronted!(site, path: "/mishka/docs")
+
+      for section <- ["get-started", "get-started/install"] do
+        assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+          mount_page(site, "doc-section", %{
+            path: "/mishka/docs",
+            lang_param: "",
+            params: %{"section" => section}
+          })
+        end
+      end
+
+      {:ok, toc, _html} =
+        mount_page(site, "doc-toc", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "get-started"}
+        })
+
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == []
+    end
+
+    test "is linked at /docs/<slug> for a document with no address", %{site: site} do
+      fronted!(site, [])
+
+      attrs = %{
+        doc_base: "/docs",
+        lang_param: "",
+        params: %{"workspace" => "fronted"}
+      }
+
+      {:ok, view, _html} = mount_page(site, "doc-section", attrs)
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Get started"]
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", Map.put(attrs, :expand_all, true))
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/docs/fronted",
+               "/docs/fronted/install",
+               "/docs/fronted/upgrading"
+             ]
+
+      {:ok, child, _html} =
+        mount_page(site, "doc-section", put_in(attrs, [:params, "section"], "install"))
+
+      assert hrefs(child, ~s([data-role="doc-section-crumb"])) == ["/docs/fronted"]
+    end
+
+    test "and a version with none keeps the landing", %{site: site} do
+      %{front: front} = fronted!(site, path: "/mishka/docs")
+
+      front
+      |> Ash.Changeset.for_update(:update, %{front_page: false},
+        tenant: site.id,
+        authorize?: false
+      )
+      |> Ash.update!()
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-landing-title"])) == ["Fronted"]
+      assert text_of(view, ~s([data-role="doc-section-title"])) == []
+    end
+  end
+
+  # A CALLOUT IS PLACED INSIDE A PAGE'S TEXT, as the content editor stores it: a marker inside a
+  # paragraph around a line, or a marker on its own around paragraphs and lists. `rich_content`
+  # draws it as `doc-callout`, in the tone the marker names.
+  describe "doc-callout in a page's text" do
+    # THE RUNTIME DRAWS A MARKER'S COMPONENT ONLY BY A NAME `SiteState` KNOWS for the site, which a
+    # booted site holds for every component it has and this suite's hand-saved one does not.
+    defp callout_page!(site, content) do
+      :ok = SiteState.put_component(site.id, "doc-callout")
+      on_exit(fn -> SiteState.delete_component(site.id, "doc-callout") end)
+
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Callouts",
+        slug: "callouts",
+        order_position: 9,
+        content: content
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "callouts"}
+        })
+
+      view
+      |> render_async(@async)
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([data-role="doc-section-body"]))
+    end
+
+    test "draws a marker inside a paragraph as the callout, around its line", %{site: site} do
+      body =
+        callout_page!(
+          site,
+          ~s(<p>Before.</p><p>[[component doc-callout tone="tip"]]Use <code>mix</code>[[/component]]</p>)
+        )
+
+      assert [callout] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-callout"])))
+      assert LazyHTML.attribute(callout, "data-tone") == ["tip"]
+      assert LazyHTML.query(callout, ~s([data-role="doc-callout-title"])) |> Enum.count() == 0
+
+      assert callout
+             |> LazyHTML.query(~s([data-role="doc-callout-body"] > code))
+             |> LazyHTML.text() == "mix"
+
+      assert LazyHTML.query(body, ~s(p [data-role="doc-callout"])) |> Enum.count() == 0
+    end
+
+    test "draws a marker on its own around paragraphs and a list", %{site: site} do
+      body =
+        callout_page!(
+          site,
+          ~s([[component doc-callout tone="warning" title="Heads up"]]) <>
+            "<p>One.</p><ul><li>Two.</li><li>Three.</li></ul>[[/component]]"
+        )
+
+      assert [callout] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-callout"])))
+      assert LazyHTML.attribute(callout, "data-tone") == ["warning"]
+
+      assert callout
+             |> LazyHTML.query(~s([data-role="doc-callout-title"]))
+             |> LazyHTML.text()
+             |> String.trim() == "Heads up"
+
+      inner = LazyHTML.query(callout, ~s([data-role="doc-callout-body"]))
+      assert inner |> LazyHTML.query("p") |> LazyHTML.text() == "One."
+      assert inner |> LazyHTML.query("ul > li") |> Enum.count() == 2
+    end
+
+    test "is a note when the marker names no tone", %{site: site} do
+      body = callout_page!(site, "<p>[[component doc-callout]]Plain.[[/component]]</p>")
+
+      assert body
+             |> LazyHTML.query(~s([data-role="doc-callout"]))
+             |> LazyHTML.attribute("data-tone") == ["note"]
+    end
+  end
+
+  # AN EXAMPLE IS PLACED INSIDE A PAGE'S TEXT around the markers of the components it shows, and
+  # drawn in a frame of its own: the components' HTML is the frame's page, under the site's
+  # stylesheet, with a toolbar over it that the kit's hook answers.
+  describe "doc-example in a page's text" do
+    # THE RUNTIME DRAWS A MARKER'S COMPONENT ONLY BY A NAME `SiteState` KNOWS for the site, which a
+    # booted site holds for every component it has and this suite's hand-saved one does not.
+    defp example_page!(site, content, inside \\ ["doc-callout"]) do
+      for name <- ["doc-example" | inside] do
+        :ok = SiteState.put_component(site.id, name)
+        on_exit(fn -> SiteState.delete_component(site.id, name) end)
+      end
+
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Examples",
+        slug: "examples",
+        order_position: 9,
+        content: content
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "examples"}
+        })
+
+      view
+      |> render_async(@async)
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([data-role="doc-section-body"]))
+    end
+
+    # The frame's own page, as the browser reads it out of `srcdoc`.
+    defp framed(example) do
+      [page] =
+        example
+        |> LazyHTML.query(~s([data-role="doc-example-frame"]))
+        |> LazyHTML.attribute("srcdoc")
+
+      LazyHTML.from_document(page)
+    end
+
+    defp pressed(example) do
+      example
+      |> LazyHTML.query(~s([data-role="doc-example-option"]))
+      |> Enum.map(fn option ->
+        [action] = LazyHTML.attribute(option, "data-action")
+        [value] = LazyHTML.attribute(option, "data-value")
+        [pressed] = LazyHTML.attribute(option, "aria-pressed")
+        {action, value, pressed}
+      end)
+    end
+
+    test "draws a marker around a component as a frame whose page is that component",
+         %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s(<p>Before.</p>[[component doc-example title="A tip"]]) <>
+            ~s([[component doc-callout tone="tip"]]Use <code>mix</code>[[/component]]) <>
+            "[[/component]]"
+        )
+
+      assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+      assert [id] = LazyHTML.attribute(example, "id")
+      assert id =~ ~r/\Aone-body-\d+\z/
+      assert LazyHTML.attribute(example, "data-frame-theme") == ["dark"]
+      assert LazyHTML.attribute(example, "data-frame-device") == ["desktop"]
+      assert LazyHTML.attribute(example, "data-frame-dir") == ["ltr"]
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-title"]))
+             |> LazyHTML.text()
+             |> String.trim() == "A tip"
+
+      assert [frame] = Enum.to_list(LazyHTML.query(example, ~s([data-role="doc-example-frame"])))
+      assert LazyHTML.attribute(frame, "sandbox") == ["allow-same-origin"]
+      assert LazyHTML.attribute(frame, "loading") == ["lazy"]
+      assert LazyHTML.attribute(frame, "title") == ["A tip"]
+
+      page = framed(example)
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("data-theme") == ["dark"]
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("dir") == ["ltr"]
+
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("data-role") == [
+               "doc-example-page"
+             ]
+
+      assert page |> LazyHTML.query("script") |> Enum.count() == 0
+
+      callout =
+        LazyHTML.query(page, ~s(body[data-role="doc-example-body"] > [data-role="doc-callout"]))
+
+      assert LazyHTML.attribute(callout, "data-tone") == ["tip"]
+
+      assert callout
+             |> LazyHTML.query(~s([data-role="doc-callout-body"] > code))
+             |> LazyHTML.text() == "mix"
+
+      # The callout is the frame's, and only the frame's: the page around it draws none.
+      assert body |> LazyHTML.query(~s([data-role="doc-callout"])) |> Enum.count() == 0
+      assert body |> LazyHTML.query("p:not([data-role])") |> LazyHTML.text() == "Before."
+    end
+
+    # A TALL EXAMPLE IS CUT, but the browser is what knows how tall it is: the root says the height,
+    # and the hook marks it collapsible once it has measured the frame. The foot's button shows all
+    # of it.
+    test "carries the height a tall example is cut at, and the button that shows all of it",
+         %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s([[component doc-example collapse_height="480" expand_text="All of it"]]) <>
+            "[[component doc-callout]]Tall.[[/component]][[/component]]" <>
+            ~s([[component doc-example collapse_height="7"]]) <>
+            "[[component doc-callout]]Odd.[[/component]][[/component]]"
+        )
+
+      examples = LazyHTML.query(body, ~s([data-role="doc-example"]))
+      assert LazyHTML.attribute(examples, "data-collapse-height") == ["480", "320"]
+      assert LazyHTML.attribute(examples, "data-collapsible") == []
+
+      [first | _second] = Enum.to_list(examples)
+      [id] = LazyHTML.attribute(first, "id")
+
+      stage = LazyHTML.query(first, ~s([data-role="doc-example-stage"]))
+      assert LazyHTML.attribute(stage, "id") == ["#{id}-stage"]
+
+      button = LazyHTML.query(first, ~s([data-role="doc-example-foot"] > button[type="button"]))
+      assert LazyHTML.attribute(button, "data-role") == ["doc-example-expand"]
+      assert LazyHTML.attribute(button, "aria-expanded") == ["false"]
+      assert LazyHTML.attribute(button, "aria-controls") == ["#{id}-stage"]
+
+      assert first
+             |> LazyHTML.query(~s([data-role="doc-example-expand-text"]))
+             |> LazyHTML.text()
+             |> String.trim() == "All of it"
+
+      assert first
+             |> LazyHTML.query(~s([data-role="doc-example-collapse-text"]))
+             |> LazyHTML.text()
+             |> String.trim() == "Show less"
+    end
+
+    test "draws its toolbar with the choices it was set with pressed", %{site: site} do
+      body =
+        example_page!(
+          site,
+          "[[component doc-example]][[component doc-callout]]Plain.[[/component]][[/component]]"
+        )
+
+      example = LazyHTML.query(body, ~s([data-role="doc-example"]))
+
+      assert pressed(example) == [
+               {"theme", "light", "false"},
+               {"theme", "dark", "true"},
+               {"device", "desktop", "true"},
+               {"device", "tablet", "false"},
+               {"device", "mobile", "false"},
+               {"dir", "ltr", "true"},
+               {"dir", "rtl", "false"}
+             ]
+
+      toolbar = LazyHTML.query(example, ~s([data-role="doc-example-toolbar"][role="toolbar"]))
+      assert LazyHTML.attribute(toolbar, "aria-label") == ["Preview"]
+
+      assert toolbar
+             |> LazyHTML.query(~s(button[type="button"][data-role="doc-example-option"]))
+             |> Enum.count() == 7
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-option-text"]))
+             |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim())) ==
+               ~w(Light Dark Desktop Tablet Mobile LTR RTL)
+
+      assert example |> LazyHTML.query(~s([data-role="doc-example-title"])) |> Enum.count() == 0
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-frame"]))
+             |> LazyHTML.attribute("title") == ["Example"]
+    end
+
+    test "takes the colours, width and direction the marker sets, and only the declared ones",
+         %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s([[component doc-example theme="light" device="mobile" dir="rtl"]]) <>
+            "[[component doc-callout]]One.[[/component]][[/component]]" <>
+            ~s([[component doc-example theme="purple" device="watch" dir="up"]]) <>
+            "[[component doc-callout]]Two.[[/component]][[/component]]"
+        )
+
+      assert [set, refused] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+
+      assert LazyHTML.attribute(set, "data-frame-theme") == ["light"]
+      assert LazyHTML.attribute(set, "data-frame-device") == ["mobile"]
+      assert LazyHTML.attribute(set, "data-frame-dir") == ["rtl"]
+
+      assert for({action, value, "true"} <- pressed(set), do: {action, value}) ==
+               [{"theme", "light"}, {"device", "mobile"}, {"dir", "rtl"}]
+
+      assert set |> framed() |> LazyHTML.query("html") |> LazyHTML.attribute("data-theme") ==
+               ["light"]
+
+      assert set |> framed() |> LazyHTML.query("html") |> LazyHTML.attribute("dir") == ["rtl"]
+
+      assert LazyHTML.attribute(refused, "data-frame-theme") == ["dark"]
+      assert LazyHTML.attribute(refused, "data-frame-device") == ["desktop"]
+      assert LazyHTML.attribute(refused, "data-frame-dir") == ["ltr"]
+    end
+
+    # THE FRAME'S PAGE IS AN ATTRIBUTE'S VALUE, escaped as one: a quote or an ampersand in the
+    # example reaches the frame as written and never closes the attribute around it.
+    test "carries the example's text into the frame exactly as it was written", %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s([[component doc-example]]<p>Tom &amp; "Jerry" &lt;b&gt;</p>[[/component]]),
+          []
+        )
+
+      assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+
+      assert example |> framed() |> LazyHTML.query("body > p") |> LazyHTML.text() ==
+               ~s(Tom & "Jerry" <b>)
+
+      assert body |> LazyHTML.query("p") |> Enum.count() == 0
+      assert body |> LazyHTML.query("b") |> Enum.count() == 0
+    end
+
+    # THE FRAME DRAWS THE EXAMPLE AS THE SITE DRAWS IT, so its page links the stylesheet the site's
+    # own pages link — once the site has one.
+    test "links the site's own stylesheet inside the frame's page", %{site: site} do
+      content =
+        "[[component doc-example]][[component doc-callout]]Styled.[[/component]][[/component]]"
+
+      unstyled = example_page!(site, content)
+
+      assert unstyled
+             |> LazyHTML.query(~s([data-role="doc-example"]))
+             |> framed()
+             |> LazyHTML.query(~s(link[rel="stylesheet"]))
+             |> Enum.count() == 0
+
+      :ok =
+        MishkaCmsCore.Runtime.States.AssetsState.save(%{
+          id: site.name,
+          type: "css",
+          value: "body{}",
+          hash: "0123abcd",
+          updated_at: DateTime.utc_now()
+        })
+
+      on_exit(fn -> MishkaCmsCore.Runtime.States.AssetsState.delete(site.name, "css") end)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "examples"}
+        })
+
+      assert view
+             |> drawn(~s([data-role="doc-example"]))
+             |> framed()
+             |> LazyHTML.query(~s(head > link[rel="stylesheet"]))
+             |> LazyHTML.attribute("href") == ["/assets/css/#{site.name}/0123abcd.css"]
+    end
+
+    # A COMPONENT THAT KEEPS STATE IS DRAWN BY LIVEVIEW, ON THE PAGE, and never as HTML a frame could
+    # hold. An example holding one draws a line saying so in place of its frame, and the page around
+    # it is drawn as ever.
+    test "draws a note in place of the frame when its example keeps state", %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s(<p>Before.</p>[[component doc-example title="Contents"]][[component doc-toc /]][[/component]]),
+          ["doc-toc"]
+        )
+
+      assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-unavailable"]))
+             |> LazyHTML.text()
+             |> String.trim() ==
+               "This example holds a component that keeps state, which a frame cannot draw."
+
+      assert example
+             |> LazyHTML.query(~s([data-role="doc-example-title"]))
+             |> LazyHTML.text()
+             |> String.trim() == "Contents"
+
+      assert example |> LazyHTML.query(~s([data-role="doc-example-frame"])) |> Enum.count() == 0
+      assert example |> LazyHTML.query(~s([data-role="doc-example-toolbar"])) |> Enum.count() == 0
+      assert example |> LazyHTML.query(~s([data-role="doc-toc"])) |> Enum.count() == 0
+      assert body |> LazyHTML.query("p:not([data-role])") |> LazyHTML.text() == "Before."
+    end
+
+    # THE TOOLBAR IS ANSWERED BY THE KIT'S OWN HOOK, mounted on the example's root, under the name
+    # the site's JavaScript registers the installed row by.
+    test "mounts the kit's example hook on its root", %{site: site} do
+      hook =
+        MishkaCmsCore.Runtime.JsHook
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(name == "doc-example" and site_id == ^site.id)
+        |> Ash.Query.load([:is_global])
+        |> Ash.read_one!()
+
+      assert hook, "installing the kit wrote no doc-example hook for the site"
+      assert hook.active
+
+      body =
+        example_page!(
+          site,
+          "[[component doc-example]][[component doc-callout]]Hooked.[[/component]][[/component]]"
+        )
+
+      registered =
+        MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name(hook, site.name)
+
+      assert registered == String.capitalize(site.name) <> "DocExample"
+
+      assert body
+             |> LazyHTML.query(~s([data-role="doc-example"]))
+             |> LazyHTML.attribute("phx-hook") ==
+               [registered]
+    end
+
+    # A PREVIEW RENDERS CONTENT TO A STRING, with no LiveView to draw on: the example is drawn in its
+    # frame there as well.
+    test "draws the same frame where content is rendered to a string", %{site: site} do
+      for name <- ["doc-example", "doc-callout"] do
+        :ok = SiteState.put_component(site.id, name)
+        on_exit(fn -> SiteState.delete_component(site.id, name) end)
+      end
+
+      html =
+        %{
+          html:
+            ~s([[component doc-example dir="rtl"]][[component doc-callout tone="info"]]Hi[[/component]][[/component]]),
+          site: site.name,
+          id: "preview"
+        }
+        |> MishkaCmsCore.Runtime.ContentComponents.draw(:static)
+        |> Phoenix.HTML.Safe.to_iodata()
+        |> IO.iodata_to_binary()
+        |> LazyHTML.from_fragment()
+
+      example = LazyHTML.query(html, ~s([data-role="doc-example"]))
+      assert LazyHTML.attribute(example, "id") == ["preview-0"]
+
+      page = framed(example)
+      assert page |> LazyHTML.query("html") |> LazyHTML.attribute("dir") == ["rtl"]
+
+      assert page
+             |> LazyHTML.query(~s([data-role="doc-callout"]))
+             |> LazyHTML.attribute("data-tone") == ["info"]
+    end
+  end
+
+  # A GROUP IS ONLY A HEADING IN THE CONTENTS, like a sidebar's NAVIGATION over its pages: it has no
+  # page and no address, nothing links to it, and the pages under it are addressed as if it were not
+  # there (`MishkaDocument.Address`).
+  describe "a document with a group" do
+    test "draws it in the contents as a heading over its pages, always open", %{site: site} do
+      grouped!(site)
+
+      {:ok, contents, _html} =
+        mount_page(site, "doc-sidebar", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "upgrading"}
+        })
+
+      assert text_of(contents, ~s([data-role="doc-sidebar-group"])) == ["Navigation"]
+
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"])) == [
+               "/mishka/docs/getting-started",
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/menu",
+               "/mishka/docs/upgrading"
+             ]
+
+      refute "/mishka/docs/navigation" in hrefs(contents, "a")
+    end
+
+    test "keeps it in a filtered list while one of its pages matches", %{site: site} do
+      grouped!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-sidebar", %{path: "/mishka/docs", lang_param: "", show_filter: true})
+
+      view |> form(~s(#one form), %{"q" => "crumb"}) |> render_change()
+      assert text_of(view, ~s([data-role="doc-sidebar-group"])) == ["Navigation"]
+      assert text_of(view, ~s([data-role="doc-sidebar-link"])) == ["Breadcrumb"]
+
+      view |> form(~s(#one form), %{"q" => "upgr"}) |> render_change()
+      assert text_of(view, ~s([data-role="doc-sidebar-group"])) == []
+      assert text_of(view, ~s([data-role="doc-sidebar-link"])) == ["Upgrading"]
+
+      view |> form(~s(#one form), %{"q" => "navigation"}) |> render_change()
+      assert text_of(view, ~s([data-role="doc-sidebar-group"])) == []
+    end
+
+    test "lists it on the landing as a heading over its pages", %{site: site} do
+      grouped!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert text_of(view, ~s([data-role="doc-landing-items"] [data-role="doc-landing-link"])) ==
+               ["Getting started", "Upgrading"]
+
+      assert text_of(view, ~s([data-role="doc-landing-group-title"])) == ["Navigation"]
+
+      assert hrefs(view, ~s([data-role="doc-landing-group"] [data-role="doc-landing-link"])) == [
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/menu"
+             ]
+    end
+
+    test "steps over it from page to page, and names it in the trail as a word", %{site: site} do
+      grouped!(site)
+      attrs = %{path: "/mishka/docs", lang_param: ""}
+
+      {:ok, first, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(attrs, :params, %{"section" => "getting-started"})
+        )
+
+      assert hrefs(first, ~s([data-role="doc-section-next"])) == ["/mishka/docs/breadcrumb"]
+
+      {:ok, crumb, _html} =
+        mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => "breadcrumb"}))
+
+      assert text_of(crumb, ~s([data-role="doc-section-title"])) == ["Breadcrumb"]
+      assert hrefs(crumb, ~s([data-role="doc-section-prev"])) == ["/mishka/docs/getting-started"]
+      assert text_of(crumb, ~s([data-role="doc-section-crumb"])) == ["Navigation"]
+      assert hrefs(crumb, ~s([data-role="doc-section-crumb"])) == []
+    end
+
+    test "has no address: its would-be one is a missing page, and no block takes it for a page",
+         %{site: site} do
+      grouped!(site)
+
+      for section <- ["navigation", "navigation/breadcrumb"] do
+        assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+          mount_page(site, "doc-section", %{
+            path: "/mishka/docs",
+            lang_param: "",
+            params: %{"section" => section}
+          })
+        end
+      end
+
+      attrs = %{path: "/mishka/docs", lang_param: "", params: %{"section" => "navigation"}}
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == []
+
+      {:ok, contents, _html} = mount_page(site, "doc-sidebar", attrs)
+      assert hrefs(contents, ~s([data-role="doc-sidebar-link"][aria-current="page"])) == []
+
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == ["/mishka/docs"]
+    end
+  end
+
+  # THE PAGE'S OWN TEXT IS STYLED, AND NOTHING A COMPONENT IN IT DRAWS. The body's and a note's
+  # rules reach an element with no class and nothing with a class between it and the body: what the
+  # editor writes carries no class, and a component's markup does — so a component drawn at the top,
+  # one whose own root is a heading or a list, and one placed inside a list item keep their own look.
+  # Each rule is read off the markup and run as the selector it compiles to.
+  describe "the text of a page" do
+    # A COMPONENT'S MARKUP AS CHELEKOM WRITES IT: every element carries classes of its own. Each is
+    # marked `data-part="component"` too, so a test can tell it from the page's own HTML.
+    defp marked!(site, name, template) do
+      :ok = SiteState.put_component(site.id, name)
+      on_exit(fn -> SiteState.delete_component(site.id, name) end)
+      create_component!(name: name, site_id: site.id, active: true, template: template)
+    end
+
+    defp crumbs!(site),
+      do:
+        marked!(
+          site,
+          "content-crumbs",
+          ~S|<nav data-role="content-crumbs" data-part="component" class="text-sm"><ol data-part="component" class="flex items-center gap-2"><li data-part="component" class="flex items-center"><a data-part="component" href="https://example.com/home" class="text-[#5b57d6]">Home</a></li><li data-part="component" class="flex items-center">Here</li></ol></nav>|
+        )
+
+    defp heading!(site),
+      do:
+        marked!(
+          site,
+          "content-heading",
+          ~S|<h2 data-role="content-heading" data-part="component" class="text-3xl font-black">Drawn heading</h2>|
+        )
+
+    defp listed!(site),
+      do:
+        marked!(
+          site,
+          "content-list",
+          ~S|<ul data-role="content-list" data-part="component" class="m-0"><li data-part="component" class="p-1"><a data-part="component" class="no-underline" href="https://example.com/x">Listed</a></li></ul>|
+        )
+
+    defp linked!(site),
+      do:
+        marked!(
+          site,
+          "content-link",
+          ~S|<a data-role="content-link" data-part="component" class="font-bold" href="https://example.com/drawn">Drawn link</a>|
+        )
+
+    defp text_page!(site, content, note \\ nil) do
+      %{version: version} = manual!(site)
+
+      page =
+        page!(site, version, title: "Text", slug: "text", order_position: 9, content: content)
+
+      if note, do: note!(site, page, title: "Aside", content: note)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", params: %{"section" => "text"}})
+
+      {view, page}
+    end
+
+    # WHAT EACH CONTENT STYLE ON `role` REACHES: every `[selector]:utility` class of it, read as the
+    # rule Tailwind writes for it — `&` the element, `_` a space — and run over the drawn page. One
+    # `{utility, elements}` per class.
+    defp styled(view, role) do
+      page = view |> render_async(@async) |> LazyHTML.from_fragment()
+      scope = ~s([data-role="#{role}"])
+      [classes | _] = page |> LazyHTML.query(scope) |> LazyHTML.attribute("class")
+
+      for class <- String.split(classes),
+          [_class, selector, utility] <- [Regex.run(~r/\A\[(.+)\]:([^\]]+)\z/, class)] do
+        rule = selector |> String.replace("_", " ") |> String.replace("&", scope)
+        {utility, page |> LazyHTML.query(rule) |> Enum.to_list()}
+      end
+    end
+
+    defp reached(styled, utility),
+      do: for({^utility, elements} <- styled, element <- elements, do: element)
+
+    defp reached_component(styled),
+      do:
+        for(
+          {_utility, elements} <- styled,
+          element <- elements,
+          LazyHTML.attribute(element, "data-part") == ["component"],
+          do: element
+        )
+
+    test "its own list and link take its styles, and a component's list and link do not",
+         %{site: site} do
+      crumbs!(site)
+      listed!(site)
+
+      content =
+        ~s(<p>Read <a href="https://example.com/guide">the guide</a> first.</p>) <>
+          "<ul><li><p>Own item</p></li></ul><ol><li><p>First step</p></li></ol>" <>
+          "<p>[[component content-crumbs /]]</p>[[component content-list /]]"
+
+      {view, _page} = text_page!(site, content, content)
+
+      assert view |> render_async(@async) |> roles("content-crumbs") == 2
+
+      for role <- ["doc-section-body", "doc-note-body"] do
+        styles = styled(view, role)
+
+        assert styles |> reached("list-disc") |> Enum.map(&LazyHTML.text/1) == ["Own item"]
+        assert styles |> reached("list-decimal") |> Enum.map(&LazyHTML.text/1) == ["First step"]
+
+        assert styles |> reached("ml-5") |> Enum.map(&LazyHTML.text/1) == [
+                 "Own item",
+                 "First step"
+               ]
+
+        assert styles |> reached("underline") |> Enum.flat_map(&LazyHTML.attribute(&1, "href")) ==
+                 ["https://example.com/guide"]
+
+        assert reached_component(styles) == [], "#{role} reaches a component's markup"
+      end
+    end
+
+    # A COMPONENT IS NOT TEXT WHEREVER IT IS DRAWN: one whose own root is a heading, a list or a link,
+    # and one placed inside a list item, keep the classes they were drawn with.
+    test "a component drawn as a heading, or inside a list item, is left to its own classes",
+         %{site: site} do
+      heading!(site)
+      crumbs!(site)
+      listed!(site)
+      linked!(site)
+
+      {view, _page} =
+        text_page!(
+          site,
+          "<h2>Own heading</h2><p>[[component content-heading /]]</p>" <>
+            "<ul><li><p>Own item</p><p>[[component content-crumbs /]]</p>" <>
+            "<p>[[component content-list /]]</p><p>[[component content-link /]]</p></li></ul>" <>
+            ~s(<blockquote><p>Quoted <a href="https://example.com/source">source</a></p></blockquote>)
+        )
+
+      html = render_async(view, @async)
+      assert roles(html, "content-heading") == 1
+
+      for role <- ["content-crumbs", "content-list", "content-link"] do
+        assert html
+               |> LazyHTML.from_fragment()
+               |> LazyHTML.query(~s(li > [data-role="#{role}"]))
+               |> Enum.count() == 1,
+               "#{role} is not drawn inside the list item"
+      end
+
+      styles = styled(view, "doc-section-body")
+
+      assert styles |> reached("text-lg") |> Enum.map(&LazyHTML.text/1) == ["Own heading"]
+      assert styles |> reached("list-disc") |> Enum.count() == 1
+
+      assert styles |> reached("underline") |> Enum.flat_map(&LazyHTML.attribute(&1, "href")) ==
+               ["https://example.com/source"]
+
+      assert reached_component(styles) == []
+    end
+
+    test "and a callout's own text is styled the same way", %{site: site} do
+      :ok = SiteState.put_component(site.id, "doc-callout")
+      on_exit(fn -> SiteState.delete_component(site.id, "doc-callout") end)
+      crumbs!(site)
+
+      {view, _page} =
+        text_page!(
+          site,
+          ~s([[component doc-callout tone="tip"]]<ul><li><p>Inside</p></li></ul>) <>
+            "<p>[[component content-crumbs /]]</p>[[/component]]"
+        )
+
+      body = styled(view, "doc-section-body")
+      assert reached(body, "list-disc") == []
+
+      callout = styled(view, "doc-callout-body")
+      assert callout |> reached("list-disc") |> Enum.map(&LazyHTML.text/1) == ["Inside"]
+      assert reached_component(callout) == []
+    end
+  end
+
+  # THE TRAIL CAN END WITH THE PAGE ITSELF, as a word marked as the current page — and then a page
+  # at the top of its document has a trail too. Left off, the trail is the pages above it alone.
+  describe "doc-section's crumb_current" do
+    test "ends the trail with the page being read", %{site: site} do
+      addressed!(site)
+
+      base = %{path: "/mishka/docs", lang_param: "", crumb_current: true}
+
+      {:ok, nested, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(base, :params, %{"section" => "installation/from-source"})
+        )
+
+      assert text_of(nested, ~s([data-role="doc-section-crumb"])) == [
+               "Installation",
+               "From source"
+             ]
+
+      assert hrefs(nested, ~s([data-role="doc-section-crumb"])) == ["/mishka/docs/installation"]
+
+      assert text_of(nested, ~s([data-role="doc-section-crumb"][aria-current="page"])) == [
+               "From source"
+             ]
+
+      {:ok, top, _html} =
+        mount_page(site, "doc-section", Map.put(base, :params, %{"section" => "upgrading"}))
+
+      assert text_of(top, ~s([data-role="doc-section-breadcrumb"])) == ["Upgrading"]
+
+      assert text_of(top, ~s([data-role="doc-section-crumb"][aria-current="page"])) == [
+               "Upgrading"
+             ]
+    end
+
+    test "is the front page alone on the front page, and no trail on the landing", %{site: site} do
+      %{front: front} = fronted!(site, path: "/mishka/docs")
+      attrs = %{path: "/mishka/docs", lang_param: "", crumb_current: true, params: %{}}
+
+      {:ok, view, _html} = mount_page(site, "doc-section", attrs)
+
+      assert text_of(view, ~s([data-role="doc-section-crumb"][aria-current="page"])) == [
+               "Get started"
+             ]
+
+      assert hrefs(view, ~s([data-role="doc-section-crumb"])) == []
+
+      front
+      |> Ash.Changeset.for_update(:update, %{front_page: false},
+        tenant: site.id,
+        authorize?: false
+      )
+      |> Ash.update!()
+
+      {:ok, landing, _html} = mount_page(site, "doc-section", attrs)
+      assert text_of(landing, ~s([data-role="doc-section-breadcrumb"])) == []
+    end
+
+    test "left off, a page at the top has no trail and a nested one ends above it", %{site: site} do
+      addressed!(site)
+      base = %{path: "/mishka/docs", lang_param: ""}
+
+      {:ok, top, _html} =
+        mount_page(site, "doc-section", Map.put(base, :params, %{"section" => "upgrading"}))
+
+      assert text_of(top, ~s([data-role="doc-section-breadcrumb"])) == []
+
+      {:ok, nested, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(base, :params, %{"section" => "installation/from-source"})
+        )
+
+      assert text_of(nested, ~s([data-role="doc-section-crumb"])) == ["Installation"]
+      assert text_of(nested, ~s([aria-current="page"])) == []
+    end
+  end
+
+  describe "doc-switcher's version_text" do
+    test "names the version switch, and left empty leaves the number alone", %{site: site} do
+      addressed!(site)
+      attrs = %{path: "/mishka/docs", lang_param: "", show: "version"}
+
+      {:ok, named, _html} = mount_page(site, "doc-switcher", attrs)
+
+      assert text_of(named, ~s([data-role="doc-switcher-versions-summary"])) == [
+               "Version: 1.0.0"
+             ]
+
+      {:ok, bare, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :version_text, ""))
+      assert text_of(bare, ~s([data-role="doc-switcher-versions-summary"])) == ["1.0.0"]
+    end
   end
 
   describe "they compile" do
@@ -1107,6 +2241,305 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert body =~ "Body of Installation."
     end
 
+    # A PAGE'S CODE IS STORED HIGHLIGHTED, and the body is scrubbed again on its way to the page.
+    # The token classes and the block's language have to come through that, or the kit's stylesheet
+    # has nothing to colour.
+    test "draws a whole page with its code highlighted as it was stored", %{site: site} do
+      %{version: version} = manual!(site)
+
+      editor =
+        create_user_with_permissions!(["admin:dashboard:document:section"], site_id: site.id)
+
+      prose = "<p>#{String.duplicate("Words about it. ", 60)}</p>"
+
+      content =
+        Enum.map_join(1..6, fn index ->
+          "<h2>Step #{index}</h2>" <>
+            prose <>
+            ~S|<pre><code class="language-elixir">def hello(name), do: "Hi #{name}"</code></pre>|
+        end)
+
+      assert byte_size(content) > 6_000
+
+      page =
+        MishkaDocument.Section
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            workspace_version_id: version.id,
+            title: "Long page",
+            slug: "long-page",
+            order_position: 9,
+            language: "en",
+            content: content,
+            content_review_status: :approved,
+            technical_review_status: :approved
+          },
+          actor: editor,
+          tenant: site.id
+        )
+        |> Ash.create!()
+
+      attrs = %{workspace: "mishka-cms", params: %{"section" => "long-page"}}
+      {:ok, view, _html} = mount_page(site, "doc-section", attrs)
+
+      token_classes = fn html, scope ->
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(scope <> " pre.highlight > code.language-elixir > span")
+        |> LazyHTML.attribute("class")
+      end
+
+      stored = token_classes.(page.content, "")
+      drawn = token_classes.(render_async(view, @async), ~s([data-role="doc-section-body"]))
+
+      assert "kd" in stored and "nf" in stored and "s" in stored
+      assert drawn == stored
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) ==
+               Enum.map(1..6, &"Step #{&1}")
+    end
+
+    # A CODE BLOCK IS READ IN A WINDOW THE BLOCK DRAWS, not one the page stores: a head with the
+    # language the block was stored with and a button that copies it, over the block as it was. The
+    # stored text keeps only its code.
+    test "draws each code block in a window with its language and a copy button", %{site: site} do
+      %{version: version} = manual!(site)
+
+      content =
+        ~S|<h2>Install</h2><p>Add it.</p>| <>
+          ~S|<pre><code class="language-elixir">def deps, do: []</code></pre>| <>
+          ~S|<p>Then run it.</p><pre><code>mix deps.get</code></pre>|
+
+      page =
+        page!(site, version, title: "Code", slug: "code", order_position: 9, content: content)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", params: %{"section" => "code"}})
+
+      body = drawn(view, ~s([data-role="doc-section-body"]))
+      windows = LazyHTML.query(body, ~s([data-role="doc-code"]))
+
+      assert Enum.count(windows) == 2
+      assert LazyHTML.attribute(windows, "data-language") == ["elixir", ""]
+      assert text_of(view, ~s([data-role="doc-code-lang"])) == ["elixir", ""]
+
+      assert text_of(view, ~s([data-role="doc-code"] > pre > code)) ==
+               ["def deps, do: []", "mix deps.get"]
+
+      assert body |> LazyHTML.query("pre.highlight > code.language-elixir > span") |> Enum.count() >
+               0
+
+      buttons =
+        LazyHTML.query(
+          body,
+          ~s([data-role="doc-code"] > [data-role="doc-code-head"] > button[type="button"][data-role="doc-code-copy"])
+        )
+
+      assert Enum.count(buttons) == 2
+      assert LazyHTML.attribute(buttons, "aria-label") == ["Copy code", "Copy code"]
+      assert LazyHTML.attribute(buttons, "data-copied-text") == ["Copied", "Copied"]
+      assert text_of(view, ~s([data-role="doc-code-copy-text"])) == ["Copy", "Copy"]
+      assert text_of(view, ~s([data-role="doc-code-copied-text"])) == ["✓Copied", "✓Copied"]
+
+      statuses =
+        LazyHTML.query(body, ~s([data-role="doc-code-head"] > [data-role="doc-code-status"]))
+
+      assert LazyHTML.attribute(statuses, "aria-live") == ["polite", "polite"]
+      assert text_of(view, ~s([data-role="doc-code-status"])) == ["", ""]
+
+      stored = Ash.get!(MishkaDocument.Section, page.id, authorize?: false, tenant: site.id)
+
+      refute stored.content =~ "doc-code"
+      assert stored.content =~ ~S|<p>Then run it.</p><pre><code>mix deps.get</code></pre>|
+    end
+
+    test "and its button says what an author tells it to, as text", %{site: site} do
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Code",
+        slug: "code",
+        order_position: 9,
+        content: ~S|<pre><code class="language-heex">&lt;.button /&gt;</code></pre>|
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "code"},
+          copy_text: "Kopieren",
+          copied_text: ~S|Kopiert <b>"ok"</b>|,
+          copy_label: "Code kopieren"
+        })
+
+      button = drawn(view, ~s([data-role="doc-code-copy"]))
+
+      assert LazyHTML.attribute(button, "aria-label") == ["Code kopieren"]
+      assert LazyHTML.attribute(button, "data-copied-text") == [~S|Kopiert <b>"ok"</b>|]
+      assert text_of(view, ~s([data-role="doc-code-copy-text"])) == ["Kopieren"]
+      assert text_of(view, ~s([data-role="doc-code-copied-text"])) == [~S|✓Kopiert <b>"ok"</b>|]
+      assert button |> LazyHTML.query("b") |> Enum.count() == 0
+      assert text_of(view, ~s([data-role="doc-code-lang"])) == ["heex"]
+      assert text_of(view, ~s([data-role="doc-code"] code)) == ["<.button />"]
+    end
+
+    test "and leaves a page with no code block as it was", %{site: site} do
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      body = drawn(view, ~s([data-role="doc-section-body"]))
+
+      assert body |> LazyHTML.query(~s([data-role^="doc-code"])) |> Enum.count() == 0
+      assert text_of(view, ~s([data-role="doc-section-body"] > p)) == ["Body of Installation."]
+    end
+
+    # A LONG BLOCK IS CUT AT `code_lines`, with a button under it that shows all of it and says how
+    # many lines that is; a short one is drawn as it always was.
+    test "cuts a code block of more lines than code_lines, with the button that shows all of it",
+         %{site: site} do
+      %{version: version} = manual!(site)
+      long = Enum.map_join(1..20, "\n", &"line #{&1}")
+
+      page!(site, version,
+        title: "Code",
+        slug: "code",
+        order_position: 9,
+        content:
+          ~s|<pre><code class="language-elixir">#{long}\n</code></pre>| <>
+            ~S|<pre><code>mix deps.get</code></pre>|
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", params: %{"section" => "code"}})
+
+      windows = drawn(view, ~s([data-role="doc-section-body"] [data-role="doc-code"]))
+      assert LazyHTML.attribute(windows, "data-collapsible") == ["true"]
+      assert LazyHTML.attribute(windows, "data-collapse-lines") == ["16"]
+
+      [long_window, short_window] = Enum.to_list(windows)
+
+      assert long_window |> LazyHTML.query("pre") |> LazyHTML.attribute("id") == [
+               "one-body-code-0"
+             ]
+
+      button = LazyHTML.query(long_window, ~s(pre + [data-role="doc-code-foot"] > button))
+      assert LazyHTML.attribute(button, "type") == ["button"]
+      assert LazyHTML.attribute(button, "data-role") == ["doc-code-expand"]
+      assert LazyHTML.attribute(button, "aria-expanded") == ["false"]
+      assert LazyHTML.attribute(button, "aria-controls") == ["one-body-code-0"]
+
+      assert text_of(view, ~s([data-role="doc-code-expand-text"])) == ["Show all 20 lines"]
+      assert text_of(view, ~s([data-role="doc-code-collapse-text"])) == ["Show less"]
+      assert text_of(view, ~s([data-role="doc-code"] > pre > code)) == [long, "mix deps.get"]
+
+      assert short_window |> LazyHTML.query("pre") |> LazyHTML.attribute("id") == []
+      assert short_window |> LazyHTML.query(~s([data-role="doc-code-foot"])) |> Enum.count() == 0
+    end
+
+    test "and cuts none at code_lines 0, its button saying what an author tells it to",
+         %{site: site} do
+      %{version: version} = manual!(site)
+      long = Enum.map_join(1..20, "\n", &"line #{&1}")
+
+      page!(site, version,
+        title: "Code",
+        slug: "code",
+        order_position: 9,
+        content: ~s|<pre><code>#{long}</code></pre>|
+      )
+
+      {:ok, whole, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "code"},
+          code_lines: 0
+        })
+
+      assert text_of(whole, ~s([data-role="doc-code-foot"])) == []
+      assert whole |> drawn("[data-collapsible]") |> Enum.count() == 0
+
+      {:ok, cut, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "code"},
+          code_lines: 8,
+          expand_text: ~S|Alle %{count} <b>Zeilen</b>|,
+          collapse_text: "Weniger"
+        })
+
+      assert cut |> drawn("[data-collapse-lines]") |> LazyHTML.attribute("data-collapse-lines") ==
+               ["8"]
+
+      assert text_of(cut, ~s([data-role="doc-code-expand-text"])) == [~S|Alle 20 <b>Zeilen</b>|]
+      assert text_of(cut, ~s([data-role="doc-code-collapse-text"])) == ["Weniger"]
+      assert cut |> drawn(~s([data-role="doc-code-foot"] b)) |> Enum.count() == 0
+    end
+
+    # A NOTE IS STORED AS BASIC HTML, which keeps no class, so its code block names no language; its
+    # window still carries the button.
+    test "and draws a note's code blocks in windows as well", %{site: site} do
+      %{pages: [_first, installation | _rest]} = manual!(site)
+
+      note!(site, installation,
+        title: "On Windows",
+        content: ~S|<p>Use PowerShell.</p><pre><code class="language-bash">mix setup</code></pre>|
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code-lang"])) == [""]
+
+      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code"] > pre > code)) ==
+               ["mix setup"]
+
+      assert view
+             |> drawn(~s([data-role="doc-note-body"] [data-role="doc-code-copy"]))
+             |> Enum.count() == 1
+    end
+
+    # THE BUTTONS ARE ANSWERED BY THE KIT'S OWN HOOK, mounted on the block's root and not inside its
+    # text, under the name the site's JavaScript registers the installed row by.
+    test "mounts the kit's copy hook on its root", %{site: site} do
+      hook =
+        MishkaCmsCore.Runtime.JsHook
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(name == "doc-code-copy" and site_id == ^site.id)
+        |> Ash.Query.load([:is_global])
+        |> Ash.read_one!()
+
+      assert hook, "installing the kit wrote no doc-code-copy hook for the site"
+      assert hook.active
+
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      root = drawn(view, ~s(#one[data-role="doc-section"]))
+
+      registered =
+        MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name(hook, site.name)
+
+      assert registered == String.capitalize(site.name) <> "DocCodeCopy"
+      assert LazyHTML.attribute(root, "phx-hook") == [registered]
+      assert view |> drawn(~s([data-role="doc-section-body"] [phx-hook])) |> Enum.count() == 0
+    end
+
     # A SLUG THAT NAMES NOTHING IS A DIFFERENT SENTENCE from no slug at all — one is "pick a
     # document", the other is "that page is gone", and a reader who followed a stale link deserves
     # the second.
@@ -1420,7 +2853,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           workspace: "mishka-cms",
           doc_base: "/docs",
           lang_param: "",
-          params: %{"section" => "from-source"}
+          params: %{"section" => "installation/from-source"}
         })
 
       assert text_of(view, ~s([data-role="doc-section-crumb"])) == ["Installation"]
@@ -1492,9 +2925,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       # flat, "From source" would sit at the top of the document and "Installation" would lead
       # straight to "Upgrading", past the page filed under it.
       walked =
-        for slug <- ~w(getting-started installation from-source upgrading) do
+        for address <- ~w(getting-started installation installation/from-source upgrading) do
           {:ok, view, _html} =
-            mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => slug}))
+            mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => address}))
 
           assert [text] = text_of(view, ~s([data-role="doc-section-next"]))
           text |> String.split("\n") |> List.last() |> String.trim()
@@ -1570,6 +3003,509 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # WHAT A PLUGIN ADDS TO A PAGE on `document:page:extras`: facts under its title and tabs beside its
+  # text, every word of them escaped, the tab shown the one the URL names; a page no plugin adds to
+  # is drawn as it always was.
+  describe "doc-section's page extras" do
+    setup do
+      Process.register(self(), :__page_extras_probe__)
+
+      {:ok, _} =
+        Event.write(%{
+          name: PageExtras,
+          event: @extras_event,
+          extension: :mishka_installer,
+          status: :started
+        })
+
+      :ok = EventHandler.do_compile(@extras_event, :start, false)
+
+      on_exit(fn ->
+        PageExtras.forget!()
+        Event.unregister(:name, PageExtras, false)
+        EventHandler.do_compile(@extras_event, :start, false)
+      end)
+
+      :ok
+    end
+
+    test "tells the plugin the page it draws", %{site: site} do
+      grouped!(site)
+
+      {:ok, _view, _html} = mount_breadcrumb(site)
+
+      site_id = site.id
+
+      assert_received {:page_extras_asked,
+                       %{
+                         site_id: ^site_id,
+                         document: %{slug: "grouped", path: "/mishka/docs", language: "en"},
+                         version: "1.0.0",
+                         page: %{
+                           slug: "breadcrumb",
+                           title: "Breadcrumb",
+                           path: "breadcrumb",
+                           parents: [%{slug: "navigation", title: "Navigation", group: true}]
+                         },
+                         header: [],
+                         tabs: []
+                       }}
+    end
+
+    test "draws the facts it puts under the title, as text", %{site: site} do
+      grouped!(site)
+
+      PageExtras.answer!(fn state ->
+        %{
+          state
+          | header: [
+              %{
+                kind: :badges,
+                items: [
+                  %{text: "v1.0.0", tone: :primary},
+                  %{text: "Stable", tone: "success"},
+                  %{text: "Odd", tone: "Not A Tone"},
+                  %{tone: "success"}
+                ]
+              },
+              %{kind: :command, label: "Installation", value: "mix gen breadcrumb"},
+              %{
+                kind: :link,
+                label: "Source",
+                href: "https://github.com/x/y",
+                text: "View Source"
+              },
+              %{kind: :link, label: "Docs", href: "/mishka/docs", text: "Contents"},
+              %{kind: :text, label: "Package", value: ~S|<b>"Kit"</b>|},
+              %{kind: :link, label: "Bad", href: "javascript:alert(1)", text: "Run"},
+              %{kind: :link, label: "Away", href: "//elsewhere.test/x", text: "Away"},
+              %{kind: :command, label: "Empty", value: "  "},
+              %{kind: :script, value: "nothing"},
+              "not a fact"
+            ]
+        }
+      end)
+
+      {:ok, view, _html} = mount_breadcrumb(site)
+
+      extras = drawn(view, ~s([data-role="doc-section-article"] > [data-role="doc-extras"]))
+      assert Enum.count(extras) == 1
+
+      badges = LazyHTML.query(extras, ~s([data-role="doc-extra-badge"]))
+      assert Enum.map(badges, &LazyHTML.text/1) == ["v1.0.0", "Stable", "Odd"]
+      assert LazyHTML.attribute(badges, "data-tone") == ["primary", "success", "neutral"]
+
+      assert text_of(view, ~s([data-role="doc-extras"] [data-role="doc-extra-label"])) ==
+               ["Installation", "Source", "Docs", "Package"]
+
+      command = LazyHTML.query(extras, ~s([data-role="doc-extra-command"]))
+      assert command |> LazyHTML.query("code") |> LazyHTML.attribute("dir") == ["ltr"]
+      assert text_of(view, ~s([data-role="doc-extra-command"] code)) == ["mix gen breadcrumb"]
+
+      button = LazyHTML.query(command, ~s(button[type="button"][data-role="doc-code-copy"]))
+      assert LazyHTML.attribute(button, "aria-label") == ["Copy code"]
+      assert LazyHTML.attribute(button, "data-copied-text") == ["Copied"]
+      assert command |> LazyHTML.query(~s([data-role="doc-code-status"])) |> Enum.count() == 1
+
+      links = LazyHTML.query(extras, ~s([data-role="doc-extra-link"] a))
+      assert LazyHTML.attribute(links, "href") == ["https://github.com/x/y", "/mishka/docs"]
+      assert LazyHTML.attribute(links, "target") == ["_blank"]
+      assert LazyHTML.attribute(links, "rel") == ["noopener noreferrer"]
+
+      assert text_of(view, ~s([data-role="doc-extra-text"] [data-role="doc-extra-value"])) ==
+               [~S|<b>"Kit"</b>|]
+
+      assert extras |> LazyHTML.query("b") |> Enum.count() == 0
+      assert view |> drawn(~s([data-role="doc-tabs"])) |> Enum.count() == 0
+    end
+
+    test "adds its tabs after the text's own, which is shown", %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site)
+
+      assert text_of(view, ~s([data-role="doc-tabs"] [data-role="doc-tab"])) ==
+               ["Documentation", "Props", "CLI", "Pending"]
+
+      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/breadcrumb?tab=props",
+               "/mishka/docs/breadcrumb?tab=cli",
+               "/mishka/docs/breadcrumb?tab=pending"
+             ]
+
+      assert shown_tab(view) == ["documentation"]
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               []
+
+      panels = drawn(view, ~s([data-role="doc-section-article"] > [data-role="doc-tab-panel"]))
+      assert LazyHTML.attribute(panels, "data-tab") == ["props", "cli", "pending"]
+      assert LazyHTML.attribute(panels, "hidden") == ["", "", ""]
+
+      assert LazyHTML.attribute(panels, "aria-labelledby") ==
+               ["one-tab-props", "one-tab-cli", "one-tab-pending"]
+
+      # The Props tab: one table, every cell as text.
+      assert text_of(view, panel("props", ~s([data-role="doc-extra-title"]))) == ["Attributes"]
+      assert text_of(view, panel("props", "th")) == ["Name", "Values", "Required", "Description"]
+
+      assert text_of(view, panel("props", ~s(td[data-column="name"] code))) == [
+               "color",
+               "<script>"
+             ]
+
+      assert text_of(view, panel("props", ~s([data-role="doc-extra-item"]))) == [
+               "base",
+               "primary"
+             ]
+
+      assert view
+             |> drawn(
+               panel("props", ~s(td[data-column="required"] [data-role="doc-extra-badge"]))
+             )
+             |> LazyHTML.attribute("data-tone") == ["secondary", "neutral"]
+
+      assert text_of(view, panel("props", ~s([data-role="doc-extra-blank"]))) == ["—", "—"]
+      assert view |> drawn(panel("props", "script")) |> Enum.count() == 0
+
+      # The CLI tab: a list of facts, its command copied by the same button, and an empty table.
+      assert text_of(
+               view,
+               panel("cli", ~s([data-role="doc-extra-list"] [data-role="doc-extra-label"]))
+             ) ==
+               ["Command", "Needs"]
+
+      assert view
+             |> drawn(
+               panel("cli", ~s([data-role="doc-extra-command"] [data-role="doc-code-copy"]))
+             )
+             |> Enum.count() == 1
+
+      assert text_of(view, panel("cli", ~s([data-role="doc-extra-rows-empty"]))) == [
+               "No options."
+             ]
+
+      # A tab whose data is being fetched says so.
+      assert text_of(view, panel("pending", ~s([data-role="doc-tab-pending"]))) ==
+               ["Still fetching."]
+    end
+
+    test "opens the tab the URL names, keeps the page's other keys, and reads nothing for it",
+         %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"tab" => "props", "utm" => "feed"})
+
+      assert shown_tab(view) == ["props"]
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               [""]
+
+      assert open_panels(view) == ["props"]
+
+      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+               "/mishka/docs/breadcrumb?utm=feed",
+               "/mishka/docs/breadcrumb?tab=props&utm=feed",
+               "/mishka/docs/breadcrumb?tab=cli&utm=feed",
+               "/mishka/docs/breadcrumb?tab=pending&utm=feed"
+             ]
+
+      flush_asks()
+      send(view.pid, {:params, %{"section" => "breadcrumb", "tab" => "cli", "utm" => "feed"}})
+
+      assert open_panels(view) == ["cli"]
+      assert shown_tab(view) == ["cli"]
+      refute_received {:page_extras_asked, _again}
+
+      send(view.pid, {:params, %{"section" => "breadcrumb", "tab" => "nothing", "utm" => "feed"}})
+
+      assert open_panels(view) == []
+      assert shown_tab(view) == ["documentation"]
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               []
+
+      send(view.pid, {:params, %{"section" => "menu", "tab" => "nothing"}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Menu"]
+      assert_received {:page_extras_asked, %{page: %{slug: "menu"}}}
+    end
+
+    test "on a document's landing, tells the plugin there is no page and hides the contents under a tab",
+         %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"tab" => "cli"}
+        })
+
+      assert_received {:page_extras_asked, %{page: nil, version: "1.0.0"}}
+
+      assert view
+             |> drawn(~s([data-role="doc-section-landing"] > [data-role="doc-tabs"]))
+             |> Enum.count() == 1
+
+      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+               "/mishka/docs",
+               "/mishka/docs?tab=props",
+               "/mishka/docs?tab=cli",
+               "/mishka/docs?tab=pending"
+             ]
+
+      for hidden <- ~w(doc-landing-items doc-landing-group) do
+        assert view |> drawn(~s([data-role="#{hidden}"])) |> LazyHTML.attribute("hidden") == [""]
+      end
+
+      assert view
+             |> drawn(
+               ~s|[data-role="doc-section-landing"] > [data-role="doc-tab-panel"]:not([hidden])|
+             )
+             |> LazyHTML.attribute("data-tab") == ["cli"]
+    end
+
+    # WHAT A PLUGIN IS STILL FETCHING is a skeleton until the fetch is announced on the topic the
+    # plugin names, and then the page asks once more and draws it, with no reload and no polling.
+    test "draws a skeleton while its data is fetched, and the rows once the fetch is announced",
+         %{site: site} do
+      grouped!(site)
+      topic = "test:page_extras:#{System.unique_integer([:positive])}"
+      fetched = :atomics.new(1, [])
+
+      PageExtras.answer!(fn state ->
+        case :atomics.get(fetched, 1) do
+          1 -> with_tabs(state)
+          0 -> fetching(state, topic)
+        end
+      end)
+
+      {view, _first_paint} = mount_raw(site, [breadcrumb_block(%{})])
+      view_pid = view.pid
+      test_pid = self()
+
+      # The task that waits has subscribed once it asks for itself.
+      assert_receive {:page_extras_asker, asker} when asker not in [view_pid, test_pid], @async
+
+      waiting = LazyHTML.from_fragment(render(view))
+
+      assert waiting
+             |> LazyHTML.query(~s([data-role="doc-extras"] [data-role="doc-extra-pending"]))
+             |> Enum.count() == 1
+
+      assert waiting
+             |> LazyHTML.query(
+               ~s([data-role="doc-tab-panel"] [data-role="doc-tab-pending"][data-tone="loading"])
+             )
+             |> Enum.count() == 2
+
+      :atomics.put(fetched, 1, 1)
+      :ok = Phoenix.PubSub.broadcast(MishkaCmsCore.PubSub, topic, {:fetched, "1.0.0"})
+
+      assert text_of(view, panel("props", ~s(td[data-column="name"] code))) == [
+               "color",
+               "<script>"
+             ]
+
+      assert view |> drawn(~s([data-role="doc-extra-pending"])) |> Enum.count() == 0
+      assert view |> drawn(~s([data-role="doc-tab"])) |> Enum.count() == 4
+
+      assert hrefs(view, ~s([data-role="doc-tab"][data-tab="cli"])) == [
+               "/mishka/docs/breadcrumb?tab=cli"
+             ]
+    end
+
+    test "says what it could not fetch once the wait is over, and a tab the plugin says failed",
+         %{site: site} do
+      grouped!(site)
+      topic = "test:page_extras:#{System.unique_integer([:positive])}"
+
+      PageExtras.answer!(fn state ->
+        failed = %{id: "gone", label: "Gone", state: :failed, text: "Not here."}
+        fetching = fetching(state, topic)
+        %{fetching | tabs: fetching.tabs ++ [failed]}
+      end)
+
+      {view, _first_paint} = mount_raw(site, [breadcrumb_block(%{pending_wait: 50})])
+
+      assert text_of(view, panel("props", ~s([data-role="doc-tab-failed"]))) == [
+               "Could not fetch."
+             ]
+
+      assert text_of(view, panel("cli", ~s([data-role="doc-tab-failed"]))) == ["Could not fetch."]
+      assert text_of(view, panel("gone", ~s([data-role="doc-tab-failed"]))) == ["Not here."]
+      assert view |> drawn(~s([data-role="doc-tab-pending"])) |> Enum.count() == 0
+      assert view |> drawn(~s([data-role="doc-extra-pending"])) |> Enum.count() == 0
+    end
+
+    test "draws a page no plugin adds to as it always was", %{site: site} do
+      grouped!(site)
+
+      {:ok, asked_nothing, _html} = mount_breadcrumb(site)
+
+      PageExtras.answer!(&%{&1 | header: "not a list", tabs: nil})
+      {:ok, nonsense, _html} = mount_breadcrumb(site, %{"tab" => "props"})
+
+      for view <- [asked_nothing, nonsense] do
+        assert view |> drawn(~s([data-role^="doc-extra"], [data-role^="doc-tab"])) |> Enum.count() ==
+                 0
+
+        assert view |> drawn("[hidden]") |> Enum.count() == 0
+        assert text_of(view, ~s([data-role="doc-section-body"] > p)) == ["Body"]
+      end
+
+      assert article(nonsense) == article(asked_nothing)
+    end
+
+    test "draws the page as it always was when the event cannot run", %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      :ok = ModuleStateCompiler.purge_create([], @extras_event, [__MODULE__.NotLoadedPlugin])
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"tab" => "props"})
+
+      refute_received {:page_extras_asked, _state}
+
+      assert view |> drawn(~s([data-role^="doc-extra"], [data-role^="doc-tab"])) |> Enum.count() ==
+               0
+
+      assert view |> drawn("[hidden]") |> Enum.count() == 0
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Breadcrumb"]
+    end
+  end
+
+  defp mount_breadcrumb(site, params \\ %{}) do
+    mount_page(site, "doc-section", %{
+      path: "/mishka/docs",
+      lang_param: "",
+      params: Map.put(params, "section", "breadcrumb")
+    })
+  end
+
+  defp breadcrumb_block(attrs) do
+    %{
+      "name" => "doc-section",
+      "id" => "one",
+      "attrs" =>
+        Map.merge(
+          %{path: "/mishka/docs", lang_param: "", params: %{"section" => "breadcrumb"}},
+          attrs
+        )
+    }
+  end
+
+  # The skeleton of the facts and two tabs still being fetched, announced on `topic`.
+  defp fetching(state, topic) do
+    pending = fn id, label ->
+      %{
+        id: id,
+        label: label,
+        state: :not_ready,
+        text: "Fetching.",
+        failed_text: "Could not fetch.",
+        pending: %{topic: topic}
+      }
+    end
+
+    %{
+      state
+      | header: [%{kind: :pending, text: "Fetching."}],
+        tabs: [pending.("props", "Props"), pending.("cli", "CLI")]
+    }
+  end
+
+  defp panel(id, selector), do: ~s([data-role="doc-tab-panel"][data-tab="#{id}"] #{selector})
+
+  defp shown_tab(view) do
+    view
+    |> drawn(~s([data-role="doc-tab"][aria-current="page"]))
+    |> LazyHTML.attribute("data-tab")
+  end
+
+  defp open_panels(view) do
+    view
+    |> drawn(~s|[data-role="doc-tab-panel"]:not([hidden])|)
+    |> LazyHTML.attribute("data-tab")
+  end
+
+  defp article(view) do
+    view
+    |> drawn(~s([data-role="doc-section-article"]))
+    |> LazyHTML.to_html()
+  end
+
+  defp flush_asks do
+    receive do
+      {:page_extras_asked, _state} -> flush_asks()
+    after
+      0 -> :ok
+    end
+  end
+
+  # Three tabs, and the four a plugin should not have added: the text's own id, an id no URL
+  # carries, one with no label and a second Props.
+  defp with_tabs(state) do
+    %{
+      state
+      | tabs: [
+          %{
+            id: "props",
+            label: "Props",
+            kind: :table,
+            title: "Attributes",
+            columns: [
+              %{key: :name, label: "Name", code: true},
+              %{key: :values, label: "Values"},
+              %{key: :required, label: "Required"},
+              %{key: "doc", label: "Description"},
+              %{label: "No key"}
+            ],
+            rows: [
+              %{
+                :name => "color",
+                :values => ["base", :primary],
+                :required => %{text: "Yes", tone: :secondary},
+                "doc" => "The colour."
+              },
+              %{name: "<script>", values: [], required: %{text: "No"}},
+              "not a row"
+            ],
+            empty_text: "No attributes."
+          },
+          %{
+            id: "cli",
+            label: "CLI",
+            blocks: [
+              %{
+                kind: :list,
+                items: [
+                  %{kind: :command, label: "Command", value: "mix gen breadcrumb"},
+                  %{kind: :badges, label: "Needs", items: [%{text: "icon"}]}
+                ]
+              },
+              %{
+                kind: :table,
+                columns: [%{key: :flag, label: "Option"}],
+                rows: [],
+                empty_text: "No options."
+              }
+            ]
+          },
+          %{id: "pending", label: "Pending", state: :not_ready, text: "Still fetching."},
+          %{id: "documentation", label: "Mine", kind: :list, items: []},
+          %{id: "Not An Id", label: "Odd", kind: :list, items: []},
+          %{id: "nolabel", kind: :list, items: []},
+          %{id: "props", label: "Props again", kind: :list, items: []}
+        ]
+    }
+  end
+
   describe "doc-sidebar" do
     test "lists every published page of the version, in order", %{site: site} do
       manual!(site)
@@ -1637,7 +3573,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, open, _html} =
         mount_page(site, "doc-sidebar", %{
           workspace: "mishka-cms",
-          params: %{"section" => "from-source"}
+          params: %{"section" => "installation/from-source"}
         })
 
       assert text_of(open, ~s([data-role="doc-sidebar-link"])) ==
@@ -1929,6 +3865,26 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
                ["1.0.0", "0.9.0"]
     end
 
+    # A MENU CLOSES WHEN THE READER LEAVES IT: a click outside it or Escape presses its summary while
+    # it is open, in the browser, and a patch keeps the `open` the reader left it with.
+    test "closes its version menu on a click outside it and on Escape", %{site: site} do
+      {:ok, view, _html} = mount_page(site, "doc-switcher", %{workspace: "mishka-cms"})
+
+      menu = drawn(view, ~s(details[data-role="doc-switcher-versions"]))
+
+      closes =
+        Jason.encode!(
+          Phoenix.LiveView.JS.dispatch("click", to: {:inner, ":scope[open] summary"}).ops
+        )
+
+      assert LazyHTML.attribute(menu, "phx-click-away") == [closes]
+      assert LazyHTML.attribute(menu, "phx-window-keydown") == [closes]
+      assert LazyHTML.attribute(menu, "phx-key") == ["Escape"]
+
+      assert LazyHTML.attribute(menu, "phx-mounted") ==
+               [Jason.encode!(Phoenix.LiveView.JS.ignore_attributes(["open"]).ops)]
+    end
+
     test "marks the one being read and the latest one", %{site: site} do
       {:ok, view, _html} =
         mount_page(site, "doc-switcher", %{workspace: "mishka-cms", params: %{"v" => "0.9.0"}})
@@ -2076,7 +4032,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
             {"doc-workspace-list", %{per_page: 10, doc_base: "/:lang/docs", lang_param: ""},
              ["doc-list-title"]},
             {"doc-section", attrs, ["doc-landing-link"]},
-            {"doc-section", Map.put(attrs, :params, %{"section" => "from-source"}),
+            {"doc-section", Map.put(attrs, :params, %{"section" => "installation/from-source"}),
              ["doc-section-crumb", "doc-section-prev", "doc-section-next"]},
             {"doc-sidebar", Map.put(attrs, :expand_all, true), ["doc-sidebar-link"]},
             {"doc-switcher", Map.put(attrs, :show, "version"), []}
@@ -2350,6 +4306,106 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert marked == ["Installation"],
              "the block was not redrawn, so the line above asserts nothing about what survived"
     end
+  end
+
+  # One manual read at /mishka/docs, with "From source" filed under "Installation", and an older
+  # version holding "Installation" too.
+  defp addressed!(site) do
+    document = document!(site, name: "Mishka CMS", slug: "mishka-cms", path: "/mishka/docs")
+    version = version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
+
+    install =
+      page!(site, version,
+        title: "Installation",
+        slug: "installation",
+        order_position: 0,
+        content: "<h2>Steps</h2><p>One.</p><h2>Checks</h2><p>Two.</p>"
+      )
+
+    page!(site, version,
+      title: "From source",
+      slug: "from-source",
+      order_position: 0,
+      parent_section_id: install.id,
+      content: "<h2>Clone</h2><p>One.</p><h2>Build</h2><p>Two.</p>"
+    )
+
+    page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 1)
+
+    older =
+      version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+    page!(site, older, title: "Installation", slug: "installation", order_position: 0)
+
+    %{document: document, version: version}
+  end
+
+  # One manual whose latest version marks "Get started" as its front page, with "Install" filed under
+  # it, and an older version with no front page.
+  defp fronted!(site, opts) do
+    document = document!(site, Keyword.merge([name: "Fronted", slug: "fronted"], opts))
+    version = version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
+
+    front =
+      page!(site, version,
+        title: "Get started",
+        slug: "get-started",
+        order_position: 0,
+        front_page: true,
+        content: "<p>Welcome.</p><h2>Why</h2><p>One.</p><h2>How</h2><p>Two.</p>"
+      )
+
+    page!(site, version,
+      title: "Install",
+      slug: "install",
+      order_position: 0,
+      parent_section_id: front.id
+    )
+
+    page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 1)
+
+    older =
+      version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+    page!(site, older, title: "Get started", slug: "get-started", order_position: 0)
+
+    %{document: document, version: version, front: front}
+  end
+
+  # One manual at /mishka/docs whose contents hold the group "Navigation" between two pages, with
+  # "Breadcrumb" and "Menu" under it.
+  defp grouped!(site) do
+    document = document!(site, name: "Grouped", slug: "grouped", path: "/mishka/docs")
+    version = version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
+
+    page!(site, version, title: "Getting started", slug: "getting-started", order_position: 0)
+
+    group =
+      page!(site, version,
+        title: "Navigation",
+        slug: "navigation",
+        order_position: 1,
+        group_heading: true,
+        content: nil
+      )
+
+    page!(site, version,
+      title: "Breadcrumb",
+      slug: "breadcrumb",
+      order_position: 0,
+      parent_section_id: group.id
+    )
+
+    page!(site, version,
+      title: "Menu",
+      slug: "menu",
+      order_position: 1,
+      parent_section_id: group.id
+    )
+
+    page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 2)
+
+    %{document: document, version: version, group: group}
   end
 
   defp public_versions(site, document) do

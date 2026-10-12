@@ -4,7 +4,7 @@ defmodule MishkaDocument.Kit do
 
   ## What is in the bundle, and why it is a bundle
 
-  `priv/cms_ui_kits/mishka_document.json` carries eight components of two kinds. Each is complete on
+  `priv/cms_ui_kits/mishka_document.json` carries ten components of two kinds. Each is complete on
   its own: its markup, its declarations, and its own code, including the Ash reads it runs. Nothing
   about them lives in Elixir.
 
@@ -14,12 +14,45 @@ defmodule MishkaDocument.Kit do
   `Phoenix.LiveComponent` that resolves the document from the URL itself and runs its own reads, so
   an author can put any of them on any page and each holds what it read.
 
-  ### The three pieces, which are function components
+  ### The five pieces, which are function components
 
-  `doc-workspace-card`, `doc-pager` and `doc-notice`. These hold nothing and read nothing: they draw
-  what the block above hands them. The notice is drawn by all five blocks — it is every skeleton,
-  every empty line and every failed read in this kit — and the card is what `doc-workspace-list`
-  draws a document with unless the author names a card of their own in its `card` attribute.
+  `doc-workspace-card`, `doc-pager`, `doc-notice`, `doc-callout` and `doc-example`. These hold
+  nothing and read nothing: they draw what they are handed. The notice is drawn by all five blocks —
+  it is every skeleton, every empty line and every failed read in this kit — and the card is what
+  `doc-workspace-list` draws a document with unless the author names a card of their own in its
+  `card` attribute. The callout and the example are placed by an author inside a page's text, with
+  the content editor — `[[component doc-callout tone="tip"]]…[[/component]]` — and drawn by
+  `doc-section`'s `rich_content`, which names them for the site's stylesheet.
+
+  ### The example
+
+  `[[component doc-example title="…"]]` around the markers of the components an example is made
+  of, then `[[/component]]`. Its `inner_block` is turned into HTML and drawn as the page of an
+  `<iframe srcdoc>`: that page links the site's own stylesheet
+  (`MishkaCmsCore.Runtime.Compilers.Shared.site_css_href/1`, for the site the page is rendered
+  for), carries the example's theme as `<html data-theme>` and its direction as `<html dir>`, and
+  holds no script. The frame is `sandbox="allow-same-origin"` — the hook reads its page from
+  outside — and `loading="lazy"`, named by `title` or `frame_label`.
+
+  `theme` (light, dark; dark by default), `device` (desktop, tablet, mobile; desktop) and `dir`
+  (ltr, rtl; ltr) are what it is first drawn with, carried on its root as `data-frame-theme`,
+  `data-frame-device` and `data-frame-dir`; the frame is the page's whole width, 768 or 375
+  pixels, centred, and scrolls sideways in a narrower page. A toolbar over it —
+  `doc-example-toolbar`, its buttons `doc-example-option` with a `data-action` of theme, device or
+  dir, a `data-value` and `aria-pressed` — switches them. Every element says what it is in its
+  `data-role` for a site's stylesheet to restyle.
+
+  An example taller than `collapse_height` pixels (320; 240, 400, 480 or 640, and 0 cuts none) is
+  cut at that height under a fade until the `doc-example-expand` button in the `doc-example-foot`
+  under it shows all of it, saying `expand_text` and then `collapse_text`. The root carries the
+  height as `data-collapse-height`; the hook measures the frame and writes `data-collapsible` onto
+  the root — again whenever a choice changes the example's height — and the button writes
+  `data-expanded`. The frame keeps its whole height inside the cut, and the toolbar works while it
+  is cut.
+
+  A component that keeps state is drawn by LiveView on the page and is never HTML a frame could
+  hold: an example holding one draws `stateful_text` in place of its frame on a live page. A
+  preview, which draws every component cold into a string, draws it in the frame.
 
   They draw themselves in plain HTML and Tailwind and call no other kit. A site that installed this
   extension and skipped Chelekom renders them; the components a documentation page is made of cannot
@@ -47,9 +80,140 @@ defmodule MishkaDocument.Kit do
   `doc-switcher` offers the document's other versions and its other languages, each leading back to
   the same page.
 
-  A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.basic_html/1` and drawn with
-  `rich_content/1`, so a component the author placed in them with the content editor is drawn there
-  as that component (`MishkaCmsCore.Runtime.ContentComponents`).
+  A version may mark one page at its top as its front page: every block reads that page at the
+  document's own address, in place of the landing, links to it there, and files the pages under it
+  directly under that address (`MishkaDocument.Address`). A page marked as a group is only a heading
+  over the pages under it — in the contents and on the landing — with no page or address of its own:
+  nothing links to it, Previous and Next step over it, and its pages are addressed as if it were not
+  there.
+
+  A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
+  text is stored through, and drawn with `rich_content/1`, so a component the author placed in them
+  with the content editor is drawn there as that component (`MishkaCmsCore.Runtime.ContentComponents`),
+  and a code block keeps the classes it was highlighted with.
+
+  After the scrub, `doc-section` draws each code block in a window: a head holding the block's
+  language, read off its `language-x` class, and a `<button type="button">` that copies its code,
+  over the block as it was stored. Every element of it says what it is in its `data-role` —
+  `doc-code`, `doc-code-head`, `doc-code-lang`, `doc-code-copy`, `doc-code-status` — for a site's
+  stylesheet to restyle, and what the button says is the block's `copy_text`, `copied_text` and
+  `copy_label`. The window is drawn, never stored: a page's text keeps only its code.
+
+  A block of more lines than `code_lines` (16; 8, 12, 20, 24 or 32, and 0 cuts none) is cut at that
+  many under a fade: its window carries `data-collapsible` and `data-collapse-lines`, its `<pre>` an
+  id, and a `doc-code-foot` under the code holds the `doc-code-expand` button that shows all of it,
+  saying `expand_text` — `%{count}` is its number of lines — and then `collapse_text`. The copy
+  button copies the whole code either way.
+
+  ### What plugins add to a page
+
+  Each time `doc-section` reads a page of a document it fires the `document:page:extras`
+  mishka_installer event through `MishkaInstaller.Event.Hook.call/3`, with:
+
+      %{
+        site_id: "…",
+        document: %{slug: "chelekom", path: "/chelekom/docs", language: "en"},
+        version: "0.0.9",
+        page: %{
+          slug: "breadcrumb",
+          title: "Breadcrumb",
+          path: "breadcrumb",
+          parents: [%{slug: "navigations", title: "Navigations", group: true}]
+        },
+        header: [],
+        tabs: []
+      }
+
+  `page` is `nil` on a document's landing. Its `path` is its address under the document and
+  `parents` the pages and groups it is filed under, nearest last. A plugin appends to `header` and
+  `tabs` and replies with the map:
+
+      use MishkaInstaller.Event.Hook, event: "document:page:extras"
+
+      def call(%{document: %{slug: "handbook"}, header: header} = state),
+        do: {:reply, %{state | header: header ++ [%{kind: :text, label: "Edition", value: "2"}]}}
+
+      def call(state), do: {:reply, state}
+
+  `header` holds facts, drawn under the title in the order given:
+
+    * `%{kind: :badges, label: nil, items: [%{text: "v1.0", tone: :primary}]}` — a `tone` is
+      `neutral` (the default), `primary`, `secondary`, `success`, `info`, `warning`, `danger`, or
+      any other word a site's stylesheet keys on as `data-tone`.
+    * `%{kind: :command, label: "Install", value: "mix …"}` — drawn left to right, with the button a
+      code window has.
+    * `%{kind: :link, label: "Source", href: "https://…", text: "View source"}` — `http`, `https`
+      or a path on the site; an `http` or `https` address opens in a new tab.
+    * `%{kind: :text, label: "Package", value: "…"}`.
+    * `%{kind: :pending, text: "…"}` — a skeleton for the facts still being fetched, `text` for a
+      screen reader.
+
+  `tabs` holds tabs, drawn after the page's own text, `docs_tab_text`. A tab is
+  `%{id: "props", label: "Props", blocks: [block]}`, or the one block it is —
+  `%{id: "props", label: "Props", kind: :table, …}`. While its data is being fetched it is
+  `%{id: "props", label: "Props", state: :not_ready, text: "…", failed_text: "…",
+  pending: %{topic: "…"}}`, drawn as a skeleton, and one whose data could not be had is
+  `%{id: "props", label: "Props", state: :failed, text: "…"}`. An `id` is lower-case letters,
+  digits, `-` and `_`, and never `documentation`; the first tab with an id is kept. A block is:
+
+    * `%{kind: :table, title: nil, description: nil, columns: [%{key: :name, label: "Name",
+      code: true}], rows: [%{name: "color"}], empty_text: "…"}` — a cell is a word (in code under
+      a `code: true` column), a list of words, or a badge, `%{text: "Yes", tone: :success}`;
+      nothing is a dash, and a table with no rows says `empty_text`.
+    * `%{kind: :list, title: nil, description: nil, items: [fact]}` — facts, one a row.
+
+  Each tab is a link to the page with its id under `tab_param` — `?tab=props` — and the page's
+  other URL keys; the text is shown when the URL names no tab a plugin added. Every panel is drawn,
+  the ones not shown `hidden`, and changing tabs reads nothing again. Every element says what it is
+  in its `data-role`: `doc-extras`, `doc-extra-badges`, `doc-extra-badge`, `doc-extra-command`,
+  `doc-extra-link`, `doc-extra-text`, `doc-extra-label`, `doc-extra-value`, `doc-tabs`, `doc-tab`
+  (`aria-current` on the one shown), `doc-tab-panel`, `doc-extra-table`, `doc-extra-list`,
+  `doc-extra-row`, `doc-extra-item`, `doc-extra-blank`, `doc-extra-pending`, `doc-tab-pending` and
+  `doc-tab-failed`.
+
+  A `pending` topic — on a tab, or on the answer as `pending: %{topic: "…"}` — is a
+  `Phoenix.PubSub` topic on `MishkaCmsCore.PubSub` the plugin announces the end of its fetch on.
+  Once connected, `doc-section` starts one task (`MishkaGervaz.Messages.start_async/4`) that
+  subscribes to it, asks the event once more, and otherwise waits for the next message on it, up
+  to `pending_wait` milliseconds; then it asks again and draws the answer, and waits again while it
+  still names a topic. Nothing polls. A wait that runs out turns each tab still being fetched into
+  its `failed_text`, and takes the header's skeleton away.
+
+  Every word is text the template escapes, and anything of another shape is left out. With no
+  plugin, or an event that cannot run, the page is drawn as it was.
+
+  ### The hooks
+
+  `doc-code-copy` answers the buttons on each code window — the copy and the one that shows all of a
+  cut block — and the one beside each command a plugin adds to the page. `doc-section` mounts it on
+  its own root, outside the page's text, under the name the site's JavaScript registers it by
+  (`MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`), and one listener there
+  answers every button inside, whatever render drew it. A press copies the window's code with the
+  Clipboard API, or a textarea and `execCommand("copy")` where that API is missing, marks the button
+  `data-copied="true"` for 1.2 seconds and puts `copied_text` in the window's `doc-code-status`
+  live region. It writes no class and no style attribute, so a site's CSP has nothing to refuse.
+  Installed with the components, per site.
+
+  The `doc-example` hook answers an example's toolbar. The component of that name mounts it on its
+  own root, under the name `MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`
+  gives it. A press writes
+  the choice onto the root's `data-frame-*` and the buttons' `aria-pressed` through the hook's JS
+  commands, which a LiveView patch keeps, and onto the frame's `<html>`; the frame's width is the
+  stylesheet's, keyed on `data-frame-device`. It keeps the frame as tall as its page through the
+  frame's `height` attribute — when the page loads, its fonts arrive, the frame's width changes and
+  after every choice — and leads a link pressed in the frame to the page itself. No style
+  attribute, no class and no markup is written.
+
+  ### The stylesheet
+
+  `doc-code-highlight` colours the code blocks in a page's body. A page is stored with its code
+  already highlighted — `MishkaDocument.Resources.Changes.HighlightCode` does it when the page is
+  written — as `<pre class="highlight"><code class="language-x">` with a `<span>` per token, and the
+  sheet colours the token classes Makeup emits, in its Monokai style, and draws the window around
+  each block, the button's copied state included. It cuts a long block and a tall example at each
+  height their attributes offer, and draws the fade, the blur and the button over the cut, keyed on
+  `data-collapsible` and `data-expanded`. Installed with the components, per site, as a `:base`
+  stylesheet, so a site's own `:custom` rows still win over it.
 
   Every one of them resolves a document the same way — slug to workspace, `?v=` to a version, version
   to its approved pages — and always through the public reads, never by a raw id. That is what keeps

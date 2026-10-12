@@ -266,7 +266,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
               dir="ltr"
               class="mt-0.5 truncate font-['Space_Grotesk'] text-[11.5px] font-semibold text-white/80 rtl:text-right"
             >
-              /{@record.slug}
+              {@record.path || "/" <> @record.slug}
             </div>
           </div>
 
@@ -490,7 +490,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
               @progress.solid
             ]}
           >
-            /{@record.slug}
+            {@record.path || "/" <> @record.slug}
           </div>
         </div>
       </div>

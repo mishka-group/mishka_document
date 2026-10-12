@@ -499,7 +499,7 @@ defmodule MishkaDocument.Test.SectionTest do
     end
 
     describe "identities" do
-      test "unique_slug_per_version prevents duplicate slugs within a workspace version" do
+      test "unique_slug_per_parent prevents two top-level sections of a version sharing a slug" do
         site = create_site!()
         workspace = create_workspace!(site_id: site.id)
         version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
@@ -514,6 +514,37 @@ defmodule MishkaDocument.Test.SectionTest do
         assert_raise Ash.Error.Invalid, fn ->
           create_section!(
             slug: "unique-slug",
+            workspace_version_id: version.id,
+            site_id: site.id
+          )
+        end
+      end
+
+      test "allows the same slug under two parents, and refuses it twice under one" do
+        site = create_site!()
+        workspace = create_workspace!(site_id: site.id)
+        version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        tabs = create_section!(slug: "tabs", workspace_version_id: version.id, site_id: site.id)
+
+        headless =
+          create_section!(slug: "headless", workspace_version_id: version.id, site_id: site.id)
+
+        nested =
+          create_section!(
+            slug: "tabs",
+            parent_section_id: headless.id,
+            workspace_version_id: version.id,
+            site_id: site.id
+          )
+
+        assert {tabs.slug, nested.slug} == {"tabs", "tabs"}
+        assert nested.parent_section_id == headless.id
+
+        assert_raise Ash.Error.Invalid, fn ->
+          create_section!(
+            slug: "tabs",
+            parent_section_id: headless.id,
             workspace_version_id: version.id,
             site_id: site.id
           )

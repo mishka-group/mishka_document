@@ -14,6 +14,7 @@ defmodule MishkaDocument.Test.WorkspaceGuardedStructTest do
         assert MapSet.new([
                  :name,
                  :slug,
+                 :path,
                  :description,
                  :status,
                  :schema,

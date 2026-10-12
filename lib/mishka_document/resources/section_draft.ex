@@ -1079,8 +1079,7 @@ defmodule MishkaDocument.SectionDraft do
     field :slug, :string,
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=255)"
 
-    field :content, :string,
-      derives: "sanitize(basic_html) validate(optional=[string, max_len=2000])"
+    field :content, :string, derives: "sanitize(html5) validate(optional=[string])"
 
     field :order_position, :integer, derives: "validate(optional=[integer, min_len=0])"
 
@@ -1176,6 +1175,9 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
+      # Highlights the code blocks of the sanitized content, before the row is written.
+      change MishkaDocument.Resources.Changes.HighlightCode
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section_draft, for_action: :create}
 
@@ -1232,6 +1234,8 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
+      change MishkaDocument.Resources.Changes.HighlightCode
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section_draft, for_action: :create}
 
@@ -1280,6 +1284,8 @@ defmodule MishkaDocument.SectionDraft do
 
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
+      change MishkaDocument.Resources.Changes.HighlightCode
+
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplySectionDraft
 
@@ -1321,6 +1327,8 @@ defmodule MishkaDocument.SectionDraft do
       end
 
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+
+      change MishkaDocument.Resources.Changes.HighlightCode
 
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplySectionDraft
@@ -1627,8 +1635,8 @@ defmodule MishkaDocument.SectionDraft do
     attribute :content, :string do
       allow_nil? true
       public? true
-      constraints max_length: 2000, trim?: true
-      description "Optional description of the section"
+      constraints trim?: true
+      description "The page's own text, as HTML, its code blocks highlighted"
     end
 
     attribute :order_position, :integer do

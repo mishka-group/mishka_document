@@ -93,6 +93,7 @@ defmodule MishkaDocument.Dev.Generator do
       defaults: [
         name: sequence(:name, &"Test Workspace #{&1}"),
         slug: sequence(:slug, &"test-workspace-#{&1}"),
+        path: nil,
         description: sequence(:description, &"Test workspace description #{&1}"),
         status: StreamData.member_of([:active, :draft]),
         schema: [],
@@ -171,6 +172,8 @@ defmodule MishkaDocument.Dev.Generator do
         slug: sequence(:slug, &"test-section-#{&1}"),
         content: sequence(:content, &"Test section content #{&1}"),
         order_position: 0,
+        front_page: false,
+        group_heading: false,
         change_version: "0.0.1",
         content_review_status: :pending,
         technical_review_status: :pending,
@@ -439,6 +442,7 @@ defmodule MishkaDocument.Dev.Generator do
             slug = base |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
             "#{slug}-#{i}"
           end),
+        path: nil,
         description:
           StreamData.repeatedly(fn ->
             name = Enum.random(@workspace_names)
@@ -521,6 +525,8 @@ defmodule MishkaDocument.Dev.Generator do
             "<h2>#{title}</h2>\n<p>This section covers #{String.downcase(title)} in detail with practical examples and step-by-step instructions.</p>\n<p>Follow these guidelines to ensure correct implementation and avoid common pitfalls.</p>"
           end),
         order_position: StreamData.integer(0..100),
+        front_page: false,
+        group_heading: false,
         change_version: "1.0.0",
         content_review_status: StreamData.member_of([:pending, :approved, :rejected]),
         technical_review_status: StreamData.member_of([:pending, :approved, :rejected]),

@@ -4,6 +4,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaCmsCore.Localized
+  alias MishkaDocumentWeb.AdminActions
   alias MishkaDocumentWeb.Templates.DocumentCard
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
@@ -57,6 +58,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       |> assign(:version_ids, [])
       |> assign(:selected_version, nil)
       |> assign(:selected_version_id, workspace_version_id)
+      |> assign(:front_page, nil)
       |> assign(:url_state, nil)
       |> assign(:show_note_form, false)
       |> assign(:editing_note_id, nil)
@@ -68,6 +70,9 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       |> assign(:section_activity_logs_loading, %{})
       |> assign(:activity_logs, [])
       |> assign(:activity_logs_loading, AsyncResult.loading())
+      |> assign(:admin_context, nil)
+      |> assign(:admin_actions, [])
+      |> assign(:admin_action, nil)
 
     socket =
       if connected?(socket) do
@@ -102,6 +107,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
         |> assign(:selected_version, selected_version)
         |> assign(:selected_version_id, version_from_path)
         |> assign(:workspace_version_id, version_from_path)
+        |> load_front_page_async()
+        |> assign_admin_actions()
       else
         socket
       end
@@ -176,6 +183,16 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   def handle_event("change_version", %{"version_id" => version_id}, socket) do
     {:noreply, push_patch(socket, to: "/admin/dashboard/document/sections/#{version_id}")}
   end
+
+  @impl true
+  def handle_event("open_admin_action", %{"id" => id}, socket) do
+    {:noreply,
+     assign(socket, :admin_action, Enum.find(socket.assigns.admin_actions, &(&1.id == id)))}
+  end
+
+  @impl true
+  def handle_event("close_admin_action", _params, socket),
+    do: {:noreply, assign(socket, :admin_action, nil)}
 
   @impl true
   def handle_info({:form_saved, action, %MishkaDocument.Note{} = note}, socket)
@@ -428,11 +445,36 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       pubsub_notification: notification
     )
 
+    {:noreply, load_front_page_async(socket)}
+  end
+
+  @impl true
+  def handle_info(message, %{assigns: %{admin_action: %{} = action}} = socket) do
+    send_update(action.component, id: AdminActions.component_id(action), info: message)
     {:noreply, socket}
   end
 
   @impl true
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  # The buttons the plugins add for the document on screen — see `MishkaDocumentWeb.AdminActions`.
+  # Asked only for a reader who may manage the workspace. The open modal stays open while its action
+  # is still offered.
+  defp assign_admin_actions(
+         %{assigns: %{workspace_admin?: true, workspace: %{} = workspace}} = socket
+       ) do
+    context = AdminActions.context(workspace, socket.assigns.selected_version)
+    actions = AdminActions.actions(context, socket.assigns.current_user)
+    open = socket.assigns.admin_action && socket.assigns.admin_action.id
+
+    socket
+    |> assign(:admin_context, context)
+    |> assign(:admin_actions, actions)
+    |> assign(:admin_action, Enum.find(actions, &(&1.id == open)))
+  end
+
+  defp assign_admin_actions(socket),
+    do: assign(socket, admin_context: nil, admin_actions: [], admin_action: nil)
 
   defp note_saved_message(:create), do: gettext("Note created successfully")
   defp note_saved_message(:update), do: gettext("Note updated successfully")
@@ -477,6 +519,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
         |> assign(:selected_version, selected_version)
         |> assign(:selected_version_id, if(selected_version, do: selected_version.id, else: nil))
         |> assign(:workspace_loading, AsyncResult.ok(socket.assigns.workspace_loading, workspace))
+        |> load_front_page_async()
+        |> assign_admin_actions()
 
       socket =
         if workspace_id do
@@ -500,6 +544,14 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
        AsyncResult.failed(socket.assigns.workspace_loading, reason)
      )}
   end
+
+  @impl true
+  def handle_async(:load_front_page, {:ok, front_page}, socket),
+    do: {:noreply, assign(socket, :front_page, front_page)}
+
+  @impl true
+  def handle_async(:load_front_page, {:exit, _reason}, socket),
+    do: {:noreply, assign(socket, :front_page, nil)}
 
   @impl true
   def handle_async(:load_activity_logs, {:ok, logs}, socket) do
@@ -780,6 +832,27 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       end
     end)
   end
+
+  # THE PAGE THE SELECTED VERSION DRAWS AT ITS DOCUMENT'S OWN ADDRESS, for the Site Information panel,
+  # which a master alone is shown.
+  defp load_front_page_async(%{assigns: %{master_user?: true, selected_version_id: id}} = socket)
+       when is_binary(id) do
+    current_user = socket.assigns.current_user
+
+    MishkaGervaz.Messages.start_async(socket, :load_front_page, fn ->
+      MishkaDocument.Section
+      |> Ash.Query.for_read(:master_read, %{}, actor: current_user)
+      |> Ash.Query.filter(workspace_version_id == ^id and front_page == true)
+      |> Ash.Query.select([:id, :title, :slug])
+      |> Ash.read(page: [limit: 1])
+      |> case do
+        {:ok, %{results: [front_page | _]}} -> front_page
+        _none -> nil
+      end
+    end)
+  end
+
+  defp load_front_page_async(socket), do: socket
 
   defp load_workspace_version(%User{site_id: nil} = user, id) do
     case Ash.get(MishkaDocument.WorkspaceVersion, id, action: :master_get, actor: user) do

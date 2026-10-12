@@ -70,6 +70,8 @@ defmodule MishkaDocument.Section do
   @admin_fields [
     :workspace_version_id,
     :parent_section_id,
+    :front_page,
+    :group_heading,
     :title,
     :slug,
     :content,
@@ -96,6 +98,8 @@ defmodule MishkaDocument.Section do
 
     # Database-level optimization for archived records
     base_filter_sql "(archived_at IS NULL)"
+
+    identity_wheres_to_sql unique_front_page_per_version: "front_page = true"
 
     references do
       reference :site, on_delete: :delete
@@ -229,7 +233,7 @@ defmodule MishkaDocument.Section do
         # smaller open share and :section_content takes the slack.
         column :section_title do
           static true
-          requires [:id, :title, :slug, :breadcrumb_path]
+          requires [:id, :title, :slug, :front_page, :group_heading, :breadcrumb_path]
           label fn -> dgettext("mishka_gervaz", "Section") end
           position :first
           sortable true
@@ -252,6 +256,8 @@ defmodule MishkaDocument.Section do
               id: record.id,
               title: record.title,
               slug: record.slug,
+              front_page?: record.front_page == true,
+              group?: record.group_heading == true,
               path: Enum.join(crumbs, " › ")
             }
 
@@ -266,14 +272,32 @@ defmodule MishkaDocument.Section do
               </div>
               <div class="truncate text-[13.5px] font-semibold text-[#17161a]">{@title}</div>
               <div class="mt-[2px] flex items-center gap-[5px]">
-                <span class="truncate font-['Space_Grotesk'] text-[11px] font-medium text-[#a8a5a0]">
+                <span
+                  :if={@group?}
+                  title={dgettext("mishka_gervaz", "Only a heading in the contents, with no address")}
+                  class="rounded-[5px] bg-[#f4f3ee] px-[6px] py-[1px] text-[9.5px] font-bold uppercase text-[#6d6a63]"
+                >
+                  {dgettext("mishka_gervaz", "Group")}
+                </span>
+                <span
+                  :if={not @group?}
+                  class="truncate font-['Space_Grotesk'] text-[11px] font-medium text-[#a8a5a0]"
+                >
                   /{@slug}
                 </span>
                 <.copy_button
+                  :if={not @group?}
                   id={"section-slug-copy-#{@id}"}
                   value={@slug}
                   label={dgettext("mishka_gervaz", "Copy slug")}
                 />
+                <span
+                  :if={@front_page?}
+                  title={dgettext("mishka_gervaz", "Drawn at the document's own address")}
+                  class="rounded-[5px] bg-[#f2f1fc] px-[6px] py-[1px] text-[9.5px] font-bold uppercase text-[#4f4bcc]"
+                >
+                  {dgettext("mishka_gervaz", "Front page")}
+                </span>
               </div>
             </div>
             """
@@ -323,7 +347,7 @@ defmodule MishkaDocument.Section do
 
         # The only cell that really grows with its content, so it takes the slack every fixed-length
         # cell gives up. Two clamped lines is what stops a long body owning the row, and the slice
-        # keeps the rest of a 2000-character section out of the DOM twenty rows at a time.
+        # keeps the rest of a long page out of the DOM twenty rows at a time.
         column :section_content do
           static true
           requires [:content]
@@ -973,6 +997,32 @@ defmodule MishkaDocument.Section do
           end
         end
 
+        field :front_page, :toggle do
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Front page") end
+
+            description fn ->
+              dgettext(
+                "mishka_gervaz",
+                "Drawn at the document's own address instead of under it. One page per version, and only a page with no parent."
+              )
+            end
+          end
+        end
+
+        field :group_heading, :toggle do
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Group") end
+
+            description fn ->
+              dgettext(
+                "mishka_gervaz",
+                "Only a heading in the contents: it has no page of its own, and the pages under it keep their address as if it were not there."
+              )
+            end
+          end
+        end
+
         field :source_section_id, :relation do
           display_field :title
           search_field :title
@@ -1222,7 +1272,14 @@ defmodule MishkaDocument.Section do
         end
 
         group :references do
-          fields [:workspace, :workspace_version_id, :parent_section_id, :source_section_id]
+          fields [
+            :workspace,
+            :workspace_version_id,
+            :parent_section_id,
+            :front_page,
+            :group_heading,
+            :source_section_id
+          ]
 
           ui do
             label fn -> dgettext("mishka_gervaz", "References") end
@@ -1303,10 +1360,11 @@ defmodule MishkaDocument.Section do
     field :slug, :string,
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=255)"
 
-    field :content, :string,
-      derives: "sanitize(basic_html) validate(optional=[string, max_len=2000])"
+    field :content, :string, derives: "sanitize(html5) validate(optional=[string])"
 
     field :order_position, :integer, derives: "validate(optional=[integer, min_len=0])"
+    field :front_page, :boolean, derives: "validate(boolean)"
+    field :group_heading, :boolean, derives: "validate(boolean)"
 
     field :change_version, :string,
       derives: "sanitize(trim) validate(optional=[string, max_len=50, semver])"
@@ -1413,6 +1471,11 @@ defmodule MishkaDocument.Section do
         end
       end
 
+      # Highlights the code blocks of the sanitized content, before the row is written, and stores
+      # the components it names.
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :create}
 
@@ -1459,6 +1522,9 @@ defmodule MishkaDocument.Section do
           :ok
         end
       end
+
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :create}
@@ -1515,6 +1581,9 @@ defmodule MishkaDocument.Section do
                on_match: :ignore
              )
 
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :update}
 
@@ -1555,6 +1624,9 @@ defmodule MishkaDocument.Section do
                on_match: :ignore,
                on_lookup: {:relate, :create, :master_get}
              )
+
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :update}
@@ -1907,6 +1979,44 @@ defmodule MishkaDocument.Section do
               label: dgettext_noop("errors", "section"),
               in: :other_version},
              only_when_valid?: true
+
+    # A FRONT PAGE IS DRAWN AT ITS DOCUMENT'S OWN ADDRESS (`MishkaDocument.Address`), so it is a page
+    # at the top: one filed under another would be drawn in two places.
+    validate fn changeset, _context ->
+      front_page? = Ash.Changeset.get_attribute(changeset, :front_page) == true
+      parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
+
+      if front_page? and not is_nil(parent_id) do
+        {:error,
+         field: :front_page,
+         message:
+           dgettext_noop("errors", "Only a page with no parent may be its document's front page.")}
+      else
+        :ok
+      end
+    end
+
+    # A GROUP HAS NO PAGE OF ITS OWN, so it cannot be the page a document's address draws.
+    validate fn changeset, _context ->
+      if Ash.Changeset.get_attribute(changeset, :front_page) == true and
+           Ash.Changeset.get_attribute(changeset, :group_heading) == true do
+        {:error,
+         field: :group_heading,
+         message:
+           dgettext_noop(
+             "errors",
+             "A page cannot be both its document's front page and a group."
+           )}
+      else
+        :ok
+      end
+    end
+
+    # A PAGE'S WHOLE ADDRESS IS ITS OWN in its version, now that a front page's and a group's slugs
+    # are in none: two pages under two parents may otherwise meet at one address.
+    validate MishkaDocument.Resources.Validations.SectionAddress,
+      on: [:create, :update],
+      only_when_valid?: true
   end
 
   # Multi-tenancy configuration - sections are always site-specific
@@ -1937,8 +2047,24 @@ defmodule MishkaDocument.Section do
     attribute :content, :string do
       allow_nil? true
       public? true
-      constraints max_length: 2000, trim?: true
-      description "Optional description of the section"
+      constraints trim?: true
+      description "The page's own text, as HTML, its code blocks highlighted"
+    end
+
+    # WORKED OUT WITH THE CONTENT, never written by hand nor on a read —
+    # `MishkaDocument.Resources.Changes.ContentFacts`.
+    attribute :content_components, {:array, :string} do
+      allow_nil? true
+      public? false
+      description "The components the content's markers name, nil when it names none"
+    end
+
+    # WORKED OUT WITH THE CONTENT, never written by hand nor on a read —
+    # `MishkaDocument.Resources.Changes.ContentFacts`.
+    attribute :content_icons, {:array, :string} do
+      allow_nil? true
+      public? false
+      description "The icon classes the content names, nil when it names none"
     end
 
     attribute :order_position, :integer do
@@ -1947,6 +2073,26 @@ defmodule MishkaDocument.Section do
       default 0
       constraints min: 0
       description "Position for ordering sections"
+    end
+
+    # DRAWN AT ITS DOCUMENT'S OWN ADDRESS, in place of the document's landing: its own part of the
+    # address is empty and the pages under it sit directly under the document's
+    # (`MishkaDocument.Address`).
+    attribute :front_page, :boolean do
+      allow_nil? false
+      public? true
+      default false
+      description "Whether the page is drawn at its document's own address instead of under it"
+    end
+
+    # ONLY A HEADING IN THE CONTENTS: no page of its own and no address, and the pages under it are
+    # addressed as if it were not there (`MishkaDocument.Address`).
+    attribute :group_heading, :boolean do
+      allow_nil? false
+      public? true
+      default false
+
+      description "Whether the page is only a heading over the pages under it, with no page of its own"
     end
 
     attribute :change_version, :string do
@@ -2412,11 +2558,33 @@ defmodule MishkaDocument.Section do
   end
 
   identities do
-    identity :unique_slug_per_version, [:slug, :workspace_version_id, :site_id] do
-      description "Ensures section slugs are unique within each workspace version and site"
-      message dgettext_noop("errors", "Section slug must be unique within a workspace version.")
+    # A PAGE'S SLUG IS ITS PART OF THE ADDRESS UNDER ITS PARENT — see `MishkaDocument.Address` — so it
+    # is unique among the pages that share that parent, and two parents may each hold a `tabs`.
+    identity :unique_slug_per_parent,
+             [:slug, :parent_section_id, :workspace_version_id, :site_id] do
+      description "Ensures section slugs are unique among the sections sharing a parent, in each workspace version and site"
+
+      message dgettext_noop(
+                "errors",
+                "Another section under the same parent already has this slug."
+              )
+
       all_tenants? true
       nils_distinct? false
+    end
+
+    # ONE FRONT PAGE A VERSION, among its pages not archived — `base_filter_sql` joins the index's
+    # `where`.
+    identity :unique_front_page_per_version, [:workspace_version_id, :site_id] do
+      description "Ensures a workspace version has at most one front page"
+      where expr(front_page == true)
+
+      message dgettext_noop(
+                "errors",
+                "Another page of this version is already its front page."
+              )
+
+      all_tenants? true
     end
 
     identity :unique_language_per_group, [:language, :language_group_id, :site_id] do

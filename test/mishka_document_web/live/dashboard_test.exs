@@ -196,6 +196,60 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     assert render_async(view, 5_000) =~ "sectioner@example.com"
   end
 
+  # THE ADDRESS A DOCUMENT IS READ AT DRAWS ITS VERSION'S FRONT PAGE, so the Sections screen names
+  # the one the version being looked at draws there, beside the address.
+  test "the Sections screen names the page its version draws at the document's address", %{
+    conn: conn
+  } do
+    site = master_site()
+    workspace = create_workspace!(site_id: site.id)
+    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+    bare = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+    create_section!(
+      site_id: site.id,
+      workspace_version_id: version.id,
+      title: "Get started",
+      front_page: true
+    )
+
+    conn = log_in(conn, create_admin("docfront@example.com"))
+
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document/sections/#{version.id}")
+    render_async(view, 5_000)
+    render_async(view, 5_000)
+    assert has_element?(view, "#section-front-page", "Get started")
+
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document/sections/#{bare.id}")
+    render_async(view, 5_000)
+    render_async(view, 5_000)
+    refute has_element?(view, "#section-front-page")
+  end
+
+  # A GROUP IS ONLY A HEADING, so its card carries no address: a Group chip in place of its slug.
+  test "the Sections screen draws a group as a heading with no address", %{conn: conn} do
+    site = master_site()
+    workspace = create_workspace!(site_id: site.id)
+    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+    create_section!(
+      site_id: site.id,
+      workspace_version_id: version.id,
+      title: "Navigation",
+      slug: "navigation-group",
+      group_heading: true
+    )
+
+    conn = log_in(conn, create_admin("docgroup@example.com"))
+
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document/sections/#{version.id}")
+    render_async(view, 5_000)
+    html = render_async(view, 5_000)
+
+    assert has_element?(view, ~s([data-role="sec-group"]), "Group")
+    refute html =~ "/navigation-group"
+  end
+
   defp archived_issue!(site) do
     issue = create_issue!(site_id: site.id)
     Ash.destroy!(issue, action: :master_destroy, authorize?: false)

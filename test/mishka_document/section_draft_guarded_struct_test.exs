@@ -50,7 +50,7 @@ defmodule MishkaDocument.Test.SectionDraftGuardedStructTest do
                 ]} = SectionDraft.__guarded_change__(%{version_increment_type: :bogus})
       end
 
-      test "title as plain text, trimmed; slug trim; content basic_html" do
+      test "title as plain text, trimmed; slug trim; content html5" do
         assert {:ok,
                 %{
                   title: "API Refs",
@@ -60,11 +60,21 @@ defmodule MishkaDocument.Test.SectionDraftGuardedStructTest do
                  SectionDraft.__guarded_change__(%{
                    title: "  <em>API Refs</em>  ",
                    slug: "  api-refs  ",
-                   content: "<p>section <b>content</b></p><script>x</script>"
+                   content:
+                     ~s(<p>section <b>content</b></p><pre><code class="language-js">a</code></pre>) <>
+                       "<script>x</script>"
                  })
 
         assert content =~ "<p>section <b>content</b></p>"
+        assert content =~ ~s(<code class="language-js">)
         refute content =~ "<script"
+      end
+
+      test "content of a whole page is not capped" do
+        page = String.duplicate("<p>#{String.duplicate("word ", 40)}</p>", 50)
+
+        assert {:ok, %{content: content}} = SectionDraft.__guarded_change__(%{content: page})
+        assert byte_size(content) > 9_000
       end
     end
   end

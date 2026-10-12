@@ -439,6 +439,171 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
     end
   end
 
+  # A DOCUMENT WITH AN ADDRESS OF ITS OWN is named by the page that serves it there — no slug in the
+  # URL — and that address, with its page's under it, is the one canonical address of it, wherever
+  # it was asked for (`MishkaDocument.Address`).
+  describe "a document with an address of its own" do
+    setup %{site: site} do
+      document = document!(site, slug: "product", name: "Product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      install = page!(site, version, "install", title: "Install")
+      page!(site, version, "steps", title: "Steps", parent_section_id: install.id)
+      :ok
+    end
+
+    defp at_address(site, path, params, record) do
+      Seo.given(
+        %{
+          title: "Document page",
+          path: path,
+          language: "en",
+          seo: %{description: nil, schema: []}
+        },
+        site_id: site.id,
+        url: base() <> "/asked/elsewhere",
+        params: params,
+        record: record
+      )
+    end
+
+    test "is named by the page at its address, and its pages by theirs under it", %{site: site} do
+      front = answer(at_address(site, "/product/docs", %{}, "docs:document"))
+
+      assert {front.title, front.url} == {"Product", base() <> "/product/docs"}
+
+      page =
+        answer(
+          at_address(site, "/product/docs/*section", %{"section" => "install/steps"}, "docs:page")
+        )
+
+      assert {page.title, page.url} == {"Steps", base() <> "/product/docs/install/steps"}
+
+      assert crumbs(page) == [
+               {1, "Documentation", base() <> "/docs"},
+               {2, "Product", base() <> "/product/docs"},
+               {3, "Steps", base() <> "/product/docs/install/steps"}
+             ]
+    end
+
+    test "asked by its slug under /docs, names nothing: it is read at its own address alone",
+         %{site: site} do
+      for {kind, params} <- [
+            workspace: %{"lang" => "en", "workspace" => "product"},
+            section: %{"lang" => "en", "workspace" => "product", "section" => "install/steps"}
+          ] do
+        given = given(site, kind, params)
+        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+      end
+    end
+
+    test "at its address, is the one named whatever slug the query carries", %{site: site} do
+      document!(site, slug: "guide", name: "Guide")
+
+      front =
+        answer(at_address(site, "/product/docs", %{"workspace" => "guide"}, "docs:document"))
+
+      assert {front.title, front.url} == {"Product", base() <> "/product/docs"}
+    end
+
+    test "a page asked by its slug alone, when it is filed under another, names nothing",
+         %{site: site} do
+      given = at_address(site, "/product/docs/*section", %{"section" => "steps"}, "docs:page")
+      assert answer(given).title == "Document page"
+    end
+  end
+
+  # A VERSION'S FRONT PAGE IS DRAWN AT ITS DOCUMENT'S OWN ADDRESS, and the head there stays the
+  # document's: the address is the document's, whichever page it draws. Its slug under the address
+  # names nothing, and the pages filed under it are named directly under the address.
+  describe "a document whose version has a front page" do
+    setup %{site: site} do
+      document = document!(site, slug: "product", name: "Product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", title: "Get started", front_page: true)
+      page!(site, version, "install", title: "Install", parent_section_id: front.id)
+      :ok
+    end
+
+    defp fronted(site, path, params, record) do
+      Seo.given(
+        %{
+          title: "Document page",
+          path: path,
+          language: "en",
+          seo: %{description: nil, schema: []}
+        },
+        site_id: site.id,
+        url: base() <> "/asked/elsewhere",
+        params: params,
+        record: record
+      )
+    end
+
+    test "keeps the document's head at the document's address", %{site: site} do
+      front = answer(fronted(site, "/product/docs", %{}, "docs:document"))
+
+      assert {front.title, front.url} == {"Product", base() <> "/product/docs"}
+    end
+
+    test "names nothing at the address with the front page's slug after it", %{site: site} do
+      given =
+        fronted(site, "/product/docs/*section", %{"section" => "get-started"}, "docs:page")
+
+      assert answer(given).title == "Document page"
+    end
+
+    test "names a page filed under it directly under the address", %{site: site} do
+      page =
+        answer(fronted(site, "/product/docs/*section", %{"section" => "install"}, "docs:page"))
+
+      assert {page.title, page.url} == {"Install", base() <> "/product/docs/install"}
+
+      assert crumbs(page) == [
+               {1, "Documentation", base() <> "/docs"},
+               {2, "Product", base() <> "/product/docs"},
+               {3, "Install", base() <> "/product/docs/install"}
+             ]
+    end
+  end
+
+  # A GROUP IS ONLY A HEADING: nothing is named at its slug, and the pages under it are named as if it
+  # were not there.
+  describe "a document whose contents hold a group" do
+    setup %{site: site} do
+      document = document!(site, slug: "product", name: "Product", path: "/product/docs")
+      version = version!(site, document, is_latest_for_version: true)
+      group = page!(site, version, "navigation", title: "Navigation", group_heading: true)
+      page!(site, version, "breadcrumb", title: "Breadcrumb", parent_section_id: group.id)
+      :ok
+    end
+
+    defp in_group(site, params) do
+      Seo.given(
+        %{
+          title: "Document page",
+          path: "/product/docs/*section",
+          language: "en",
+          seo: %{description: nil, schema: []}
+        },
+        site_id: site.id,
+        url: base() <> "/asked/elsewhere",
+        params: params,
+        record: "docs:page"
+      )
+    end
+
+    test "names nothing at the group's slug", %{site: site} do
+      for section <- ["navigation", "navigation/breadcrumb"] do
+        assert answer(in_group(site, %{"section" => section})).title == "Document page"
+      end
+    end
+
+    test "names a page under it directly under the address", %{site: site} do
+      page = answer(in_group(site, %{"section" => "breadcrumb"}))
+      assert {page.title, page.url} == {"Breadcrumb", base() <> "/product/docs/breadcrumb"}
+    end
+  end
+
   describe "who may open it" do
     setup %{site: site} do
       document = document!(site, slug: "members", permissions: ["members:read"])
@@ -488,13 +653,15 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       page!(site, members, "invoices", parent_section_id: billing.id)
       page!(site, members, "steps", parent_section_id: install.id)
 
+      # Each page at its address: under the pages it is filed under, and at the top when its parent
+      # is not published — `notes`, whose parent `draft` is still waiting on a review.
       for {workspace, section, permissions} <- [
-            {"handbook", "leave", ["hr:read"]},
-            {"handbook", "parental", ["hr:read"]},
-            {"handbook", "payroll", ["payroll:read"]},
+            {"handbook", "hr/leave", ["hr:read"]},
+            {"handbook", "hr/leave/parental", ["hr:read"]},
+            {"handbook", "hr/payroll", ["payroll:read"]},
             {"handbook", "notes", ["hr:read"]},
-            {"members", "invoices", ["billing:read"]},
-            {"members", "steps", ["members:read"]}
+            {"members", "billing/invoices", ["billing:read"]},
+            {"members", "install/steps", ["members:read"]}
           ] do
         params = %{"lang" => "en", "workspace" => workspace, "section" => section}
 
@@ -668,6 +835,31 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
              ] = MishkaDocument.Plugins.PageRecords.types(site.id)
 
       assert Enum.any?(documents, &(&1.params["workspace"] == "guide"))
+    end
+
+    test "preview a page at the address it is read at, and no front page as a page of its own",
+         %{site: site} do
+      document = document!(site, slug: "guide", name: "Guide")
+      version = version!(site, document, is_latest_for_version: true)
+      front = page!(site, version, "get-started", title: "Get started", front_page: true)
+      page!(site, version, "install", title: "Install", parent_section_id: front.id)
+
+      [_documents, %{id: "docs:page", samples: samples}] =
+        MishkaDocument.Plugins.PageRecords.types(site.id)
+
+      assert Enum.map(samples, & &1.params["section"]) == ["install"]
+    end
+
+    test "preview no group, and a page under one directly under the document", %{site: site} do
+      document = document!(site, slug: "guide", name: "Guide")
+      version = version!(site, document, is_latest_for_version: true)
+      group = page!(site, version, "navigation", title: "Navigation", group_heading: true)
+      page!(site, version, "breadcrumb", title: "Breadcrumb", parent_section_id: group.id)
+
+      [_documents, %{id: "docs:page", samples: samples}] =
+        MishkaDocument.Plugins.PageRecords.types(site.id)
+
+      assert Enum.map(samples, & &1.params["section"]) == ["breadcrumb"]
     end
   end
 

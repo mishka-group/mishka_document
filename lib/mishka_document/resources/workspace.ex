@@ -41,6 +41,7 @@ defmodule MishkaDocument.Workspace do
   @admin_fields [
     :name,
     :slug,
+    :path,
     :description,
     :status,
     :schema,
@@ -776,6 +777,20 @@ defmodule MishkaDocument.Workspace do
           end
         end
 
+        field :path do
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Address") end
+            placeholder "/product/docs"
+
+            description fn ->
+              dgettext(
+                "mishka_gervaz",
+                "Where this document is read, such as /product/docs. Leave it empty to read it at /docs/<slug>."
+              )
+            end
+          end
+        end
+
         field :status, :select do
           required true
 
@@ -944,7 +959,7 @@ defmodule MishkaDocument.Workspace do
 
       groups do
         group :basic_info do
-          fields [:site_id, :name, :slug, :status]
+          fields [:site_id, :name, :slug, :path, :status]
 
           ui do
             label fn -> dgettext("mishka_gervaz", "Basic Information") end
@@ -1006,6 +1021,8 @@ defmodule MishkaDocument.Workspace do
 
     field :slug, :string,
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=255)"
+
+    field :path, :string, derives: "sanitize(trim) validate(optional=[string, max_len=255])"
 
     field :description, :string,
       validator: {MishkaCmsCore.PlainText, :field},
@@ -1500,7 +1517,30 @@ defmodule MishkaDocument.Workspace do
   end
 
   # Every id this record holds names a record of its own site, whoever writes it.
+  # A DOCUMENT'S OWN ADDRESS IS STORED ONE WAY, so two ways of writing it are one address — see
+  # `MishkaDocument.Address.normalize/1` — and the check below reads what is stored.
+  changes do
+    change fn changeset, _context ->
+             case Ash.Changeset.fetch_change(changeset, :path) do
+               {:ok, given} ->
+                 Ash.Changeset.force_change_attribute(
+                   changeset,
+                   :path,
+                   MishkaDocument.Address.normalize(given)
+                 )
+
+               :error ->
+                 changeset
+             end
+           end,
+           on: [:create, :update]
+
+    change MishkaDocument.Resources.Changes.EnsureAddressPages, on: [:create, :update]
+  end
+
   validations do
+    validate MishkaDocument.Resources.Validations.DocumentAddress, on: [:create, :update]
+
     validate {MishkaCmsCore.Runtime.Resources.Validations.SameSiteReference,
               field: :language_group_id,
               resource: MishkaDocument.Workspace,
@@ -1533,6 +1573,14 @@ defmodule MishkaDocument.Workspace do
       public? true
       constraints min_length: 1, max_length: 255, trim?: true
       description "URL-friendly slug for the workspace"
+    end
+
+    attribute :path, :string do
+      allow_nil? true
+      public? true
+      constraints max_length: 255
+
+      description "The address this document is read at, such as /product/docs, its pages under it. Empty, it is read at /docs/<slug>. See MishkaDocument.Address."
     end
 
     attribute :description, :string do
@@ -2027,6 +2075,17 @@ defmodule MishkaDocument.Workspace do
 
       all_tenants? true
       nils_distinct? false
+    end
+
+    identity :unique_path_per_language, [:path, :language, :site_id] do
+      description "Ensures one document of a language is read at each address of a site"
+
+      message dgettext_noop(
+                "errors",
+                "Another document in this language is read at this address."
+              )
+
+      all_tenants? true
     end
   end
 

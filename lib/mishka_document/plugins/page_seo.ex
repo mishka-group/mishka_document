@@ -7,30 +7,42 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   A page is matched by the kind of record it says it shows (`record`, its `extra`'s `"record"`):
   `"docs:document"`, a document's front page, or `"docs:page"`, one page of a document — the kinds
-  `MishkaDocument.Plugins.PageRecords` names. Its path may be anything that captures `workspace`,
-  and `section` for a page. Every other page is handed back untouched before anything is read. A
-  kind has one owner, so the answer for one of these halts the chain: no later plugin is asked.
+  `MishkaDocument.Plugins.PageRecords` names. Its path is a document's own address,
+  `/chelekom/docs` and `/chelekom/docs/*section` (`MishkaDocument.Address`), which names that
+  document; or anything that captures `workspace`, and `*section` for a page, whose slug names a
+  document with no address of its own. Every other page is handed back untouched before anything
+  is read. A kind has one owner, so the answer
+  for one of these halts the chain: no later plugin is asked.
 
   ## What is read
 
   One read, through `:public_list` as `doc-section` reads it, on the page's site, as the system: the
-  active document the `workspace` capture names in the page's language. On
-  `/:lang/docs/:workspace/:section` it brings its published versions and, in each, the approved page
-  the `section` capture names; the page shown is the one in the version `?v=` names, else in the
-  version marked latest, else in the newest published one.
+  active document whose own address the page is at, else the one the `workspace` capture names, in
+  the page's language. A slug names only a document with no address of its own: one that has an
+  address is read there and nowhere else, so `/docs/<its slug>` names nothing. For one of its pages it brings its published versions and, in each, the approved
+  pages as a tree; the version shown is the one `?v=` names, else the one marked latest, else the
+  newest published, and the page is the one at the address the `section` capture holds —
+  `headless/switch` — read once more for its own text and lock. A version's front page is at the
+  document's own address and nowhere under it (`MishkaDocument.Address`), so a `section` naming its
+  slug names nothing; a group is only a heading in the contents, and nothing is named at its slug
+  either.
 
   ## What it returns
 
   Every value is a default: what the page sets in its own SEO — a title, a description, a tag,
   structured data — wins, and may name the variables below, `{{doc.title}} · {{workspace.name}}`.
 
-    * `title`, `description` — the document's name and description on its front page; the page's
-      title and the start of its text on one of its pages;
+    * `title`, `description` — the document's name and description on its front page, whether it
+      draws the page its version marks as its front page there or the landing; the page's title and
+      the start of its text on one of its pages;
     * `type` — `"article"`;
     * `tags` — the document's or the page's own `seo_tags`; a page that holds no robots meta of its
       own takes its document's, as a CMS page takes its layout's;
     * `schema` — its own `schema` when it holds one, else a `TechArticle`; then a
       `BreadcrumbList`, Documentation → the document → the page;
+    * `url` — the canonical address: the document's own address where it has one, with the page's
+      under it, so the head names the one address a reader and a crawler are sent to; else the
+      address asked;
     * `vars` — `doc.title`, `doc.description`, `doc.url`, `doc.version`, `doc.published_at`,
       `doc.modified_at` (the front page or the page of it this address shows), and
       `workspace.name`, `workspace.description`, `workspace.url` (the document);
@@ -62,12 +74,13 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   alias MishkaCmsCore.Runtime.{Languages, Seo}
   alias MishkaCmsCore.Settings
-  alias MishkaDocument.{Provision, Section, Workspace, WorkspaceVersion}
+  alias MishkaDocument.{Address, Provision, Section, Workspace, WorkspaceVersion}
 
   @workspace_fields [
     :id,
     :name,
     :slug,
+    :path,
     :description,
     :language,
     :seo_tags,
@@ -114,6 +127,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
       %Workspace{} = workspace ->
         answer(seo, workspace, %{
           page?: false,
+          segments: [],
           title: workspace.name,
           description: workspace.description,
           version: nil,
@@ -132,11 +146,14 @@ defmodule MishkaDocument.Plugins.PageSeo do
   defp document_page(%{params: params} = seo) do
     seo = %{seo | var_docs: docs()}
 
-    with slug when is_binary(slug) and slug != "" <- params["section"],
-         %Workspace{} = workspace <- read(seo, versions: versions(slug)),
-         {version, %Section{} = section} <- shown(workspace.versions, params["v"]) do
+    with wanted when is_binary(wanted) and wanted != "" <- params["section"],
+         %Workspace{} = workspace <- read(seo, versions: versions()),
+         {version, tree} <- shown(workspace.versions, params["v"]),
+         %{id: id} = page <- Address.page_at(tree, wanted),
+         %Section{} = section <- section(id, seo.site_id) do
       answer(seo, workspace, %{
         page?: true,
+        segments: Map.get(Address.paths(tree), page.id, []),
         title: section.title,
         description: summary(section.content),
         version: version.version_number,
@@ -151,17 +168,36 @@ defmodule MishkaDocument.Plugins.PageSeo do
     end
   end
 
-  # The document the `workspace` capture names, in the page's language, on the page's site; `nil`
-  # when the request names none or none is shown. Read as the system, because what it reads is the
-  # lock `MishkaCmsWeb.RuntimeLive` admits the visitor by: read as a visitor who may not open it, a
-  # locked document or page is no record at all, and the page is handed no permissions to refuse
-  # them with. The hook names no visitor either, and the head built here reaches only a visitor the
-  # page admitted.
-  defp read(%{params: %{"workspace" => slug}, site_id: site_id} = seo, loads)
-       when is_binary(slug) and slug != "" and is_binary(site_id) do
+  # The document whose own address the page is at, else the one with no address of its own the
+  # `workspace` capture names, in the page's language, on the page's site; `nil` when the request
+  # names none or none is shown. Read as the system, because what it reads is the lock
+  # `MishkaCmsWeb.RuntimeLive` admits the visitor by: read as a visitor who may not open it, a locked
+  # document or page is no record at all, and the page is handed no permissions to refuse them with.
+  # The hook names no visitor either, and the head built here reaches only a visitor the page
+  # admitted.
+  defp read(%{site_id: site_id} = seo, loads) when is_binary(site_id),
+    do: Enum.find_value(own_address(seo) ++ by_slug(seo), &read(&1, seo, loads))
+
+  defp read(_seo, _loads), do: nil
+
+  defp own_address(%{page: %{path: path}}) do
+    case Address.of_page(path) do
+      nil -> []
+      address -> [{:path, address}]
+    end
+  end
+
+  defp own_address(_seo), do: []
+
+  defp by_slug(%{params: %{"workspace" => slug}}) when is_binary(slug) and slug != "",
+    do: [{:slug, slug}]
+
+  defp by_slug(_seo), do: []
+
+  defp read(named, %{site_id: site_id} = seo, loads) do
     Workspace
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
-    |> Ash.Query.filter(slug == ^slug)
+    |> named_by(named)
     |> in_language(seo.language)
     |> Ash.Query.select(@workspace_fields)
     |> Ash.Query.load(loads)
@@ -172,28 +208,29 @@ defmodule MishkaDocument.Plugins.PageSeo do
     end
   end
 
-  defp read(_seo, _loads), do: nil
+  defp named_by(query, {:slug, slug}),
+    do: Ash.Query.filter(query, slug == ^slug and is_nil(path))
+
+  defp named_by(query, {:path, address}), do: Ash.Query.filter(query, path == ^address)
 
   defp in_language(query, language) when is_binary(language) and language != "",
     do: Ash.Query.filter(query, language == ^language)
 
   defp in_language(query, _no_language), do: query
 
-  # Every published version, each with its approved page under `slug`.
-  defp versions(slug) do
+  # Every published version, each with its approved pages as a tree — what a page's address is
+  # followed through (`MishkaDocument.Address.page_at/2`).
+  defp versions do
     WorkspaceVersion
     |> Ash.Query.select(@version_fields)
     |> Ash.Query.load(
       sections:
-        Section
-        |> Ash.Query.filter(slug == ^slug)
-        |> Ash.Query.select(@section_fields)
-        |> Ash.Query.load(:effective_permissions)
+        Ash.Query.select(Section, [:id, :slug, :parent_section_id, :front_page, :group_heading])
     )
   end
 
   # The version a reader is shown — the one `asked` names, else the one marked latest, else the
-  # newest published — and its page, or `nil` when it has none.
+  # newest published — and its pages, or `nil` when there is none.
   defp shown(versions, asked) do
     newest = Enum.sort_by(versions, &{moment(&1.published_at), moment(&1.inserted_at)}, :desc)
 
@@ -202,7 +239,21 @@ defmodule MishkaDocument.Plugins.PageSeo do
         Enum.find(newest, & &1.is_latest_for_version) || List.first(newest)
 
     case version do
-      %WorkspaceVersion{sections: [section | _rest]} -> {version, section}
+      %WorkspaceVersion{sections: pages} when is_list(pages) -> {version, pages}
+      _none -> nil
+    end
+  end
+
+  # The page shown, with its text and its lock, read as the system for the reason `read/3` gives.
+  defp section(id, site_id) do
+    Section
+    |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
+    |> Ash.Query.filter(id == ^id)
+    |> Ash.Query.select(@section_fields)
+    |> Ash.Query.load(:effective_permissions)
+    |> Ash.read(tenant: site_id, authorize?: false, page: [limit: 1])
+    |> case do
+      {:ok, %{results: [section | _rest]}} -> section
       _none -> nil
     end
   end
@@ -224,8 +275,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   defp answer(seo, workspace, record) do
     base = base(seo)
-    docs_url = address(Path.dirname(Provision.item_paths().workspace), seo, base)
-    workspace_url = address(Provision.item_paths().workspace, seo, base)
+    docs_url = edition_url(Provision.docs_base(), workspace, seo, base)
+    workspace_url = document_url(workspace, [], seo, base)
+    seo = %{seo | url: document_url(workspace, record.segments, seo, base) || seo.url}
     published = iso8601(record.published)
     modified = iso8601(record.modified)
 
@@ -314,13 +366,31 @@ defmodule MishkaDocument.Plugins.PageSeo do
   defp robots(tags),
     do: tags |> Seo.stored_tags() |> Enum.filter(&match?(%{id: "robots"}, Seo.entry_of(&1)))
 
-  # `path` filled with this request's captures, at the address the site's URL mode gives it, on
-  # `base`.
-  defp address(path, %{params: params, site_id: site_id}, base),
-    do:
-      path
-      |> Languages.url(Map.take(params, [Languages.capture(), "workspace"]), site_id)
-      |> Seo.absolute(base)
+  # THE ADDRESS OF A DOCUMENT, OR OF ONE OF ITS PAGES, on `base`: under its own address where it has
+  # one, which is then the one canonical address of it wherever it was asked for; under the
+  # documentation's base by its slug where it has not — the address asked, filled as the page fills
+  # it.
+  defp document_url(%{path: own} = workspace, segments, seo, base)
+       when is_binary(own) and own != "",
+       do: edition_url(Enum.join([own | segments], "/"), workspace, seo, base)
+
+  defp document_url(workspace, [], %{params: params, site_id: site_id}, base) do
+    Provision.item_paths().workspace
+    |> Languages.url(
+      params
+      |> Map.take([Languages.capture()])
+      |> Map.merge(%{"lang" => workspace.language, "workspace" => workspace.slug}),
+      site_id
+    )
+    |> Seo.absolute(base)
+  end
+
+  defp document_url(_workspace, _segments, _seo, _base), do: nil
+
+  # `path` in the language of the edition being described, at the address the site's URL mode gives
+  # it, on `base`.
+  defp edition_url(path, workspace, %{site_id: site_id}, base),
+    do: path |> Languages.url(%{"lang" => workspace.language}, site_id) |> Seo.absolute(base)
 
   defp publisher(site_id, base) do
     case Settings.get("site.title", nil, site_id) do
