@@ -1274,6 +1274,67 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert body =~ "Body of Installation."
     end
 
+    # A PAGE'S CODE IS STORED HIGHLIGHTED, and the body is scrubbed again on its way to the page.
+    # The token classes and the block's language have to come through that, or the kit's stylesheet
+    # has nothing to colour.
+    test "draws a whole page with its code highlighted as it was stored", %{site: site} do
+      %{version: version} = manual!(site)
+
+      editor =
+        create_user_with_permissions!(["admin:dashboard:document:section"], site_id: site.id)
+
+      prose = "<p>#{String.duplicate("Words about it. ", 60)}</p>"
+
+      content =
+        Enum.map_join(1..6, fn index ->
+          "<h2>Step #{index}</h2>" <>
+            prose <>
+            ~S|<pre><code class="language-elixir">def hello(name), do: "Hi #{name}"</code></pre>|
+        end)
+
+      assert byte_size(content) > 6_000
+
+      page =
+        MishkaDocument.Section
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            workspace_version_id: version.id,
+            title: "Long page",
+            slug: "long-page",
+            order_position: 9,
+            language: "en",
+            content: content,
+            content_review_status: :approved,
+            technical_review_status: :approved
+          },
+          actor: editor,
+          tenant: site.id
+        )
+        |> Ash.create!()
+
+      attrs = %{workspace: "mishka-cms", params: %{"section" => "long-page"}}
+      {:ok, view, _html} = mount_page(site, "doc-section", attrs)
+
+      token_classes = fn html, scope ->
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(scope <> " pre.highlight > code.language-elixir > span")
+        |> LazyHTML.attribute("class")
+      end
+
+      stored = token_classes.(page.content, "")
+      drawn = token_classes.(render_async(view, @async), ~s([data-role="doc-section-body"]))
+
+      assert "kd" in stored and "nf" in stored and "s" in stored
+      assert drawn == stored
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) ==
+               Enum.map(1..6, &"Step #{&1}")
+    end
+
     # A SLUG THAT NAMES NOTHING IS A DIFFERENT SENTENCE from no slug at all — one is "pick a
     # document", the other is "that page is gone", and a reader who followed a stale link deserves
     # the second.

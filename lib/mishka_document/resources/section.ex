@@ -323,7 +323,7 @@ defmodule MishkaDocument.Section do
 
         # The only cell that really grows with its content, so it takes the slack every fixed-length
         # cell gives up. Two clamped lines is what stops a long body owning the row, and the slice
-        # keeps the rest of a 2000-character section out of the DOM twenty rows at a time.
+        # keeps the rest of a long page out of the DOM twenty rows at a time.
         column :section_content do
           static true
           requires [:content]
@@ -1303,8 +1303,7 @@ defmodule MishkaDocument.Section do
     field :slug, :string,
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=255)"
 
-    field :content, :string,
-      derives: "sanitize(basic_html) validate(optional=[string, max_len=2000])"
+    field :content, :string, derives: "sanitize(html5) validate(optional=[string])"
 
     field :order_position, :integer, derives: "validate(optional=[integer, min_len=0])"
 
@@ -1413,6 +1412,9 @@ defmodule MishkaDocument.Section do
         end
       end
 
+      # Highlights the code blocks of the sanitized content, before the row is written.
+      change MishkaDocument.Resources.Changes.HighlightCode
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :create}
 
@@ -1459,6 +1461,8 @@ defmodule MishkaDocument.Section do
           :ok
         end
       end
+
+      change MishkaDocument.Resources.Changes.HighlightCode
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :create}
@@ -1515,6 +1519,8 @@ defmodule MishkaDocument.Section do
                on_match: :ignore
              )
 
+      change MishkaDocument.Resources.Changes.HighlightCode
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :update}
 
@@ -1555,6 +1561,8 @@ defmodule MishkaDocument.Section do
                on_match: :ignore,
                on_lookup: {:relate, :create, :master_get}
              )
+
+      change MishkaDocument.Resources.Changes.HighlightCode
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :section, for_action: :update}
@@ -1937,8 +1945,8 @@ defmodule MishkaDocument.Section do
     attribute :content, :string do
       allow_nil? true
       public? true
-      constraints max_length: 2000, trim?: true
-      description "Optional description of the section"
+      constraints trim?: true
+      description "The page's own text, as HTML, its code blocks highlighted"
     end
 
     attribute :order_position, :integer do

@@ -418,8 +418,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   @doc """
   The one-line taste of the section's content the card shows.
 
-  Kept to a single line by the design, so it is cut well before the attribute's 2000-character ceiling
-  and left for CSS to ellipsise.
+  Kept to a single line by the design, so it is cut at a line's length and left for CSS to ellipsise.
   """
   @preview_length 160
 

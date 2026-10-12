@@ -31,7 +31,7 @@ defmodule MishkaDocument.Test.SectionGuardedStructTest do
     end
 
     describe "direct __guarded_change__/1" do
-      test "title as plain text, trimmed; content basic_html; review status enums" do
+      test "title as plain text, trimmed; content html5; review status enums" do
         assert {:ok,
                 %{
                   title: "Intro",
@@ -41,13 +41,23 @@ defmodule MishkaDocument.Test.SectionGuardedStructTest do
                 }} =
                  Section.__guarded_change__(%{
                    title: "  <i>Intro</i>  ",
-                   content: "<p>Welcome</p><script>alert(1)</script>",
+                   content:
+                     ~s(<p>Welcome</p><pre><code class="language-elixir">:ok</code></pre>) <>
+                       "<script>alert(1)</script>",
                    content_review_status: :approved,
                    technical_review_status: :rejected
                  })
 
         assert content =~ "<p>Welcome</p>"
+        assert content =~ ~s(<code class="language-elixir">)
         refute content =~ "<script"
+      end
+
+      test "content of a whole page is not capped" do
+        page = String.duplicate("<p>#{String.duplicate("word ", 40)}</p>", 50)
+
+        assert {:ok, %{content: content}} = Section.__guarded_change__(%{content: page})
+        assert byte_size(content) > 9_000
       end
 
       test "title empty → min_len + not_empty fire" do

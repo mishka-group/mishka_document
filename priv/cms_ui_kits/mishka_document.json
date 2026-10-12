@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -527,7 +527,7 @@
           "type": "boolean",
           "opts": {
             "default": true,
-            "doc": "Draw the notes filed under this page. A page's own text is capped short by design, so the notes are usually the body of it."
+            "doc": "Draw the notes filed under this page, after its own text."
           }
         },
         {
@@ -732,7 +732,7 @@
         {
           "name": "clean",
           "args": "content",
-          "code": "# STORED MARKUP IS SCRUBBED AGAIN ON THE WAY OUT. It arrives sanitized, but `rendered_content` is a\n# plugin seam — anything a site installed may have rewritten it since — and this is the last place\n# before a visitor's browser.\ncase is_binary(content) do\n  true -> HtmlSanitizeEx.basic_html(content)\n  false -> \"\"\nend\n"
+          "code": "# STORED MARKUP IS SCRUBBED AGAIN ON THE WAY OUT. It arrives sanitized, but `rendered_content` is a\n# plugin seam — anything a site installed may have rewritten it since — and this is the last place\n# before a visitor's browser. The scrub is the one a page's text is stored through, which keeps\n# classes: a code block's `language-` and the token classes it was highlighted with when it was\n# written reach the page as they were stored.\ncase is_binary(content) do\n  true -> HtmlSanitizeEx.html5(content)\n  false -> \"\"\nend\n"
         },
         {
           "name": "strip_tags",
@@ -752,7 +752,7 @@
         {
           "name": "with_heading_ids",
           "args": "html",
-          "code": "# THE SAME IDS, WRITTEN ONTO THE MARKUP. The scrubber strips every attribute off a heading, so the\n# ids cannot be put there by an author and cannot survive from one: they are minted here, after the\n# scrub, and any that somehow did survive is dropped so no page carries the same id twice.\nids = Enum.map(heading_entries(html), & &1.id)\n\n~r/<(h[23])(?:\\s[^>]*)?>.*?<\\/\\1>/su\n|> Regex.split(html, include_captures: true)\n|> Enum.map_reduce(0, fn part, index ->\n  case Regex.run(~r/^<(h[23])((?:\\s[^>]*)?)>(.*)<\\/h[23]>$/su, part) do\n    [_whole, tag, attrs, inner] ->\n      id = Enum.at(ids, index, \"h-\" <> to_string(index))\n      kept = String.replace(attrs, ~r/\\sid=(\"[^\"]*\"|'[^']*')/, \"\")\n\n      {\"<#{tag}#{kept} id=\\\"#{id}\\\">#{inner}</#{tag}>\", index + 1}\n\n    _not_a_heading ->\n      {part, index}\n  end\nend)\n|> elem(0)\n|> Enum.join()\n"
+          "code": "# THE SAME IDS, WRITTEN ONTO THE MARKUP. They are minted here, after the scrub, and an id an author\n# wrote onto a heading is dropped for the one minted, so every heading answers the anchor `doc-toc`\n# lists and no page carries the same id twice.\nids = Enum.map(heading_entries(html), & &1.id)\n\n~r/<(h[23])(?:\\s[^>]*)?>.*?<\\/\\1>/su\n|> Regex.split(html, include_captures: true)\n|> Enum.map_reduce(0, fn part, index ->\n  case Regex.run(~r/^<(h[23])((?:\\s[^>]*)?)>(.*)<\\/h[23]>$/su, part) do\n    [_whole, tag, attrs, inner] ->\n      id = Enum.at(ids, index, \"h-\" <> to_string(index))\n      kept = String.replace(attrs, ~r/\\sid=(\"[^\"]*\"|'[^']*')/, \"\")\n\n      {\"<#{tag}#{kept} id=\\\"#{id}\\\">#{inner}</#{tag}>\", index + 1}\n\n    _not_a_heading ->\n      {part, index}\n  end\nend)\n|> elem(0)\n|> Enum.join()\n"
         },
         {
           "name": "climb",
@@ -1541,7 +1541,7 @@
         {
           "name": "clean",
           "args": "content",
-          "code": "# THE SAME SCRUB `doc-section` APPLIES, and it has to be the same one: the ids below are computed\n# from what that scrub leaves behind, so a different one here would compute anchors for headings the\n# page never drew.\ncase is_binary(content) do\n  true -> HtmlSanitizeEx.basic_html(content)\n  false -> \"\"\nend\n"
+          "code": "# THE SAME SCRUB `doc-section` APPLIES, and it has to be the same one: the ids below are computed\n# from what that scrub leaves behind, so a different one here would compute anchors for headings the\n# page never drew.\ncase is_binary(content) do\n  true -> HtmlSanitizeEx.html5(content)\n  false -> \"\"\nend\n"
         },
         {
           "name": "strip_tags",
@@ -2373,5 +2373,20 @@
   ],
   "icons": [],
   "js_hooks": [],
-  "stylesheets": []
+  "stylesheets": [
+    {
+      "name": "doc-code-highlight",
+      "description": "Colours the code blocks in a documentation page: pre.highlight and the token classes Makeup emits, in its Monokai style.",
+      "format": "css",
+      "kind": "base",
+      "priority": 50,
+      "active": true,
+      "content": "/* Code in a documentation page: <pre class=\"highlight\"><code class=\"language-x\"> with one <span>\n   per token. The token classes are the ones Makeup emits, coloured in its Monokai style. */\npre.highlight {\n  color: #f8f8f2;\n  background-color: #272822;\n  border-radius: 12px;\n  padding: 16px 20px;\n  margin: 0 0 12px;\n  overflow-x: auto;\n  font-size: 13px;\n  line-height: 1.6;\n  direction: ltr;\n  text-align: left;\n  tab-size: 2;\n}\n\npre.highlight code {\n  display: block;\n  padding: 0;\n  background: transparent;\n  color: inherit;\n  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;\n  font-size: inherit;\n  white-space: pre;\n}\n\n.highlight .bp {color: #f8f8f2; } /* :name_builtin_pseudo */\n.highlight .c {color: #75715e; } /* :comment */\n.highlight .c1 {color: #75715e; } /* :comment_single */\n.highlight .ch {color: #75715e; } /* :comment_hashbang */\n.highlight .cm {color: #75715e; } /* :comment_multiline */\n.highlight .cp {color: #75715e; } /* :comment_preproc */\n.highlight .cpf {color: #75715e; } /* :comment_preproc_file */\n.highlight .cs {color: #75715e; } /* :comment_special */\n.highlight .dl {color: #e6db74; } /* :string_delimiter */\n.highlight .err {color: #960050; background-color: #1e0010; } /* :error */\n.highlight .fm {color: #a6e22e; } /* :name_function_magic */\n.highlight .gd {color: #f92672; } /* :generic_deleted */\n.highlight .ge {font-style: italic; } /* :generic_emph */\n.highlight .gi {color: #a6e22e; } /* :generic_inserted */\n.highlight .gs {font-weight: bold; } /* :generic_strong */\n.highlight .gu {color: #75715e; } /* :generic_subheading */\n.highlight .il {color: #ae81ff; } /* :number_integer_long */\n.highlight .k {color: #66d9ef; } /* :keyword */\n.highlight .kc {color: #66d9ef; } /* :keyword_constant */\n.highlight .kd {color: #66d9ef; } /* :keyword_declaration */\n.highlight .kn {color: #f92672; } /* :keyword_namespace */\n.highlight .kp {color: #66d9ef; } /* :keyword_pseudo */\n.highlight .kr {color: #66d9ef; } /* :keyword_reserved */\n.highlight .kt {color: #66d9ef; } /* :keyword_type */\n.highlight .l {color: #ae81ff; } /* :literal */\n.highlight .ld {color: #ae81ff; } /* :literal_date */\n.highlight .m {color: #ae81ff; } /* :number */\n.highlight .mb {color: #ae81ff; } /* :number_bin */\n.highlight .mf {color: #ae81ff; } /* :number_float */\n.highlight .mh {color: #ae81ff; } /* :number_hex */\n.highlight .mi {color: #ae81ff; } /* :number_integer */\n.highlight .mo {color: #ae81ff; } /* :number_oct */\n.highlight .n {color: #f8f8f2; } /* :name */\n.highlight .na {color: #a6e22e; } /* :name_attribute */\n.highlight .nb {color: #f8f8f2; } /* :name_builtin */\n.highlight .nc {color: #a6e22e; } /* :name_class */\n.highlight .nd {color: #a6e22e; } /* :name_decorator */\n.highlight .ne {color: #a6e22e; } /* :name_exception */\n.highlight .nf {color: #a6e22e; } /* :name_function */\n.highlight .ni {color: #f8f8f2; } /* :name_entity */\n.highlight .nl {color: #f8f8f2; } /* :name_label */\n.highlight .nn {color: #f8f8f2; } /* :name_namespace */\n.highlight .no {color: #66d9ef; } /* :name_constant */\n.highlight .nt {color: #f92672; } /* :name_tag */\n.highlight .nv {color: #f8f8f2; } /* :name_variable */\n.highlight .nx {color: #a6e22e; } /* :name_other */\n.highlight .o {color: #f92672; } /* :operator */\n.highlight .ow {color: #f92672; } /* :operator_word */\n.highlight .p {color: #f8f8f2; } /* :punctuation */\n.highlight .py {color: #f8f8f2; } /* :name_property */\n.highlight .s {color: #e6db74; } /* :string */\n.highlight .s1 {color: #e6db74; } /* :string_single */\n.highlight .s2 {color: #e6db74; } /* :string_double */\n.highlight .sa {color: #e6db74; } /* :string_affix */\n.highlight .sb {color: #e6db74; } /* :string_backtick */\n.highlight .sc {color: #e6db74; } /* :string_char */\n.highlight .sd {color: #e6db74; } /* :string_doc */\n.highlight .se {color: #ae81ff; } /* :string_escape */\n.highlight .sh {color: #e6db74; } /* :string_heredoc */\n.highlight .si {color: #e6db74; } /* :string_interpol */\n.highlight .sr {color: #e6db74; } /* :string_regex */\n.highlight .ss {color: #e6db74; } /* :string_symbol */\n.highlight .sx {color: #e6db74; } /* :string_other, :string_sigil */\n.highlight .vc {color: #f8f8f2; } /* :name_variable_class */\n.highlight .vg {color: #f8f8f2; } /* :name_variable_global */\n.highlight .vi {color: #f8f8f2; } /* :name_variable_instance */\n.highlight .vm {color: #f8f8f2; } /* :name_variable_magic */\n",
+      "permissions": [],
+      "extra": {
+        "ui_kit": "mishka_document"
+      },
+      "site_id": null
+    }
+  ]
 }

@@ -20,7 +20,7 @@ defmodule MishkaDocument.KitTest do
   """
   use MishkaDocument.DataCase, async: false
 
-  alias MishkaCmsCore.Runtime.Component
+  alias MishkaCmsCore.Runtime.{Component, Stylesheet}
 
   require Ash.Query
 
@@ -605,6 +605,29 @@ defmodule MishkaDocument.KitTest do
       after_second = row("doc-section", site)
       assert after_second.id == before.id
       assert length(after_second.helpers) == length(before.helpers)
+    end
+
+    # THE COLOURS OF A HIGHLIGHTED PAGE travel with the components. Every class Makeup's own Monokai
+    # style colours is coloured here, read off Makeup rather than listed in this test.
+    test "writes the stylesheet a highlighted code block is coloured by", %{site: site} do
+      reader = create_user_with_permissions!(["admin:dashboard:runtime:stylesheet"])
+
+      sheet =
+        Stylesheet
+        |> Ash.Query.for_read(:read, %{}, actor: reader, tenant: site.id)
+        |> Ash.Query.filter(name == "doc-code-highlight" and site_id == ^site.id)
+        |> Ash.read_one!()
+
+      assert sheet, "the stylesheet was not installed"
+      assert sheet.kind == :base
+      assert sheet.content =~ "background-color: #272822"
+
+      monokai = Makeup.stylesheet(:monokai_style, "highlight")
+
+      for [class] <- Regex.scan(~r/^\.highlight \.([\w-]+) \{/m, monokai, capture: :all_but_first),
+          class != "hll" do
+        assert sheet.content =~ ".highlight .#{class} {", "nothing colours .#{class}"
+      end
     end
 
     # LAZY BY DEFAULT, like any other component. `precompile: true` is for a component a site cannot

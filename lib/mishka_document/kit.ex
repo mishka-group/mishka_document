@@ -47,9 +47,18 @@ defmodule MishkaDocument.Kit do
   `doc-switcher` offers the document's other versions and its other languages, each leading back to
   the same page.
 
-  A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.basic_html/1` and drawn with
-  `rich_content/1`, so a component the author placed in them with the content editor is drawn there
-  as that component (`MishkaCmsCore.Runtime.ContentComponents`).
+  A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
+  text is stored through, and drawn with `rich_content/1`, so a component the author placed in them
+  with the content editor is drawn there as that component (`MishkaCmsCore.Runtime.ContentComponents`),
+  and a code block keeps the classes it was highlighted with.
+
+  ### The stylesheet
+
+  `doc-code-highlight` colours the code blocks in a page's body. A page is stored with its code
+  already highlighted — `MishkaDocument.Resources.Changes.HighlightCode` does it when the page is
+  written — as `<pre class="highlight"><code class="language-x">` with a `<span>` per token, and the
+  sheet colours the token classes Makeup emits, in its Monokai style. Installed with the components,
+  per site, as a `:base` stylesheet, so a site's own `:custom` rows still win over it.
 
   Every one of them resolves a document the same way — slug to workspace, `?v=` to a version, version
   to its approved pages — and always through the public reads, never by a raw id. That is what keeps
