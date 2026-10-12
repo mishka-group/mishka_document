@@ -687,7 +687,8 @@ defmodule MishkaDocument.KitTest do
     end
 
     # A `<details>` DRAWN AS A MENU CLOSES WHEN THE READER LEAVES IT, on a click outside it and on
-    # Escape, through LiveView's own JS commands rather than a hook of its own.
+    # Escape, by pressing its own summary while it is open, and a patch leaves its `open` as the
+    # reader left it: LiveView's own JS commands, no hook of its own.
     test "closes every menu it draws on a click outside it and on Escape" do
       menus =
         for component <- components(),
@@ -697,13 +698,19 @@ defmodule MishkaDocument.KitTest do
 
       assert menus != [], "no <details> was found, so this asserts nothing"
 
+      closes = ~s|{JS.dispatch("click", to: {:inner, ":scope[open] summary"})}|
+
       for {name, tag} <- menus do
-        assert tag =~ ~s|phx-click-away={JS.remove_attribute("open")}|,
+        assert tag =~ ~s|phx-click-away=#{closes}|,
                "#{name} draws a menu a click outside it leaves open"
 
-        assert tag =~ ~s|phx-window-keydown={JS.remove_attribute("open")}| and
-                 tag =~ ~s|phx-key="Escape"|,
+        assert tag =~ ~s|phx-window-keydown=#{closes}| and tag =~ ~s|phx-key="Escape"|,
                "#{name} draws a menu Escape leaves open"
+
+        assert tag =~ ~s|phx-mounted={JS.ignore_attributes(["open"])}|,
+               "#{name} draws a menu a patch closes"
+
+        refute tag =~ "JS.remove_attribute(", "#{name} closes a menu with a sticky command"
       end
     end
 
