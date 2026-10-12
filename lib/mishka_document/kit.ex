@@ -108,7 +108,7 @@ defmodule MishkaDocument.Kit do
   ### What plugins add to a page
 
   Each time `doc-section` reads a page of a document it fires the `document:page:extras`
-  mishka_installer event through `MishkaCmsCore.PluginEvent.call/3`, with:
+  mishka_installer event through `MishkaInstaller.Event.Hook.call/3`, with:
 
       %{
         site_id: "…",

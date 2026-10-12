@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.16.1",
+  "version": "2.16.2",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -1004,7 +1004,7 @@
         {
           "name": "ask_extras",
           "args": "asked",
-          "code": "# THE PLUGINS' ANSWER, in the shapes the template draws, and the PubSub topics it names for what is\n# still being fetched. An event that cannot run hands back the empty lists it was handed, and an\n# answer of any other shape adds nothing.\nanswer = MishkaCmsCore.PluginEvent.call(\"document:page:extras\", asked)\n\ncase answer do\n  %{header: header, tabs: tabs} when is_list(header) and is_list(tabs) ->\n    shown = tabs |> Enum.flat_map(&tab_given(&1)) |> Enum.uniq_by(& &1.id)\n\n    %{\n      header: Enum.flat_map(header, &fact_given(&1)),\n      tabs: shown,\n      pending:\n        Enum.uniq(topic_of(Map.get(answer, :pending)) ++ Enum.flat_map(shown, &List.wrap(&1.pending)))\n    }\n\n  _not_an_answer ->\n    %{header: [], tabs: [], pending: []}\nend\n"
+          "code": "# THE PLUGINS' ANSWER, in the shapes the template draws, and the PubSub topics it names for what is\n# still being fetched. An event that cannot run hands back the empty lists it was handed, and an\n# answer of any other shape adds nothing.\nanswer = MishkaInstaller.Event.Hook.call(\"document:page:extras\", asked)\n\ncase answer do\n  %{header: header, tabs: tabs} when is_list(header) and is_list(tabs) ->\n    shown = tabs |> Enum.flat_map(&tab_given(&1)) |> Enum.uniq_by(& &1.id)\n\n    %{\n      header: Enum.flat_map(header, &fact_given(&1)),\n      tabs: shown,\n      pending:\n        Enum.uniq(topic_of(Map.get(answer, :pending)) ++ Enum.flat_map(shown, &List.wrap(&1.pending)))\n    }\n\n  _not_an_answer ->\n    %{header: [], tabs: [], pending: []}\nend\n"
         },
         {
           "name": "extras_links",

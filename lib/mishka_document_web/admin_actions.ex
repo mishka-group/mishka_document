@@ -7,7 +7,7 @@ defmodule MishkaDocumentWeb.AdminActions do
 
   ## The event
 
-  The screen fires it through `actions/2`, which calls `MishkaCmsCore.PluginEvent.call/3`, once it
+  The screen fires it through `actions/2`, which calls `MishkaInstaller.Event.Hook.call/3`, once it
   has loaded its document and again when another version is chosen — only for a reader who may
   manage that workspace (`admin:dashboard:document:workspace`); anyone else is shown no button and
   no plugin is asked. Each plugin is handed:
@@ -61,7 +61,7 @@ defmodule MishkaDocumentWeb.AdminActions do
   there. Closing the modal removes it.
   """
 
-  alias MishkaCmsCore.PluginEvent
+  alias MishkaInstaller.Event.Hook
 
   @event "document:workspace:admin_actions"
   @id ~r/\A[a-z0-9][a-z0-9_-]*\z/
@@ -122,7 +122,7 @@ defmodule MishkaDocumentWeb.AdminActions do
   @spec actions(context(), map() | nil) :: [action()]
   def actions(context, actor) do
     @event
-    |> PluginEvent.call(Map.merge(context, %{actor: actor, actions: []}))
+    |> Hook.call(Map.merge(context, %{actor: actor, actions: []}))
     |> case do
       %{actions: actions} when is_list(actions) ->
         actions |> Enum.flat_map(&action/1) |> Enum.uniq_by(& &1.id)

@@ -572,15 +572,14 @@ defmodule MishkaDocument.KitTest do
       assert copy_hook["code"] =~ ~s(name: "doc-code-copy")
     end
 
-    # WHAT A PLUGIN ADDS TO A PAGE is asked through the core's `PluginEvent.call/3`, which hands the
-    # state back when the event cannot run, and a command it adds is copied by the same hook as a
-    # code window.
+    # WHAT A PLUGIN ADDS TO A PAGE is asked through `Hook.call/3`, which hands the state back when
+    # the event cannot run, and a command it adds is copied by the same hook as a code window.
     test "asks plugins for a page's extras through the event that falls back to the page" do
       section = Enum.find(components(), &(&1["name"] == "doc-section"))
       asks = Enum.find(section["helpers"], &(&1["name"] == "ask_extras"))
 
-      assert asks["code"] =~ ~s|MishkaCmsCore.PluginEvent.call("document:page:extras", asked)|
-      refute Enum.any?(section["helpers"], &(&1["code"] =~ "Hook.call"))
+      assert asks["code"] =~
+               ~s|MishkaInstaller.Event.Hook.call("document:page:extras", asked)|
 
       # What is still being fetched is waited for on the topic the plugin names, never polled.
       waits = Enum.find(section["helpers"], &(&1["name"] == "wait_for_extras"))
