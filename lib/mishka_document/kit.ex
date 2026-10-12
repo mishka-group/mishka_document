@@ -42,6 +42,14 @@ defmodule MishkaDocument.Kit do
   dir, a `data-value` and `aria-pressed` — switches them. Every element says what it is in its
   `data-role` for a site's stylesheet to restyle.
 
+  An example taller than `collapse_height` pixels (320; 240, 400, 480 or 640, and 0 cuts none) is
+  cut at that height under a fade until the `doc-example-expand` button in the `doc-example-foot`
+  under it shows all of it, saying `expand_text` and then `collapse_text`. The root carries the
+  height as `data-collapse-height`; the hook measures the frame and writes `data-collapsible` onto
+  the root — again whenever a choice changes the example's height — and the button writes
+  `data-expanded`. The frame keeps its whole height inside the cut, and the toolbar works while it
+  is cut.
+
   A component that keeps state is drawn by LiveView on the page and is never HTML a frame could
   hold: an example holding one draws `stateful_text` in place of its frame on a live page. A
   preview, which draws every component cold into a string, draws it in the frame.
@@ -90,6 +98,12 @@ defmodule MishkaDocument.Kit do
   `doc-code`, `doc-code-head`, `doc-code-lang`, `doc-code-copy`, `doc-code-status` — for a site's
   stylesheet to restyle, and what the button says is the block's `copy_text`, `copied_text` and
   `copy_label`. The window is drawn, never stored: a page's text keeps only its code.
+
+  A block of more lines than `code_lines` (16; 8, 12, 20, 24 or 32, and 0 cuts none) is cut at that
+  many under a fade: its window carries `data-collapsible` and `data-collapse-lines`, its `<pre>` an
+  id, and a `doc-code-foot` under the code holds the `doc-code-expand` button that shows all of it,
+  saying `expand_text` — `%{count}` is its number of lines — and then `collapse_text`. The copy
+  button copies the whole code either way.
 
   ### What plugins add to a page
 
@@ -170,9 +184,9 @@ defmodule MishkaDocument.Kit do
 
   ### The hooks
 
-  `doc-code-copy` answers the button on each code window, and the one beside each command a plugin
-  adds to the page. `doc-section` mounts it on its own root, outside the page's text, under the
-  name the site's JavaScript registers it by
+  `doc-code-copy` answers the buttons on each code window — the copy and the one that shows all of a
+  cut block — and the one beside each command a plugin adds to the page. `doc-section` mounts it on
+  its own root, outside the page's text, under the name the site's JavaScript registers it by
   (`MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`), and one listener there
   answers every button inside, whatever render drew it. A press copies the window's code with the
   Clipboard API, or a textarea and `execCommand("copy")` where that API is missing, marks the button
@@ -196,8 +210,10 @@ defmodule MishkaDocument.Kit do
   already highlighted — `MishkaDocument.Resources.Changes.HighlightCode` does it when the page is
   written — as `<pre class="highlight"><code class="language-x">` with a `<span>` per token, and the
   sheet colours the token classes Makeup emits, in its Monokai style, and draws the window around
-  each block, the button's copied state included. Installed with the components, per site, as a
-  `:base` stylesheet, so a site's own `:custom` rows still win over it.
+  each block, the button's copied state included. It cuts a long block and a tall example at each
+  height their attributes offer, and draws the fade, the blur and the button over the cut, keyed on
+  `data-collapsible` and `data-expanded`. Installed with the components, per site, as a `:base`
+  stylesheet, so a site's own `:custom` rows still win over it.
 
   Every one of them resolves a document the same way — slug to workspace, `?v=` to a version, version
   to its approved pages — and always through the public reads, never by a raw id. That is what keeps

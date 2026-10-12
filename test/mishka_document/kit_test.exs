@@ -596,6 +596,44 @@ defmodule MishkaDocument.KitTest do
       assert hook["content"] =~ ~s([data-role="doc-extra-command"])
     end
 
+    # A LONG CODE BLOCK AND A TALL EXAMPLE ARE CUT AT A HEIGHT THE STYLESHEET DRAWS, never one a style
+    # attribute sets: every height an author may choose has its rule. The hooks mark what is shown
+    # whole through their JS commands, which a LiveView patch keeps.
+    test "cuts a long code block and a tall example only at heights its stylesheet draws" do
+      [sheet] = bundle()["stylesheets"]
+
+      for {component, attr, rule} <- [
+            {"doc-section", "code_lines", ~s([data-role="doc-code"][data-collapse-lines="~s"])},
+            {"doc-example", "collapse_height",
+             ~s([data-role="doc-example"][data-collapse-height="~s"])}
+          ] do
+        %{"opts" => %{"values" => values, "default" => default}} =
+          components()
+          |> Enum.find(&(&1["name"] == component))
+          |> Map.fetch!("attrs")
+          |> Enum.find(&(&1["name"] == attr))
+
+        assert default in values
+
+        for value <- values, value != 0 do
+          assert sheet["content"] =~ String.replace(rule, "~s", Integer.to_string(value)),
+                 "#{component}'s #{attr} offers #{value} and the stylesheet draws no cut for it"
+        end
+      end
+
+      copy = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-code-copy"))
+      assert copy["content"] =~ ~s|js.setAttribute(frame, "data-expanded", "true")|
+      assert copy["content"] =~ ~s|js.setAttribute(expand, "aria-expanded"|
+
+      example = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-example"))
+      assert example["content"] =~ ~s|this.js().setAttribute(this.el, "data-collapsible", "true")|
+      assert example["content"] =~ ~s|js.setAttribute(this.el, "data-expanded", "true")|
+
+      for hook <- [copy, example] do
+        refute hook["content"] =~ ~r/setAttribute\(\s*[^,]+,\s*["']style["']|innerHTML/
+      end
+    end
+
     # AN EXAMPLE'S TOOLBAR IS ANSWERED IN THE BROWSER, by the hook `doc-example` mounts on its own
     # root under the name `example_hook/0` asks the same rule for. It moves the choice onto the root
     # and the buttons through the hook's JS commands, which a LiveView patch keeps, dresses the

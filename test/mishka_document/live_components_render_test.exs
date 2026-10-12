@@ -885,6 +885,46 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert body |> LazyHTML.query("p:not([data-role])") |> LazyHTML.text() == "Before."
     end
 
+    # A TALL EXAMPLE IS CUT, but the browser is what knows how tall it is: the root says the height,
+    # and the hook marks it collapsible once it has measured the frame. The foot's button shows all
+    # of it.
+    test "carries the height a tall example is cut at, and the button that shows all of it",
+         %{site: site} do
+      body =
+        example_page!(
+          site,
+          ~s([[component doc-example collapse_height="480" expand_text="All of it"]]) <>
+            "[[component doc-callout]]Tall.[[/component]][[/component]]" <>
+            ~s([[component doc-example collapse_height="7"]]) <>
+            "[[component doc-callout]]Odd.[[/component]][[/component]]"
+        )
+
+      examples = LazyHTML.query(body, ~s([data-role="doc-example"]))
+      assert LazyHTML.attribute(examples, "data-collapse-height") == ["480", "320"]
+      assert LazyHTML.attribute(examples, "data-collapsible") == []
+
+      [first | _second] = Enum.to_list(examples)
+      [id] = LazyHTML.attribute(first, "id")
+
+      stage = LazyHTML.query(first, ~s([data-role="doc-example-stage"]))
+      assert LazyHTML.attribute(stage, "id") == ["#{id}-stage"]
+
+      button = LazyHTML.query(first, ~s([data-role="doc-example-foot"] > button[type="button"]))
+      assert LazyHTML.attribute(button, "data-role") == ["doc-example-expand"]
+      assert LazyHTML.attribute(button, "aria-expanded") == ["false"]
+      assert LazyHTML.attribute(button, "aria-controls") == ["#{id}-stage"]
+
+      assert first
+             |> LazyHTML.query(~s([data-role="doc-example-expand-text"]))
+             |> LazyHTML.text()
+             |> String.trim() == "All of it"
+
+      assert first
+             |> LazyHTML.query(~s([data-role="doc-example-collapse-text"]))
+             |> LazyHTML.text()
+             |> String.trim() == "Show less"
+    end
+
     test "draws its toolbar with the choices it was set with pressed", %{site: site} do
       body =
         example_page!(
@@ -2359,6 +2399,88 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert body |> LazyHTML.query(~s([data-role^="doc-code"])) |> Enum.count() == 0
       assert text_of(view, ~s([data-role="doc-section-body"] > p)) == ["Body of Installation."]
+    end
+
+    # A LONG BLOCK IS CUT AT `code_lines`, with a button under it that shows all of it and says how
+    # many lines that is; a short one is drawn as it always was.
+    test "cuts a code block of more lines than code_lines, with the button that shows all of it",
+         %{site: site} do
+      %{version: version} = manual!(site)
+      long = Enum.map_join(1..20, "\n", &"line #{&1}")
+
+      page!(site, version,
+        title: "Code",
+        slug: "code",
+        order_position: 9,
+        content:
+          ~s|<pre><code class="language-elixir">#{long}\n</code></pre>| <>
+            ~S|<pre><code>mix deps.get</code></pre>|
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", params: %{"section" => "code"}})
+
+      windows = drawn(view, ~s([data-role="doc-section-body"] [data-role="doc-code"]))
+      assert LazyHTML.attribute(windows, "data-collapsible") == ["true"]
+      assert LazyHTML.attribute(windows, "data-collapse-lines") == ["16"]
+
+      [long_window, short_window] = Enum.to_list(windows)
+
+      assert long_window |> LazyHTML.query("pre") |> LazyHTML.attribute("id") == [
+               "one-body-code-0"
+             ]
+
+      button = LazyHTML.query(long_window, ~s(pre + [data-role="doc-code-foot"] > button))
+      assert LazyHTML.attribute(button, "type") == ["button"]
+      assert LazyHTML.attribute(button, "data-role") == ["doc-code-expand"]
+      assert LazyHTML.attribute(button, "aria-expanded") == ["false"]
+      assert LazyHTML.attribute(button, "aria-controls") == ["one-body-code-0"]
+
+      assert text_of(view, ~s([data-role="doc-code-expand-text"])) == ["Show all 20 lines"]
+      assert text_of(view, ~s([data-role="doc-code-collapse-text"])) == ["Show less"]
+      assert text_of(view, ~s([data-role="doc-code"] > pre > code)) == [long, "mix deps.get"]
+
+      assert short_window |> LazyHTML.query("pre") |> LazyHTML.attribute("id") == []
+      assert short_window |> LazyHTML.query(~s([data-role="doc-code-foot"])) |> Enum.count() == 0
+    end
+
+    test "and cuts none at code_lines 0, its button saying what an author tells it to",
+         %{site: site} do
+      %{version: version} = manual!(site)
+      long = Enum.map_join(1..20, "\n", &"line #{&1}")
+
+      page!(site, version,
+        title: "Code",
+        slug: "code",
+        order_position: 9,
+        content: ~s|<pre><code>#{long}</code></pre>|
+      )
+
+      {:ok, whole, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "code"},
+          code_lines: 0
+        })
+
+      assert text_of(whole, ~s([data-role="doc-code-foot"])) == []
+      assert whole |> drawn("[data-collapsible]") |> Enum.count() == 0
+
+      {:ok, cut, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "code"},
+          code_lines: 8,
+          expand_text: ~S|Alle %{count} <b>Zeilen</b>|,
+          collapse_text: "Weniger"
+        })
+
+      assert cut |> drawn("[data-collapse-lines]") |> LazyHTML.attribute("data-collapse-lines") ==
+               ["8"]
+
+      assert text_of(cut, ~s([data-role="doc-code-expand-text"])) == [~S|Alle 20 <b>Zeilen</b>|]
+      assert text_of(cut, ~s([data-role="doc-code-collapse-text"])) == ["Weniger"]
+      assert cut |> drawn(~s([data-role="doc-code-foot"] b)) |> Enum.count() == 0
     end
 
     # A NOTE IS STORED AS BASIC HTML, which keeps no class, so its code block names no language; its
