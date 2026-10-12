@@ -765,7 +765,7 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
                |> Ash.read!(tenant: ctx.site.id, authorize?: false)
 
       assert content =~ "<p>#{marker}</p>"
-      assert content =~ "<p>Intro</p>"
+      assert content =~ ~s(<p dir="auto">Intro</p>)
       refute content =~ "script"
       refute content =~ "onclick"
     end
