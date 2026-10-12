@@ -62,13 +62,32 @@ defmodule MishkaDocument.Kit do
   with the content editor is drawn there as that component (`MishkaCmsCore.Runtime.ContentComponents`),
   and a code block keeps the classes it was highlighted with.
 
+  After the scrub, `doc-section` draws each code block in a window: a head holding the block's
+  language, read off its `language-x` class, and a `<button type="button">` that copies its code,
+  over the block as it was stored. Every element of it says what it is in its `data-role` —
+  `doc-code`, `doc-code-head`, `doc-code-lang`, `doc-code-copy`, `doc-code-status` — for a site's
+  stylesheet to restyle, and what the button says is the block's `copy_text`, `copied_text` and
+  `copy_label`. The window is drawn, never stored: a page's text keeps only its code.
+
+  ### The hook
+
+  `doc-code-copy` answers those buttons. `doc-section` mounts it on its own root, outside the page's
+  text, under the name the site's JavaScript registers it by
+  (`MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`), and one listener there
+  answers every button inside, whatever render drew it. A press copies the window's code with the
+  Clipboard API, or a textarea and `execCommand("copy")` where that API is missing, marks the button
+  `data-copied="true"` for 1.2 seconds and puts `copied_text` in the window's `doc-code-status`
+  live region. It writes no class and no style attribute, so a site's CSP has nothing to refuse.
+  Installed with the components, per site.
+
   ### The stylesheet
 
   `doc-code-highlight` colours the code blocks in a page's body. A page is stored with its code
   already highlighted — `MishkaDocument.Resources.Changes.HighlightCode` does it when the page is
   written — as `<pre class="highlight"><code class="language-x">` with a `<span>` per token, and the
-  sheet colours the token classes Makeup emits, in its Monokai style. Installed with the components,
-  per site, as a `:base` stylesheet, so a site's own `:custom` rows still win over it.
+  sheet colours the token classes Makeup emits, in its Monokai style, and draws the window around
+  each block, the button's copied state included. Installed with the components, per site, as a
+  `:base` stylesheet, so a site's own `:custom` rows still win over it.
 
   Every one of them resolves a document the same way — slug to workspace, `?v=` to a version, version
   to its approved pages — and always through the public reads, never by a raw id. That is what keeps

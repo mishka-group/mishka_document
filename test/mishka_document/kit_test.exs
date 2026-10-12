@@ -20,7 +20,7 @@ defmodule MishkaDocument.KitTest do
   """
   use MishkaDocument.DataCase, async: false
 
-  alias MishkaCmsCore.Runtime.{Component, Stylesheet}
+  alias MishkaCmsCore.Runtime.{Component, JsHook, Stylesheet}
 
   require Ash.Query
 
@@ -538,6 +538,34 @@ defmodule MishkaDocument.KitTest do
              "the bundle's directory is not in the package, so a hex install has nothing to read"
     end
 
+    # THE COPY BUTTON ON A CODE WINDOW IS ANSWERED IN THE BROWSER, by the one hook this bundle
+    # ships, which `doc-section` mounts on its root under the name `copy_hook/0` asks the rule the
+    # site's JavaScript is built with for. It writes no style attribute and no markup, which a site's
+    # CSP and a LiveView patch would each undo.
+    test "ships the hook doc-section mounts for the copy button on its code windows" do
+      assert [hook] = bundle()["js_hooks"]
+      assert hook["name"] == "doc-code-copy"
+      assert hook["format"] == "js"
+      assert hook["active"] == true
+      assert hook["content"] =~ "export default DocCodeCopy;"
+      assert hook["content"] =~ ~s([data-role="doc-code-copy"])
+      assert hook["content"] =~ "navigator.clipboard"
+      assert hook["content"] =~ ~s|document.execCommand("copy")|
+      assert hook["content"] =~ ~s|setAttribute("data-copied", "true")|
+      assert hook["content"] =~ ~s|removeAttribute("data-copied")|
+      refute hook["content"] =~ ~r/setAttribute\(\s*["']style["']|innerHTML|insertAdjacentHTML/
+
+      section = Enum.find(components(), &(&1["name"] == "doc-section"))
+      copy_hook = Enum.find(section["helpers"], &(&1["name"] == "copy_hook"))
+
+      assert section["template"] =~ ~r/\A<div\n  id=\{@id\}\n[^>]*phx-hook=\{copy_hook\(\)\}/
+
+      assert copy_hook["code"] =~
+               "MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name("
+
+      assert copy_hook["code"] =~ ~s(name: "doc-code-copy")
+    end
+
     test "puts the id LiveView requires onto every live component's root element" do
       for component <- components(), component["stateful"] do
         assert component["template"] =~ "id={@id}",
@@ -628,6 +656,25 @@ defmodule MishkaDocument.KitTest do
           class != "hll" do
         assert sheet.content =~ ".highlight .#{class} {", "nothing colours .#{class}"
       end
+
+      for drawn <- ~w(doc-code doc-code-head doc-code-lang doc-code-copy doc-code-status) do
+        assert sheet.content =~ ~s([data-role="#{drawn}"] {), "nothing draws #{drawn}"
+      end
+
+      assert sheet.content =~ ~s([data-role="doc-code-copy"][data-copied] {)
+    end
+
+    test "writes the hook the copy buttons are answered by, for the site", %{site: site} do
+      hook =
+        JsHook
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(name == "doc-code-copy" and site_id == ^site.id)
+        |> Ash.read_one!()
+
+      assert hook, "the hook was not installed"
+      assert hook.active
+      assert hook.format == :js
+      assert String.trim(hook.content) == String.trim(hd(bundle()["js_hooks"])["content"])
     end
 
     # LAZY BY DEFAULT, like any other component. `precompile: true` is for a component a site cannot

@@ -32,11 +32,12 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
   @workspace "admin:dashboard:document:workspace"
   @section "admin:dashboard:document:section"
   # What setting the documentation up writes: its pages, its components, the stylesheet its code
-  # blocks are coloured by, and the site's settings.
+  # blocks are coloured by, the hook their copy buttons are answered by, and the site's settings.
   @provision [
     "admin:dashboard:runtime:page",
     "admin:dashboard:runtime:component",
     "admin:dashboard:runtime:stylesheet",
+    "admin:dashboard:runtime:js_hook",
     "admin:dashboard:runtime:site"
   ]
 

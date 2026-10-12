@@ -254,6 +254,13 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
   end
 
+  defp drawn(view, selector) do
+    view
+    |> render_async(@async)
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(selector)
+  end
+
   defp hrefs(view, selector) do
     view
     |> render_async(@async)
@@ -1927,6 +1934,162 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(toc, ~s([data-role="doc-toc-link"])) ==
                Enum.map(1..6, &"Step #{&1}")
+    end
+
+    # A CODE BLOCK IS READ IN A WINDOW THE BLOCK DRAWS, not one the page stores: a head with the
+    # language the block was stored with and a button that copies it, over the block as it was. The
+    # stored text keeps only its code.
+    test "draws each code block in a window with its language and a copy button", %{site: site} do
+      %{version: version} = manual!(site)
+
+      content =
+        ~S|<h2>Install</h2><p>Add it.</p>| <>
+          ~S|<pre><code class="language-elixir">def deps, do: []</code></pre>| <>
+          ~S|<p>Then run it.</p><pre><code>mix deps.get</code></pre>|
+
+      page =
+        page!(site, version, title: "Code", slug: "code", order_position: 9, content: content)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", params: %{"section" => "code"}})
+
+      body = drawn(view, ~s([data-role="doc-section-body"]))
+      windows = LazyHTML.query(body, ~s([data-role="doc-code"]))
+
+      assert Enum.count(windows) == 2
+      assert LazyHTML.attribute(windows, "data-language") == ["elixir", ""]
+      assert text_of(view, ~s([data-role="doc-code-lang"])) == ["elixir", ""]
+
+      assert text_of(view, ~s([data-role="doc-code"] > pre > code)) ==
+               ["def deps, do: []", "mix deps.get"]
+
+      assert body |> LazyHTML.query("pre.highlight > code.language-elixir > span") |> Enum.count() >
+               0
+
+      buttons =
+        LazyHTML.query(
+          body,
+          ~s([data-role="doc-code"] > [data-role="doc-code-head"] > button[type="button"][data-role="doc-code-copy"])
+        )
+
+      assert Enum.count(buttons) == 2
+      assert LazyHTML.attribute(buttons, "aria-label") == ["Copy code", "Copy code"]
+      assert LazyHTML.attribute(buttons, "data-copied-text") == ["Copied", "Copied"]
+      assert text_of(view, ~s([data-role="doc-code-copy-text"])) == ["Copy", "Copy"]
+      assert text_of(view, ~s([data-role="doc-code-copied-text"])) == ["✓Copied", "✓Copied"]
+
+      statuses =
+        LazyHTML.query(body, ~s([data-role="doc-code-head"] > [data-role="doc-code-status"]))
+
+      assert LazyHTML.attribute(statuses, "aria-live") == ["polite", "polite"]
+      assert text_of(view, ~s([data-role="doc-code-status"])) == ["", ""]
+
+      stored = Ash.get!(MishkaDocument.Section, page.id, authorize?: false, tenant: site.id)
+
+      refute stored.content =~ "doc-code"
+      assert stored.content =~ ~S|<p>Then run it.</p><pre><code>mix deps.get</code></pre>|
+    end
+
+    test "and its button says what an author tells it to, as text", %{site: site} do
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Code",
+        slug: "code",
+        order_position: 9,
+        content: ~S|<pre><code class="language-heex">&lt;.button /&gt;</code></pre>|
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "code"},
+          copy_text: "Kopieren",
+          copied_text: ~S|Kopiert <b>"ok"</b>|,
+          copy_label: "Code kopieren"
+        })
+
+      button = drawn(view, ~s([data-role="doc-code-copy"]))
+
+      assert LazyHTML.attribute(button, "aria-label") == ["Code kopieren"]
+      assert LazyHTML.attribute(button, "data-copied-text") == [~S|Kopiert <b>"ok"</b>|]
+      assert text_of(view, ~s([data-role="doc-code-copy-text"])) == ["Kopieren"]
+      assert text_of(view, ~s([data-role="doc-code-copied-text"])) == [~S|✓Kopiert <b>"ok"</b>|]
+      assert button |> LazyHTML.query("b") |> Enum.count() == 0
+      assert text_of(view, ~s([data-role="doc-code-lang"])) == ["heex"]
+      assert text_of(view, ~s([data-role="doc-code"] code)) == ["<.button />"]
+    end
+
+    test "and leaves a page with no code block as it was", %{site: site} do
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      body = drawn(view, ~s([data-role="doc-section-body"]))
+
+      assert body |> LazyHTML.query(~s([data-role^="doc-code"])) |> Enum.count() == 0
+      assert text_of(view, ~s([data-role="doc-section-body"] > p)) == ["Body of Installation."]
+    end
+
+    # A NOTE IS STORED AS BASIC HTML, which keeps no class, so its code block names no language; its
+    # window still carries the button.
+    test "and draws a note's code blocks in windows as well", %{site: site} do
+      %{pages: [_first, installation | _rest]} = manual!(site)
+
+      note!(site, installation,
+        title: "On Windows",
+        content: ~S|<p>Use PowerShell.</p><pre><code class="language-bash">mix setup</code></pre>|
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code-lang"])) == [""]
+
+      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code"] > pre > code)) ==
+               ["mix setup"]
+
+      assert view
+             |> drawn(~s([data-role="doc-note-body"] [data-role="doc-code-copy"]))
+             |> Enum.count() == 1
+    end
+
+    # THE BUTTONS ARE ANSWERED BY THE KIT'S OWN HOOK, mounted on the block's root and not inside its
+    # text, under the name the site's JavaScript registers the installed row by.
+    test "mounts the kit's copy hook on its root", %{site: site} do
+      hook =
+        MishkaCmsCore.Runtime.JsHook
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(name == "doc-code-copy" and site_id == ^site.id)
+        |> Ash.Query.load([:is_global])
+        |> Ash.read_one!()
+
+      assert hook, "installing the kit wrote no doc-code-copy hook for the site"
+      assert hook.active
+
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      root = drawn(view, ~s(#one[data-role="doc-section"]))
+
+      registered =
+        MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name(hook, site.name)
+
+      assert registered == String.capitalize(site.name) <> "DocCodeCopy"
+      assert LazyHTML.attribute(root, "phx-hook") == [registered]
+      assert view |> drawn(~s([data-role="doc-section-body"] [phx-hook])) |> Enum.count() == 0
     end
 
     # A SLUG THAT NAMES NOTHING IS A DIFFERENT SENTENCE from no slug at all — one is "pick a
