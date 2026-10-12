@@ -1,12 +1,15 @@
 defmodule MishkaDocument.Test.ContentFactsTest do
   @moduledoc """
-  The components a page's or a note's text names, stored when it is written —
+  The components and the icons a page's or a note's text names, stored when it is written —
   `MishkaDocument.Resources.Changes.ContentFacts` — which
   `MishkaDocument.Plugins.ContentComponents` hands a site's stylesheet. Reading either works out
   nothing.
   """
   use MishkaDocument.DataCase, async: false
+  use Oban.Testing, repo: MishkaDocument.Repo
 
+  alias MishkaCmsCore.Runtime.States.SiteState
+  alias MishkaCmsCore.Runtime.Workers.RuntimeCompilerWorker
   alias MishkaDocument.{Note, Section}
   alias MishkaDocument.Plugins.ContentComponents
   alias MishkaDocument.Resources.Changes.ContentFacts
@@ -42,6 +45,23 @@ defmodule MishkaDocument.Test.ContentFactsTest do
   end
 
   defp stored(%resource{id: id}), do: Ash.get!(resource, id, action: :read_any, authorize?: false)
+
+  # THIS BUILD HAS NO `deps/heroicons`, so the stock Heroicons set ships nothing here. With no set
+  # configured, the `hero-` glyphs the installed Chelekom kit bundles register themselves
+  # (`MishkaCmsCore.Runtime.PageBuilder.Icons.Bundled`) — what a host without heroicons draws from.
+  defp bundled_icons(_context) do
+    original = Application.get_env(:mishka_cms_core, :icon_libraries)
+    Application.put_env(:mishka_cms_core, :icon_libraries, [])
+
+    on_exit(fn ->
+      case original do
+        nil -> Application.delete_env(:mishka_cms_core, :icon_libraries)
+        libraries -> Application.put_env(:mishka_cms_core, :icon_libraries, libraries)
+      end
+    end)
+
+    :ok
+  end
 
   describe "content_components" do
     test "are the names a page's markers name, each once", ctx do
@@ -114,6 +134,43 @@ defmodule MishkaDocument.Test.ContentFactsTest do
     end
   end
 
+  describe "content_icons" do
+    setup :bundled_icons
+
+    test "are the icons a page's markers and HTML name, each once", ctx do
+      page =
+        page!(
+          ctx,
+          ~s([[component breadcrumb]][[slot item icon="hero-cloud"]]Cloud[[/slot]]) <>
+            ~s([[slot item icon="hero-circle-stack"]][[/slot]][[/component]]) <>
+            ~s(<p><span class="hero-inbox size-4"></span> A hero-section, and hero-cloud again</p>)
+        )
+
+      assert stored(page).content_icons == ["hero-cloud", "hero-circle-stack", "hero-inbox"]
+    end
+
+    test "are nothing for text that names none, and follow the text it is written with", ctx do
+      page = page!(ctx, ~s(<span class="hero-inbox"></span>))
+
+      assert stored(write!(page, %{title: "Renamed"}, ctx)).content_icons == ["hero-inbox"]
+      assert stored(write!(page, %{content: "<p>plain</p>"}, ctx)).content_icons == nil
+      assert stored(page!(ctx, nil)).content_icons == nil
+    end
+
+    test "are a note's too", ctx do
+      page = page!(ctx, "<p>Body</p>")
+
+      note =
+        create_note!(
+          site_id: ctx.site.id,
+          section_id: page.id,
+          content: ~s(<p>[[component tip-box icon="hero-envelope" /]]</p>)
+        )
+
+      assert stored(note).content_icons == ["hero-envelope"]
+    end
+  end
+
   # A SITE'S STYLESHEET IS BUILT FROM WHAT IT REACHES, and a page's components are in no template.
   describe "the names a site's stylesheet hears" do
     test "are those its approved pages and notes name, each once", ctx do
@@ -148,7 +205,8 @@ defmodule MishkaDocument.Test.ContentFactsTest do
                ContentComponents.call(%{
                  site: ctx.site.name,
                  site_id: ctx.site.id,
-                 components: ["kept"]
+                 components: ["kept"],
+                 icons: []
                })
 
       assert Enum.sort(names) == ["badge", "callout", "kept", "tip-box"]
@@ -175,7 +233,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
       assert %{components: names} =
                MishkaInstaller.Event.Hook.call(
                  "runtime:compile:content_components",
-                 %{site: ctx.site.name, site_id: ctx.site.id, components: []},
+                 %{site: ctx.site.name, site_id: ctx.site.id, components: [], icons: []},
                  meta: %{site: ctx.site.name}
                )
 
@@ -185,6 +243,107 @@ defmodule MishkaDocument.Test.ContentFactsTest do
     test "come from a plugin this extension's supervisor starts" do
       assert ContentComponents in MishkaDocument.Application.plugins()
     end
+  end
+
+  # AN ICON A PAGE NAMES IS IN NO TEMPLATE EITHER: a marker's `icon="hero-cloud"` reaches its
+  # component as an expression, and a `<span class="hero-inbox">` in the text is never scanned.
+  describe "the icons a site's stylesheet hears" do
+    setup :bundled_icons
+
+    test "are those its approved pages and notes name, each once", ctx do
+      page =
+        page!(
+          ctx,
+          ~s([[slot item icon="hero-cloud" /]]<span class="hero-inbox"></span>),
+          approved()
+        )
+
+      page!(ctx, ~s(<span class="hero-cloud"></span>), approved())
+      page!(ctx, ~s(<span class="hero-star"></span>))
+
+      create_note!(
+        [
+          site_id: ctx.site.id,
+          section_id: page.id,
+          content: ~s(<p>[[component tip-box icon="hero-envelope" /]]</p>)
+        ] ++
+          approved()
+      )
+
+      create_note!(
+        site_id: ctx.site.id,
+        section_id: page.id,
+        content: ~s(<p>[[component tip-box icon="hero-moon" /]]</p>)
+      )
+
+      assert {:reply, %{icons: icons}} =
+               ContentComponents.call(%{
+                 site: ctx.site.name,
+                 site_id: ctx.site.id,
+                 components: [],
+                 icons: ["hero-bell"]
+               })
+
+      assert Enum.sort(icons) == ["hero-bell", "hero-cloud", "hero-envelope", "hero-inbox"]
+    end
+  end
+
+  # A WRITE THAT MAKES AN ICON LIVE asks for the site's stylesheet again, as one that makes a
+  # component name live does. `TailwindCompiler.schedule/1` enqueues nothing under the `:env_test?`
+  # flag, so it is switched off once the pages a test starts from exist.
+  describe "a write that changes the icons an approved page names" do
+    setup [:bundled_icons, :open_site]
+
+    test "rebuilds the site's stylesheet when it names one no approved page did", ctx do
+      write!(ctx.page, %{content: ~s(<span class="hero-cloud hero-inbox"></span>)}, ctx)
+
+      assert [_job] = css_jobs(ctx.site)
+    end
+
+    test "rebuilds nothing when its icons stay as they were", ctx do
+      write!(ctx.page, %{content: ~s(<p>New text</p><i class="hero-cloud"></i>)}, ctx)
+
+      assert stored(ctx.page).content_icons == ["hero-cloud"]
+      assert css_jobs(ctx.site) == []
+    end
+
+    test "rebuilds nothing for an icon another approved page already names", ctx do
+      write!(ctx.page, %{content: ~s(<span class="hero-cloud hero-star"></span>)}, ctx)
+
+      assert css_jobs(ctx.site) == []
+    end
+  end
+
+  # A NAME AND HOST OF ITS OWN, active, so its create caches it in `SiteState` — a stylesheet job is
+  # enqueued only for such a site.
+  defp open_site(_context) do
+    name = "iconsite#{System.unique_integer([:positive])}"
+    site = create_site!(name: name, host: "#{name}.test", active: true)
+    on_exit(fn -> SiteState.delete(site.id) end)
+
+    workspace = create_workspace!(site_id: site.id)
+    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+    ctx = %{site: site, version: version}
+
+    page = page!(ctx, ~s(<span class="hero-cloud"></span>), approved())
+    page!(ctx, ~s(<span class="hero-star"></span>), approved())
+
+    Application.put_env(:mishka_cms_core, :env_test?, false)
+    on_exit(fn -> Application.put_env(:mishka_cms_core, :env_test?, true) end)
+
+    {:ok,
+     site: site,
+     version: version,
+     page: page,
+     editor: create_user_with_permissions!([@area], site_id: site.id)}
+  end
+
+  defp css_jobs(site) do
+    all_enqueued(worker: RuntimeCompilerWorker)
+    |> Enum.filter(fn job ->
+      get_in(job.args, ["data", "type"]) == "css" and
+        get_in(job.args, ["data", "site_id"]) == site.id
+    end)
   end
 
   # WHEN A WRITE ASKS FOR THE STYLESHEET AGAIN: a name an approved page or note makes live.
@@ -214,6 +373,28 @@ defmodule MishkaDocument.Test.ContentFactsTest do
       assert ContentFacts.newly_live(approved, pending) == []
       assert ContentFacts.newly_live(%Section{}, pending) == []
       assert ContentFacts.newly_live(%Note{}, approved) == ["a"]
+    end
+
+    test "is the same question of the icons a page names" do
+      was = %{
+        content_review_status: :approved,
+        technical_review_status: :approved,
+        content_components: ["a"],
+        content_icons: ["hero-cloud"]
+      }
+
+      now = %{was | content_icons: ["hero-cloud", "hero-inbox"]}
+
+      assert ContentFacts.newly_live(was, now, :content_icons) == ["hero-inbox"]
+      assert ContentFacts.newly_live(was, now) == []
+      assert ContentFacts.newly_live(now, was, :content_icons) == []
+
+      assert ContentFacts.newly_live(
+               %{now | technical_review_status: :pending},
+               now,
+               :content_icons
+             ) ==
+               ["hero-cloud", "hero-inbox"]
     end
   end
 end
