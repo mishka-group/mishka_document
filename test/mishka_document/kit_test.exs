@@ -648,6 +648,27 @@ defmodule MishkaDocument.KitTest do
       assert link["code"] =~ "MishkaCmsCore.Runtime.Compilers.Shared.site_css_href("
     end
 
+    # A `<details>` DRAWN AS A MENU CLOSES WHEN THE READER LEAVES IT, on a click outside it and on
+    # Escape, through LiveView's own JS commands rather than a hook of its own.
+    test "closes every menu it draws on a click outside it and on Escape" do
+      menus =
+        for component <- components(),
+            code <- [component["template"] | Enum.map(component["helpers"], & &1["code"])],
+            tag <- Regex.scan(~r/<details\b[^>]*>/s, code) |> List.flatten(),
+            do: {component["name"], tag}
+
+      assert menus != [], "no <details> was found, so this asserts nothing"
+
+      for {name, tag} <- menus do
+        assert tag =~ ~s|phx-click-away={JS.remove_attribute("open")}|,
+               "#{name} draws a menu a click outside it leaves open"
+
+        assert tag =~ ~s|phx-window-keydown={JS.remove_attribute("open")}| and
+                 tag =~ ~s|phx-key="Escape"|,
+               "#{name} draws a menu Escape leaves open"
+      end
+    end
+
     test "puts the id LiveView requires onto every live component's root element" do
       for component <- components(), component["stateful"] do
         assert component["template"] =~ "id={@id}",

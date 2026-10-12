@@ -3743,6 +3743,19 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
                ["1.0.0", "0.9.0"]
     end
 
+    # A MENU CLOSES WHEN THE READER LEAVES IT: a click outside it or Escape takes its `open` off, in
+    # the browser, through LiveView's own JS commands.
+    test "closes its version menu on a click outside it and on Escape", %{site: site} do
+      {:ok, view, _html} = mount_page(site, "doc-switcher", %{workspace: "mishka-cms"})
+
+      menu = drawn(view, ~s(details[data-role="doc-switcher-versions"]))
+      closes = Jason.encode!(Phoenix.LiveView.JS.remove_attribute("open").ops)
+
+      assert LazyHTML.attribute(menu, "phx-click-away") == [closes]
+      assert LazyHTML.attribute(menu, "phx-window-keydown") == [closes]
+      assert LazyHTML.attribute(menu, "phx-key") == ["Escape"]
+    end
+
     test "marks the one being read and the latest one", %{site: site} do
       {:ok, view, _html} =
         mount_page(site, "doc-switcher", %{workspace: "mishka-cms", params: %{"v" => "0.9.0"}})
