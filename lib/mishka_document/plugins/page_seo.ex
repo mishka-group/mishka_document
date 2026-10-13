@@ -93,7 +93,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
         ]
       }
 
-  `page` is `nil` on a document's front page, and `version` when it has no published version.
+  `page` is `nil` on a document's front page, and `version` when it has no published version. A
+  `description` is the description meta the document or the page stores, else the one the head
+  is given here.
   `parents` are the pages and groups the page is filed under, nearest last. `contents` are up to
   seven entries of the page's level of the contents, in their order, the page among them marked
   `current`; on a front page, the document's top level, its version's front page marked. A plugin
@@ -423,7 +425,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
         slug: workspace.slug,
         path: workspace.path,
         language: workspace.language,
-        description: workspace.description,
+        description: stored_description(workspace.seo_tags) || workspace.description,
         url: workspace_url
       },
       version: record.version,
@@ -437,7 +439,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
     %{
       slug: page.slug,
       title: record.title,
-      description: record.description,
+      description: stored_description(record.seo_tags) || record.description,
       path: Enum.join(record.segments, "/"),
       parents:
         record
@@ -447,6 +449,17 @@ defmodule MishkaDocument.Plugins.PageSeo do
   end
 
   defp described_page(_front_page), do: nil
+
+  # The description meta a document or a page stores, which its head shows over the one built here.
+  defp stored_description(tags) do
+    Enum.find_value(Seo.stored_tags(tags), fn
+      %{tag: "meta", attrs: %{"name" => "description"}, content: text} when is_binary(text) ->
+        if String.trim(text) != "", do: String.trim(text)
+
+      _other ->
+        nil
+    end)
+  end
 
   # The pages and groups the page is drawn under, nearest last: each one's parent while it is among
   # the version's pages, as the contents draw them. A chain deeper than twenty, which only a loop

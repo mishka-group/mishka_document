@@ -1029,6 +1029,22 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
                Seo.accept(answered, at_product(site, "docs:page", %{}))
     end
 
+    test "hands on the description a page stores, which its head shows", %{site: site} do
+      [version] =
+        MishkaDocument.WorkspaceVersion
+        |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
+        |> Ash.read!(tenant: site.id)
+
+      page!(site, version, "juliet",
+        title: "Juliet",
+        content: "<p>Its text.</p>",
+        seo_tags: [%{tag: "meta", attrs: %{"name" => "description"}, content: "Its own words."}]
+      )
+
+      answer(at_product(site, "docs:page", %{"section" => "juliet"}))
+      assert %{page: %{description: "Its own words."}} = asked()
+    end
+
     test "is not asked for a page it names nothing at", %{site: site} do
       answer(at_product(site, "docs:page", %{"section" => "nowhere"}))
       refute_received {:page_seo_asked, _seo, _meta}
