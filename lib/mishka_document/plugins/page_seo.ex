@@ -93,6 +93,10 @@ defmodule MishkaDocument.Plugins.PageSeo do
         ]
       }
 
+  The answer keeps `redraw` as core handed it (`MishkaCmsCore.Runtime.Seo.given/2`): `true` when a
+  forced look at the share card asks for the head (`MishkaCmsCore.Runtime.ShareCard.specs/3`). A
+  plugin that draws a card of its own draws it again over its old file then.
+
   `page` is `nil` on a document's front page, and `version` when it has no published version. A
   `description` is the description meta the document or the page stores, else the one the head
   is given here.
@@ -106,9 +110,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
       def call(seo, %{page: %{title: title}}), do: {:reply, %{seo | title: title <> " · Docs"}}
       def call(seo, _meta), do: {:reply, seo}
 
-  A capture that names nothing a reader may open changes nothing else, and the page answers 404 as
-  it does without this. A note is drawn inside its page and has no address of its own, so its own
-  SEO is not read here.
+  A capture that names nothing a reader may open changes nothing else but `card`, `false`: the page
+  answers 404 as it does without this, and has no share card to draw. A note is drawn inside its
+  page and has no address of its own, so its own SEO is not read here.
 
   A module because a mishka_installer hook is one. Registered in `MishkaDocument.Application`.
   """
@@ -199,7 +203,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
         })
 
       nil ->
-        seo
+        named_nothing(seo)
     end
   end
 
@@ -226,9 +230,14 @@ defmodule MishkaDocument.Plugins.PageSeo do
         permissions: section.effective_permissions
       })
     else
-      _nothing_shown -> seo
+      _nothing_shown -> named_nothing(seo)
     end
   end
+
+  # An address that names no document or page a reader may open answers 404, and has no share card:
+  # a look at the cards of every page of this kind (`MishkaCmsCore.Runtime.ShareCard.specs/3`) draws
+  # none for it.
+  defp named_nothing(seo), do: Map.put(seo, :card, false)
 
   # The document whose own address the page is at, else the one with no address of its own the
   # `workspace` capture names, in the page's language, on the page's site; `nil` when the request
@@ -300,14 +309,10 @@ defmodule MishkaDocument.Plugins.PageSeo do
     )
   end
 
-  # The version a reader is shown — the one `asked` names, else the one marked latest, else the
-  # newest published — and its pages, or `nil` when there is none.
+  # The version a reader is shown (`MishkaDocument.Address.version_shown/2`) and its pages, or `nil`
+  # when there is none.
   defp shown(versions, asked) do
-    newest = Enum.sort_by(versions, &{moment(&1.published_at), moment(&1.inserted_at)}, :desc)
-
-    version =
-      Enum.find(newest, &(&1.version_number == asked)) ||
-        Enum.find(newest, & &1.is_latest_for_version) || List.first(newest)
+    version = Address.version_shown(versions, asked)
 
     case version do
       %WorkspaceVersion{sections: pages} when is_list(pages) -> {version, pages}
@@ -328,9 +333,6 @@ defmodule MishkaDocument.Plugins.PageSeo do
       _none -> nil
     end
   end
-
-  defp moment(%DateTime{} = at), do: DateTime.to_unix(at, :microsecond)
-  defp moment(_never), do: 0
 
   # What a share card (`MishkaCmsCore.Runtime.ShareCard`) shows of it: "Documentation" above a
   # document's front page, the document's name above one of its pages — and the group it is filed

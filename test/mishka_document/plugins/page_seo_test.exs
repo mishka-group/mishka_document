@@ -436,7 +436,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
         given =
           given(site, :section, %{"lang" => "en", "workspace" => workspace, "section" => section})
 
-        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+        assert answer(given) == %{given | var_docs: answer(given).var_docs, card: false}
       end
     end
   end
@@ -494,7 +494,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
             section: %{"lang" => "en", "workspace" => "product", "section" => "install/steps"}
           ] do
         given = given(site, kind, params)
-        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+        assert answer(given) == %{given | var_docs: answer(given).var_docs, card: false}
       end
     end
 
@@ -791,7 +791,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
 
       for slug <- ["drafted", "persian", "missing"] do
         given = given(site, :workspace, %{"lang" => "en", "workspace" => slug})
-        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+        assert answer(given) == %{given | var_docs: answer(given).var_docs, card: false}
       end
     end
   end
@@ -803,7 +803,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       for kind <- [:workspace, :section] do
         given = given(site, kind, %{})
         assert {answered, []} = reads_while(fn -> answer(given) end)
-        assert answered == %{given | var_docs: answered.var_docs}
+        assert answered == %{given | var_docs: answered.var_docs, card: false}
         assert "workspace.name" in keys(answered.var_docs)
       end
     end

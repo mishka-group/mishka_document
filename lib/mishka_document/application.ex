@@ -48,10 +48,12 @@ defmodule MishkaDocument.Application do
   ]
 
   # Each document's and page's share card looked at again after it is saved, on its own
-  # `document:<resource>:after_save` event (`MishkaCmsCore.Runtime.ShareCard`).
+  # `document:<resource>:after_save` event, and every one of a site named for a redraw of them all
+  # (a `runtime:share_card:targets` plugin) — `MishkaCmsCore.Runtime.ShareCard`.
   @share_card_plugins [
     MishkaDocument.Plugins.WorkspaceShareCard,
-    MishkaDocument.Plugins.SectionShareCard
+    MishkaDocument.Plugins.SectionShareCard,
+    MishkaDocument.Plugins.ShareCardTargets
   ]
 
   # Names the components the site's documentation draws in its text, the icons it names and the
