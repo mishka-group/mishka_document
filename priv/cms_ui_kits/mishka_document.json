@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.19.0",
+  "version": "2.20.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -13,7 +13,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-workspace-list\"\n  lang={page_lang(@language)}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-list-heading\"\n    class=\"mb-5 text-lg font-bold leading-tight\"\n  >\n    {@heading}\n  </h2>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-list-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-list-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @total == 0}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-list-empty\"\n    text={@empty_text}\n  />\n\n  <div\n    :if={not @loading and not @failed}\n    id={\"#{@id}-items\"}\n    phx-update={(@myself && \"stream\") || nil}\n    data-role=\"doc-list-items\"\n    class=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3\"\n  >\n    <div\n      :for={{dom_id, row} <- @streams.documents}\n      id={dom_id}\n      data-role=\"doc-list-item\"\n      lang={row.doc.language}\n      dir={text_direction(row.doc.language)}\n      class=\"h-full\"\n    >\n      <.component\n        :if={trimmed(@card) == \"\"}\n        component_name=\"doc-workspace-card\"\n        site={site_name()}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n        editions={\n          (@show_languages && edition_links(@editions, row.doc, @doc_base, @lang_param)) || []\n        }\n        show_description={@show_description}\n        read_text={@read_text}\n        unavailable_text={@unavailable_text}\n        featured_text={@featured_text}\n      />\n\n      <.component\n        :if={trimmed(@card) != \"\"}\n        component_name={@card}\n        site={site_name()}\n        id={\"#{dom_id}-card\"}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n      />\n    </div>\n  </div>\n\n  <.component\n    :if={@show_pager and not @loading and not @failed}\n    component_name=\"doc-pager\"\n    site={site_name()}\n    role=\"doc-list-pager\"\n    page={@page}\n    pages={@pages}\n    base={@base}\n    params={@params}\n    page_param={@page_param}\n    target={@myself}\n    first_text={@first_text}\n    previous_text={@previous_text}\n    next_text={@next_text}\n    last_text={@last_text}\n  />\n</div>",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-workspace-list\"\n  lang={page_lang(@language)}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-list-heading\"\n    class=\"mb-5 text-lg font-bold leading-tight\"\n  >\n    {@heading}\n  </h2>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-list-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-list-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @total == 0}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-list-empty\"\n    text={@empty_text}\n  />\n\n  <div\n    :if={not @loading and not @failed}\n    id={\"#{@id}-items\"}\n    phx-update={(@myself && \"stream\") || nil}\n    data-role=\"doc-list-items\"\n    class=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3\"\n  >\n    <div\n      :for={{dom_id, row} <- @streams.documents}\n      id={dom_id}\n      data-role=\"doc-list-item\"\n      lang={row.doc.language}\n      dir={text_direction(row.doc.language)}\n      class=\"h-full\"\n    >\n      <.component\n        :if={trimmed(@card) == \"\"}\n        component_name=\"doc-workspace-card\"\n        site={site_name()}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n        editions={\n          (@show_languages && edition_links(@editions, row.doc, @doc_base, @lang_param)) || []\n        }\n        show_description={@show_description}\n        read_text={@read_text}\n        unavailable_text={@unavailable_text}\n        featured_text={@featured_text}\n        details={row.details}\n        version_text={@version_text}\n        pages_text={@pages_text}\n        one_page_text={@one_page_text}\n        updated_text={@updated_text}\n      />\n\n      <.component\n        :if={trimmed(@card) != \"\"}\n        component_name={@card}\n        site={site_name()}\n        id={\"#{dom_id}-card\"}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n        details={row.details}\n      />\n    </div>\n  </div>\n\n  <.component\n    :if={@show_pager and not @loading and not @failed}\n    component_name=\"doc-pager\"\n    site={site_name()}\n    role=\"doc-list-pager\"\n    page={@page}\n    pages={@pages}\n    base={@base}\n    params={@params}\n    page_param={@page_param}\n    target={@myself}\n    first_text={@first_text}\n    previous_text={@previous_text}\n    next_text={@next_text}\n    last_text={@last_text}\n  />\n</div>",
       "attrs": [
         {
           "name": "heading",
@@ -87,6 +87,14 @@
           }
         },
         {
+          "name": "show_details",
+          "type": "boolean",
+          "opts": {
+            "default": false,
+            "doc": "Draw each document's version, how many pages it has, the languages it is published in and when it last changed. A card named in card is then handed them too, as details."
+          }
+        },
+        {
           "name": "show_pager",
           "type": "boolean",
           "opts": {
@@ -156,6 +164,38 @@
           "opts": {
             "default": "Featured",
             "doc": "The badge a featured document carries."
+          }
+        },
+        {
+          "name": "version_text",
+          "type": "string",
+          "opts": {
+            "default": "v%{version}",
+            "doc": "The version line on each card when details are drawn; %{version} is the version a reader lands on."
+          }
+        },
+        {
+          "name": "pages_text",
+          "type": "string",
+          "opts": {
+            "default": "%{count} pages",
+            "doc": "How many pages a document has, when details are drawn; %{count} is the number."
+          }
+        },
+        {
+          "name": "one_page_text",
+          "type": "string",
+          "opts": {
+            "default": "%{count} page",
+            "doc": "The same for a document of one page."
+          }
+        },
+        {
+          "name": "updated_text",
+          "type": "string",
+          "opts": {
+            "default": "Updated %{date}",
+            "doc": "When a document last changed, when details are drawn; %{date} is the date in the page's language."
           }
         },
         {
@@ -371,17 +411,17 @@
         {
           "name": "asked",
           "args": "assigns",
-          "code": "# EVERYTHING THE READ DEPENDS ON, AS ONE TERM — AND EVERYTHING A ROW IS DRAWN FROM, which is the\n# same term for a reason. It is the argument the task is handed — a plain map rather than the\n# socket, so nothing of LiveView's is copied into another process — and it is also what says\n# whether anything has to be read at all: `update_many/1` runs on every render of the page holding\n# this block, and a block that re-read on each of them would restart its own load whenever\n# something else on the page moved.\n#\n# A STREAMED ROW IS RENDERED ONCE AND NEVER AGAIN. LiveView prunes `stream.inserts` after each\n# render, so `@streams.documents` is empty on every render that is not a fresh load and the rows\n# already on the page are never rebuilt. An attribute the ROWS read — the card they are drawn with,\n# the words inside them, the base their links are built from — therefore cannot reach them by\n# re-rendering, so it goes in here instead: a change to one re-reads and re-streams. Words OUTSIDE\n# the rows (`heading`, `empty_text`, the pager's labels) are free, because those are drawn afresh\n# every render.\n%{\n  visitor: assigns[:current_user],\n  language: asked_language(assigns),\n  sort: trimmed(assigns[:sort]),\n  featured_only: assigns[:featured_only] == true,\n  show_languages: assigns[:show_languages] == true,\n  per_page: positive(assigns[:per_page], 6),\n  page: asked_page(assigns),\n  card: trimmed(assigns[:card]),\n  doc_base: trimmed(assigns[:doc_base]),\n  lang_param: trimmed(assigns[:lang_param]),\n  show_description: assigns[:show_description] == true,\n  read_text: trimmed(assigns[:read_text]),\n  featured_text: trimmed(assigns[:featured_text])\n}\n"
+          "code": "# EVERYTHING THE READ DEPENDS ON, AS ONE TERM — AND EVERYTHING A ROW IS DRAWN FROM, which is the\n# same term for a reason. It is the argument the task is handed — a plain map rather than the\n# socket, so nothing of LiveView's is copied into another process — and it is also what says\n# whether anything has to be read at all: `update_many/1` runs on every render of the page holding\n# this block, and a block that re-read on each of them would restart its own load whenever\n# something else on the page moved.\n#\n# A STREAMED ROW IS RENDERED ONCE AND NEVER AGAIN. LiveView prunes `stream.inserts` after each\n# render, so `@streams.documents` is empty on every render that is not a fresh load and the rows\n# already on the page are never rebuilt. An attribute the ROWS read — the card they are drawn with,\n# the words inside them, the base their links are built from — therefore cannot reach them by\n# re-rendering, so it goes in here instead: a change to one re-reads and re-streams. Words OUTSIDE\n# the rows (`heading`, `empty_text`, the pager's labels) are free, because those are drawn afresh\n# every render.\n%{\n  visitor: assigns[:current_user],\n  language: asked_language(assigns),\n  sort: trimmed(assigns[:sort]),\n  featured_only: assigns[:featured_only] == true,\n  show_languages: assigns[:show_languages] == true,\n  per_page: positive(assigns[:per_page], 6),\n  page: asked_page(assigns),\n  card: trimmed(assigns[:card]),\n  doc_base: trimmed(assigns[:doc_base]),\n  lang_param: trimmed(assigns[:lang_param]),\n  show_description: assigns[:show_description] == true,\n  read_text: trimmed(assigns[:read_text]),\n  featured_text: trimmed(assigns[:featured_text]),\n  show_details: assigns[:show_details] == true,\n  version_text: trimmed(assigns[:version_text]),\n  pages_text: trimmed(assigns[:pages_text]),\n  one_page_text: trimmed(assigns[:one_page_text]),\n  updated_text: trimmed(assigns[:updated_text])\n}\n"
         },
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# RUN IN THE TASK, so nothing here may touch the socket. A page nobody has is clamped to the last\n# one there is, and the answer carries the term it was read for — `arrived/2` stores that rather\n# than what was asked, so a clamp settles instead of asking again on the next render.\nwith {:ok, %{rows: documents, total: total}} <-\n       documents_page(asked, asked.page, asked.per_page) do\n  pages = max(ceil(total / asked.per_page), 1)\n\n  {page, documents} =\n    case asked.page > pages do\n      false ->\n        {asked.page, documents}\n\n      true ->\n        case documents_page(asked, pages, asked.per_page) do\n          {:ok, %{rows: clamped}} -> {pages, clamped}\n          {:error, _unreadable} -> {pages, []}\n        end\n    end\n\n  {:ok,\n   %{\n     asked: %{asked | page: page},\n     page: page,\n     documents: documents,\n     editions: (asked.show_languages && editions_of(documents, asked.visitor)) || %{},\n     language: asked.language,\n     total: total,\n     pages: pages\n   }}\nend\n"
+          "code": "# RUN IN THE TASK, so nothing here may touch the socket. A page nobody has is clamped to the last\n# one there is, and the answer carries the term it was read for — `arrived/2` stores that rather\n# than what was asked, so a clamp settles instead of asking again on the next render.\nwith {:ok, %{rows: documents, total: total}} <-\n       documents_page(asked, asked.page, asked.per_page) do\n  pages = max(ceil(total / asked.per_page), 1)\n\n  {page, documents} =\n    case asked.page > pages do\n      false ->\n        {asked.page, documents}\n\n      true ->\n        case documents_page(asked, pages, asked.per_page) do\n          {:ok, %{rows: clamped}} -> {pages, clamped}\n          {:error, _unreadable} -> {pages, []}\n        end\n    end\n\n  editions =\n    ((asked.show_languages or asked.show_details) && editions_of(documents, asked.visitor)) ||\n      %{}\n\n  {:ok,\n   %{\n     asked: %{asked | page: page},\n     page: page,\n     documents: documents,\n     editions: editions,\n     details: (asked.show_details && details_of(documents, editions, asked.visitor)) || %{},\n     language: asked.language,\n     total: total,\n     pages: pages\n   }}\nend\n"
         },
         {
           "name": "arrived",
           "args": "socket, {:ok, data}",
-          "code": "socket\n|> Phoenix.Component.assign(\n  asked: data.asked,\n  loading: false,\n  failed: false,\n  page: data.page,\n  editions: data.editions,\n  language: data.language,\n  total: data.total,\n  pages: data.pages\n)\n|> Phoenix.LiveView.stream(:documents, rowed(socket, data.documents), reset: true)\n"
+          "code": "socket\n|> Phoenix.Component.assign(\n  asked: data.asked,\n  loading: false,\n  failed: false,\n  page: data.page,\n  editions: data.editions,\n  language: data.language,\n  total: data.total,\n  pages: data.pages\n)\n|> Phoenix.LiveView.stream(:documents, rowed(socket, data.documents, data.details), reset: true)\n"
         },
         {
           "name": "arrived",
@@ -390,8 +430,8 @@
         },
         {
           "name": "rowed",
-          "args": "socket, rows",
-          "code": "prefix =\n  case trimmed(socket.assigns[:id]) do\n    \"\" -> \"doc\"\n    id -> id <> \"-doc\"\n  end\n\nEnum.map(rows, &%{id: prefix <> \"-\" <> to_string(&1.id), doc: &1})\n"
+          "args": "socket, rows, details",
+          "code": "prefix =\n  case trimmed(socket.assigns[:id]) do\n    \"\" -> \"doc\"\n    id -> id <> \"-doc\"\n  end\n\nEnum.map(rows, &%{id: prefix <> \"-\" <> to_string(&1.id), doc: &1, details: Map.get(details, &1.id)})\n"
         },
         {
           "name": "cold?",
@@ -407,6 +447,46 @@
           "name": "edition_links",
           "args": "editions, document, doc_base, lang_param",
           "code": "# THE CHIPS A CARD DRAWS, prepared here because only this block knows where a document lives.\n#\n# A CHIP ROW SAYS WHAT EXISTS, so an edition this site has no URL for stays in it as a word —\n# `doc_href/5` makes none for a language the site does not publish. That is the truth about it: the\n# translation was written, this site does not serve it.\nEnum.map(editions_for(editions, document), fn edition ->\n  %{\n    language: edition.language,\n    selected: edition.id == document.id,\n    href: document_href(doc_base, edition, [], lang_param, %{})\n  }\nend)\n"
+        },
+        {
+          "name": "details_of",
+          "args": "documents, editions, visitor",
+          "code": "# WHAT EACH CARD SAYS ABOUT ITS DOCUMENT, keyed by the document's id: the version a reader lands\n# on, the pages of it the visitor may read, the languages it is published in and when it last\n# changed — the latest of the document, its version and those pages. Two reads for the whole\n# page of documents, whatever its size.\nversions = current_versions(documents, visitor)\ncounted = pages_of(Map.values(versions), visitor)\n\nMap.new(documents, fn document ->\n  version = Map.get(versions, document.id)\n  pages = (version && Map.get(counted, version.id)) || %{count: 0, updated_at: nil}\n\n  {document.id,\n   %{\n     version: version && version.version_number,\n     pages: pages.count,\n     languages: languages_of(editions, document),\n     updated_at:\n       newest([document.updated_at, version && version.published_at, pages.updated_at])\n   }}\nend)\n"
+        },
+        {
+          "name": "current_versions",
+          "args": "documents, visitor",
+          "code": "# THE VERSION EACH DOCUMENT IS READ AT WITHOUT A ?v=: the one an editor marked latest, else the\n# newest published — the version its own pages open on.\nrequire Ash.Query\n\ncase Enum.map(documents, & &1.id) do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.WorkspaceVersion\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_id in ^wanted)\n    |> Ash.Query.select([\n      :id,\n      :workspace_id,\n      :version_number,\n      :is_latest_for_version,\n      :published_at,\n      :inserted_at\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.group_by(& &1.workspace_id)\n    |> Map.new(fn {workspace_id, found} -> {workspace_id, latest_of(newest_first(found))} end)\nend\n"
+        },
+        {
+          "name": "pages_of",
+          "args": "versions, visitor",
+          "code": "# HOW MANY PAGES EACH VERSION HOLDS FOR THIS VISITOR, and when the latest of them changed. A group\n# with no page of its own is only a heading, so it is not counted.\nrequire Ash.Query\n\ncase Enum.map(versions, & &1.id) do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([:workspace_version_id, :group_heading, :group_page, :updated_at])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.reject(&(&1.group_heading == true and &1.group_page != true))\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Map.new(fn {version_id, pages} ->\n      {version_id, %{count: length(pages), updated_at: newest(Enum.map(pages, & &1.updated_at))}}\n    end)\nend\n"
+        },
+        {
+          "name": "languages_of",
+          "args": "editions, document",
+          "code": "# EVERY LANGUAGE THE DOCUMENT IS PUBLISHED IN, its own among them.\ncase Map.get(editions, document.language_group_id) do\n  nil -> [document.language]\n  found -> Enum.map(found, & &1.language)\nend\n"
+        },
+        {
+          "name": "newest_first",
+          "args": "versions",
+          "code": "Enum.sort_by(versions, &{moment(&1.published_at), moment(&1.inserted_at), &1.id}, :desc)\n"
+        },
+        {
+          "name": "latest_of",
+          "args": "versions",
+          "code": "# VERSION NUMBERS ARE TEXT, so \"0.0.10\" sorts under \"0.0.9\" and the newest is whichever one an\n# editor marked latest — falling back to the most recently published when nobody has.\nEnum.find(versions, & &1.is_latest_for_version) || List.first(versions)\n"
+        },
+        {
+          "name": "newest",
+          "args": "moments",
+          "code": "# THE LATEST OF SOME TIMES, nil when none of them is one.\ncase Enum.filter(moments, &match?(%DateTime{}, &1)) do\n  [] -> nil\n  found -> Enum.max_by(found, &moment/1)\nend\n"
+        },
+        {
+          "name": "moment",
+          "args": "value",
+          "code": "# A TIME AS A NUMBER, because these are sorted in memory and two `%DateTime{}` structs compare by\n# Erlang term order rather than by when they happened. A version nobody published sorts oldest.\ncase value do\n  %DateTime{} = at -> DateTime.to_unix(at, :microsecond)\n  _never -> 0\nend\n"
         }
       ],
       "permissions": [],
@@ -2408,7 +2488,7 @@
     },
     {
       "name": "doc-workspace-card",
-      "description": "A function component: one document, as a card — its name, its summary, the languages it is published in and the way into it. What doc-workspace-list draws each document with unless the author names a card of their own.",
+      "description": "A function component: one document, as a card — its name, its summary, its version, pages and last change when handed them, the languages it is published in and the way into it. What doc-workspace-list draws each document with unless the author names a card of their own.",
       "type": "media",
       "format": "heex",
       "stateful": false,
@@ -2416,7 +2496,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<article\n  :if={@doc}\n  {@rest}\n  data-role=\"doc-card\"\n  class=\"flex h-full flex-col gap-2 rounded-[18px] border border-[#ecebe6] bg-white p-4\"\n>\n  <div class=\"flex items-start justify-between gap-2\">\n    <.link\n      :if={@href}\n      navigate={@href}\n      data-role=\"doc-list-title\"\n      class=\"text-base font-semibold leading-tight hover:underline\"\n    >\n      {@doc.name}\n    </.link>\n\n    <span :if={is_nil(@href)} data-role=\"doc-list-title\" class=\"text-base font-semibold leading-tight\">\n      {@doc.name}\n    </span>\n\n    <span\n      :if={@doc.featured}\n      data-role=\"doc-list-featured\"\n      class=\"flex-none rounded-full bg-[#fbf1dc] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#8a5514]\"\n    >\n      {@featured_text}\n    </span>\n  </div>\n\n  <p\n    :if={@show_description and @doc.description}\n    data-role=\"doc-list-description\"\n    class=\"text-sm leading-relaxed text-[#6d6a63]\"\n  >\n    {@doc.description}\n  </p>\n\n  <div :if={@editions != []} data-role=\"doc-list-languages\" class=\"flex flex-wrap gap-1\">\n    <%!-- One pass, so the chips stay in the order the editions came in: a language this site cannot\n    serve is the same chip drawn as a word. `contents` keeps the wrapper out of the flex row. --%>\n    <div :for={edition <- @editions} class=\"contents\">\n      <.link\n        :if={edition.href}\n        navigate={edition.href}\n        data-role=\"doc-list-language\"\n        data-language={edition.language}\n        data-selected={to_string(edition.selected)}\n        class={[\n          \"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]\",\n          (edition.selected && \"bg-[#f2f1fc] text-[#5b57d6]\") || \"text-[#8a877f]\"\n        ]}\n      >\n        {edition.language}\n      </.link>\n\n      <span\n        :if={is_nil(edition.href)}\n        data-role=\"doc-list-language\"\n        data-language={edition.language}\n        title={@unavailable_text}\n        class=\"rounded-full border border-dashed border-[#ecebe6] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#b4b2ab]\"\n      >\n        {edition.language}\n      </span>\n    </div>\n  </div>\n\n  <.link\n    :if={@href}\n    navigate={@href}\n    data-role=\"doc-list-read\"\n    class=\"mt-auto inline-flex items-center gap-1 self-start rounded-full border border-[#ecebe6] px-3 py-1 text-xs font-semibold text-[#5b57d6] hover:bg-[#f2f1fc]\"\n  >\n    {@read_text} <span aria-hidden=\"true\">&rarr;</span>\n  </.link>\n</article>",
+      "template": "<article\n  :if={@doc}\n  {@rest}\n  data-role=\"doc-card\"\n  class=\"flex h-full flex-col gap-2 rounded-[18px] border border-[#ecebe6] bg-white p-4\"\n>\n  <div class=\"flex items-start justify-between gap-2\">\n    <.link\n      :if={@href}\n      navigate={@href}\n      data-role=\"doc-list-title\"\n      class=\"text-base font-semibold leading-tight hover:underline\"\n    >\n      {@doc.name}\n    </.link>\n\n    <span :if={is_nil(@href)} data-role=\"doc-list-title\" class=\"text-base font-semibold leading-tight\">\n      {@doc.name}\n    </span>\n\n    <span\n      :if={@doc.featured}\n      data-role=\"doc-list-featured\"\n      class=\"flex-none rounded-full bg-[#fbf1dc] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#8a5514]\"\n    >\n      {@featured_text}\n    </span>\n  </div>\n\n  <p\n    :if={@show_description and @doc.description}\n    data-role=\"doc-list-description\"\n    class=\"text-sm leading-relaxed text-[#6d6a63]\"\n  >\n    {@doc.description}\n  </p>\n\n  <ul\n    :if={@details}\n    data-role=\"doc-list-meta\"\n    class=\"flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8a877f]\"\n  >\n    <li :if={@details.version} data-role=\"doc-list-version\" class=\"font-semibold text-[#5b57d6]\">\n      {filled(@version_text, \"%{version}\", @details.version)}\n    </li>\n    <li data-role=\"doc-list-pages\">\n      {pages_label(@details.pages, @pages_text, @one_page_text)}\n    </li>\n    <li :if={@editions == []} data-role=\"doc-list-language-codes\" class=\"uppercase\">\n      {Enum.join(@details.languages, \" · \")}\n    </li>\n    <li :if={@details.updated_at} data-role=\"doc-list-updated\">\n      <time datetime={DateTime.to_iso8601(@details.updated_at)}>\n        {filled(@updated_text, \"%{date}\", MishkaCmsCore.Localized.date(@details.updated_at))}\n      </time>\n    </li>\n  </ul>\n\n  <div :if={@editions != []} data-role=\"doc-list-languages\" class=\"flex flex-wrap gap-1\">\n    <%!-- One pass, so the chips stay in the order the editions came in: a language this site cannot\n    serve is the same chip drawn as a word. `contents` keeps the wrapper out of the flex row. --%>\n    <div :for={edition <- @editions} class=\"contents\">\n      <.link\n        :if={edition.href}\n        navigate={edition.href}\n        data-role=\"doc-list-language\"\n        data-language={edition.language}\n        data-selected={to_string(edition.selected)}\n        class={[\n          \"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]\",\n          (edition.selected && \"bg-[#f2f1fc] text-[#5b57d6]\") || \"text-[#8a877f]\"\n        ]}\n      >\n        {edition.language}\n      </.link>\n\n      <span\n        :if={is_nil(edition.href)}\n        data-role=\"doc-list-language\"\n        data-language={edition.language}\n        title={@unavailable_text}\n        class=\"rounded-full border border-dashed border-[#ecebe6] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#b4b2ab]\"\n      >\n        {edition.language}\n      </span>\n    </div>\n  </div>\n\n  <.link\n    :if={@href}\n    navigate={@href}\n    data-role=\"doc-list-read\"\n    class=\"mt-auto inline-flex items-center gap-1 self-start rounded-full border border-[#ecebe6] px-3 py-1 text-xs font-semibold text-[#5b57d6] hover:bg-[#f2f1fc]\"\n  >\n    {@read_text} <span aria-hidden=\"true\">&rarr;</span>\n  </.link>\n</article>",
       "body": null,
       "attrs": [
         {
@@ -2476,13 +2556,64 @@
           }
         },
         {
+          "name": "details",
+          "type": "any",
+          "opts": {
+            "default": null,
+            "doc": "What the block above read about the document when asked to show details: a map carrying version, pages, languages and updated_at. Nothing of it is drawn without one."
+          }
+        },
+        {
+          "name": "version_text",
+          "type": "string",
+          "opts": {
+            "default": "v%{version}",
+            "doc": "The version line; %{version} is the version a reader lands on."
+          }
+        },
+        {
+          "name": "pages_text",
+          "type": "string",
+          "opts": {
+            "default": "%{count} pages",
+            "doc": "How many pages the document has; %{count} is the number."
+          }
+        },
+        {
+          "name": "one_page_text",
+          "type": "string",
+          "opts": {
+            "default": "%{count} page",
+            "doc": "The same for a document of one page."
+          }
+        },
+        {
+          "name": "updated_text",
+          "type": "string",
+          "opts": {
+            "default": "Updated %{date}",
+            "doc": "When the document last changed; %{date} is the date in the page's language."
+          }
+        },
+        {
           "name": "rest",
           "type": "global",
           "opts": {}
         }
       ],
       "slots": [],
-      "helpers": [],
+      "helpers": [
+        {
+          "name": "filled",
+          "args": "text, key, value",
+          "code": "String.replace(to_string(text), key, to_string(value))\n"
+        },
+        {
+          "name": "pages_label",
+          "args": "count, many, one",
+          "code": "case count do\n  1 -> filled(one, \"%{count}\", 1)\n  _other -> filled(many, \"%{count}\", count)\nend\n"
+        }
+      ],
       "permissions": [],
       "dependencies": [],
       "examples": [],

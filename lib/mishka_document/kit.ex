@@ -276,6 +276,16 @@ defmodule MishkaDocument.Kit do
   the locale the page renders in (`MishkaCmsCore.Runtime.LiveViewHelpers.carry_into_tasks/0`), so a
   link `doc-switcher` builds there with `site_path/2` is the one its template would build.
 
+  `doc-workspace-list` with `show_details` also says, for each document, the version a reader lands
+  on — the one marked latest, else the newest published — how many of its pages the visitor may
+  read there, a group with no page of its own left out, every language it is published in, and when
+  it last changed: the latest of the document, that version and those pages. Two more reads for the
+  whole page of documents, both as the visitor. `doc-workspace-card` draws them as
+  `doc-list-meta`, holding `doc-list-version`, `doc-list-pages`, `doc-list-language-codes` (only
+  where no language chips are drawn) and `doc-list-updated`; a card an author named in `card` is
+  handed them as `details`, a map of `version`, `pages`, `languages` and `updated_at`, which it
+  declares as an attribute of its own.
+
   `doc-workspace-list` streams its rows, and says `phx-update="stream"` only where there is a socket
   to stream from — `@myself` is nil in a cold render, and a stream container is one the client never
   removes a child from, so the builder's canvas would keep the cards of the previous setting beside
