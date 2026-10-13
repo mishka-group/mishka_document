@@ -4,25 +4,48 @@ defmodule MishkaDocument.Kit do
 
   ## What is in the bundle, and why it is a bundle
 
-  `priv/cms_ui_kits/mishka_document.json` carries ten components of two kinds. Each is complete on
+  `priv/cms_ui_kits/mishka_document.json` carries eleven components of two kinds. Each is complete on
   its own: its markup, its declarations, and its own code, including the Ash reads it runs. Nothing
   about them lives in Elixir.
 
-  ### The five blocks, which are live components
+  ### The six blocks, which are live components
 
-  `doc-workspace-list`, `doc-section`, `doc-sidebar`, `doc-toc` and `doc-switcher`. Each is a
-  `Phoenix.LiveComponent` that resolves the document from the URL itself and runs its own reads, so
-  an author can put any of them on any page and each holds what it read.
+  `doc-workspace-list`, `doc-section`, `doc-sidebar`, `doc-toc`, `doc-switcher` and
+  `doc-section-cards`. Each is a `Phoenix.LiveComponent` that runs its own reads, so an author can
+  put any of them on any page and each holds what it read. The first five resolve the document from
+  the URL; `doc-section-cards` from the page it is drawn in.
 
   ### The five pieces, which are function components
 
   `doc-workspace-card`, `doc-pager`, `doc-notice`, `doc-callout` and `doc-example`. These hold
-  nothing and read nothing: they draw what they are handed. The notice is drawn by all five blocks —
+  nothing and read nothing: they draw what they are handed. The notice is drawn by all six blocks —
   it is every skeleton, every empty line and every failed read in this kit — and the card is what
   `doc-workspace-list` draws a document with unless the author names a card of their own in its
   `card` attribute. The callout and the example are placed by an author inside a page's text, with
   the content editor — `[[component doc-callout tone="tip"]]…[[/component]]` — and drawn by
   `doc-section`'s `rich_content`, which names them for the site's stylesheet.
+
+  ### The cards
+
+  `[[component doc-section-cards /]]` in a page's text, or in one of its notes, draws the pages
+  filed under that page as cards, two a row from the `sm` breakpoint and one under it: each its
+  title, the badges a plugin puts on it, its summary — the description its own SEO gives it, else the
+  start of its text — and a link to its address. `doc-section` hands the marker the page it is drawn
+  in (`placed_in`) and the `doc_base`, `lang_param` and `version_param` it links with, after the
+  scrub and never inside `<pre>` or `<code>`. `parent` names another page of the same version — by
+  its address, or by a slug only one page has, which is how a group with no page of its own is
+  named. The pages are the version's approved ones the visitor may read, read through
+  `public_list_at_workspace_version` as `doc-sidebar` reads them, under the parent the contents draw
+  each one under and in their order; a group with no page of its own gives up its pages in its
+  place. `doc-notice` draws its skeleton, its error and its empty line (`empty_text`).
+
+  Its badges are asked on `document:page:extras`, once a card, with the page as `doc-section` tells
+  it and `card: true`, and only the header's `:badges` are drawn. A plugin answering an ask with
+  `card: true` answers from what it already holds and fetches nothing; `show_badges=false` asks
+  nothing. Every element says what it is in its `data-role`: `doc-cards`, `doc-cards-heading`,
+  `doc-cards-items`, `doc-cards-item`, `doc-cards-link`, `doc-cards-title`, `doc-cards-badges`,
+  `doc-cards-badge` (`data-tone`), `doc-cards-description`, `doc-cards-empty`, `doc-cards-loading`
+  and `doc-cards-error`.
 
   ### The example
 
@@ -72,20 +95,23 @@ defmodule MishkaDocument.Kit do
   versions are read as the system: a page whose own lock opens for the reader is drawn inside a
   document whose lock does not.
 
-  ## What the five are
+  ## What the six are
 
   `doc-workspace-list` lists the documents a site publishes. `doc-section` draws one page of one of
   them — its body, its notes, the trail above it and the pages either side. `doc-sidebar` draws that
   document's whole contents as a tree, `doc-toc` draws what is on the page being read, and
   `doc-switcher` offers the document's other versions and its other languages, each leading back to
-  the same page.
+  the same page. `doc-section-cards` draws the pages filed under one page as cards.
 
   A version may mark one page at its top as its front page: every block reads that page at the
   document's own address, in place of the landing, links to it there, and files the pages under it
   directly under that address (`MishkaDocument.Address`). A page marked as a group is only a heading
   over the pages under it — in the contents and on the landing — with no page or address of its own:
   nothing links to it, Previous and Next step over it, and its pages are addressed as if it were not
-  there.
+  there. A group with a page of its own (`group_page`) is read at its own slug like any page — its
+  text, its notes, its trail — and its heading in the contents, its title on the landing and its
+  place in a trail link there; Previous and Next stop on it. The pages under it keep the address
+  that leaves its slug out.
 
   A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
   text is stored through, and drawn with `rich_content/1`, so a component the author placed in them
@@ -221,9 +247,9 @@ defmodule MishkaDocument.Kit do
 
   ## When a block reads in step, and when in the background
 
-  Four of the five read their FIRST answer in step with the page, on both of a visit's renders: the
+  Five of the six read their FIRST answer in step with the page, on both of a visit's renders: the
   GET, so a crawler and a reader with no JavaScript are served the workspaces, the sidebar, the
-  table of contents and the version switcher themselves, and the connected one, so they are drawn
+  table of contents, the version switcher and the cards themselves, and the connected one, so they are drawn
   straight away rather than replaced by a skeleton while they are read again. Every later read runs
   in a task, and while it does the block draws a skeleton; when a read fails it draws a line and a
   button to ask again. `cold?/1` still answers for the builder's canvas and the Preview, where
@@ -241,7 +267,7 @@ defmodule MishkaDocument.Kit do
 
   `doc-section` is the exception, and on purpose: it is what the page IS. A skeleton where the
   document's text should be is a worse page than one that takes as long as the text does, and a
-  crawler served the skeleton is served nothing. That is also the trade the other four accept: a
+  crawler served the skeleton is served nothing. That is also the trade the other five accept: a
   reader with no JavaScript is served the skeleton of a tree, a table of contents and a version
   list, while the document's own text is in the HTTP response either way.
 

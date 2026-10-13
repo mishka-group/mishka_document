@@ -21,6 +21,10 @@ defmodule MishkaDocument.Address do
   pages filed under it are addressed as if it were not there — `breadcrumb` under the group
   `navigation` is `/chelekom/docs/breadcrumb`, and `/chelekom/docs/navigation` is a missing page.
 
+  A group with a page of its own (`group_page`) is read at its own slug — `/chelekom/docs/navigation`
+  — as any page is, and the pages filed under it still leave its slug out: `breadcrumb` stays
+  `/chelekom/docs/breadcrumb`. `group_page` on a page that is not a group changes nothing.
+
   An address is a site path: segments of lower-case letters, digits and dashes, and `:lang` at most
   once, where the site's language goes, as in a page's path. The rules live here because the
   document, its pages, the head and the sitemap all read them, and must agree.
@@ -142,8 +146,8 @@ defmodule MishkaDocument.Address do
 
   @doc """
   A page's own part of its address, root first: the slugs of the pages it is drawn under, then its
-  own, a front page's and a group's left out — `[]` for the front page itself. `parent_of` answers
-  the parent each
+  own, a front page's and a group's left out — `[]` for the front page itself. A group with a page of
+  its own keeps its own slug in its own address, and only there. `parent_of` answers the parent each
   page is drawn under, or `nil` at the top — which may not be the parent it names, when that one is
   not published. A parent chain deeper than twenty, which only a loop makes, stops there.
   """
@@ -152,8 +156,9 @@ defmodule MishkaDocument.Address do
 
   @doc """
   Every page's own part of its address among `sections` — the pages of one version a reader is
-  shown, each with its `id`, `slug`, `parent_section_id`, `front_page` and `group_heading` — as
-  `%{id => ["headless", "switch"]}`, and `[]` for the front page. A group has none, and is not in it.
+  shown, each with its `id`, `slug`, `parent_section_id`, `front_page`, `group_heading` and
+  `group_page` — as `%{id => ["headless", "switch"]}`, and `[]` for the front page. A group with no
+  page of its own has none, and is not in it.
 
   A page is under its parent when that parent is among them and walking up from it reaches the top;
   otherwise it is at the top. That is the rule the documentation's blocks draw the contents by, so a
@@ -164,7 +169,7 @@ defmodule MishkaDocument.Address do
     by_id = Map.new(sections, &{&1.id, &1})
 
     for section <- sections,
-        not group?(section),
+        addressed?(section),
         into: %{},
         do: {section.id, section_path(section, fn page -> drawn_under(by_id, page) end)}
   end
@@ -172,7 +177,8 @@ defmodule MishkaDocument.Address do
   @doc """
   The page among `sections` whose own part of the address is `segments` — `["headless", "switch"]`,
   or the `"headless/switch"` a `*section` capture holds — or `nil`. Nothing asked, `[]` or `""`, is
-  the front page, when they hold one. A group is never the page at an address.
+  the front page, when they hold one. A group is the page at an address only when it has a page of
+  its own.
   """
   @spec page_at([map()], [String.t()] | String.t()) :: map() | nil
   def page_at(sections, wanted) when is_binary(wanted), do: page_at(sections, segments(wanted))
@@ -191,9 +197,20 @@ defmodule MishkaDocument.Address do
   @spec front_page?(map()) :: boolean()
   def front_page?(section), do: Map.get(section, :front_page) == true
 
-  @doc "Whether a page is a group: only a heading in the contents, with no page or address of its own."
+  @doc """
+  Whether a page is a group: a heading in the contents whose slug the pages under it leave out of
+  their address.
+  """
   @spec group?(map()) :: boolean()
   def group?(section), do: Map.get(section, :group_heading) == true
+
+  @doc "Whether a page is a group with a page of its own, read at its own slug."
+  @spec group_page?(map()) :: boolean()
+  def group_page?(section), do: group?(section) and Map.get(section, :group_page) == true
+
+  @doc "Whether a page has an address: any page but a group with no page of its own."
+  @spec addressed?(map()) :: boolean()
+  def addressed?(section), do: not group?(section) or group_page?(section)
 
   defp drawn_under(by_id, page) do
     case Map.get(by_id, page.parent_section_id) do
@@ -216,9 +233,14 @@ defmodule MishkaDocument.Address do
   defp climb(_section, _parent_of, path, depth) when depth >= 20, do: path
 
   defp climb(section, parent_of, path, depth),
-    do: climb(parent_of.(section), parent_of, own_part(section, path), depth + 1)
+    do: climb(parent_of.(section), parent_of, own_part(section, path, depth), depth + 1)
 
-  defp own_part(section, path) do
+  # A group's slug is in the address of its own page, the first step, and in no page's under it.
+  defp own_part(section, path, 0) do
+    if front_page?(section) or not addressed?(section), do: path, else: [section.slug | path]
+  end
+
+  defp own_part(section, path, _above) do
     if front_page?(section) or group?(section), do: path, else: [section.slug | path]
   end
 

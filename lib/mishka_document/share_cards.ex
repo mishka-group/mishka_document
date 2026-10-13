@@ -10,7 +10,8 @@ defmodule MishkaDocument.ShareCards do
       of the pages it is drawn under among its version's approved pages, then its own
       (`MishkaDocument.Address`). A version's front page shows none of its own: it is drawn at its
       document's address, whose card is the document's. A group shows none: it is only a heading
-      in the contents, with no page of its own.
+      in the contents, with no page of its own — unless it has one (`group_page`), which shows its
+      own at its own address.
 
   The after-save plugins (`MishkaDocument.Plugins.WorkspaceShareCard`,
   `MishkaDocument.Plugins.SectionShareCard`) hand it to `ShareCard.refresh/3`, and each record's
@@ -27,7 +28,7 @@ defmodule MishkaDocument.ShareCards do
     do: {:record, "docs:document", captures(%{"workspace" => slug}, language)}
 
   def target(%Section{front_page: true}), do: nil
-  def target(%Section{group_heading: true}), do: nil
+  def target(%Section{group_heading: true, group_page: page?}) when page? != true, do: nil
 
   def target(
         %Section{
@@ -71,7 +72,14 @@ defmodule MishkaDocument.ShareCards do
       Section
       |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
       |> Ash.Query.filter(workspace_version_id == ^version_id and id != ^id)
-      |> Ash.Query.select([:id, :slug, :parent_section_id, :front_page, :group_heading])
+      |> Ash.Query.select([
+        :id,
+        :slug,
+        :parent_section_id,
+        :front_page,
+        :group_heading,
+        :group_page
+      ])
       |> Ash.read(tenant: site_id, authorize?: false, page: false)
       |> case do
         {:ok, found} -> found

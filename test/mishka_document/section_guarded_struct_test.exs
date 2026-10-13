@@ -18,6 +18,7 @@ defmodule MishkaDocument.Test.SectionGuardedStructTest do
                  :order_position,
                  :front_page,
                  :group_heading,
+                 :group_page,
                  :change_version,
                  :content_review_status,
                  :technical_review_status,
