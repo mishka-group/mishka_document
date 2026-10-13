@@ -946,7 +946,7 @@ defmodule MishkaDocument.NoteDraft do
       validator: {MishkaCmsCore.PlainText, :field},
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=500)"
 
-    field :content, :string, derives: "sanitize(basic_html) validate(string, not_empty)"
+    field :content, :string, derives: "sanitize(html5) validate(string, not_empty)"
 
     field :order_position, :integer, derives: "validate(optional=[integer, min_len=0])"
 
@@ -1066,6 +1066,9 @@ defmodule MishkaDocument.NoteDraft do
         end
       end
 
+      # Highlights the code blocks of the sanitized content, before the row is written.
+      change MishkaDocument.Resources.Changes.HighlightCode
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :note_draft, for_action: :create}
 
@@ -1155,6 +1158,9 @@ defmodule MishkaDocument.NoteDraft do
         end
       end
 
+      # Highlights the code blocks of the sanitized content, before the row is written.
+      change MishkaDocument.Resources.Changes.HighlightCode
+
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :note_draft, for_action: :create}
 
@@ -1185,6 +1191,8 @@ defmodule MishkaDocument.NoteDraft do
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
                 field: :source_note_id, resource: MishkaDocument.Note},
                where: [changing(:source_note_id)]
+
+      change MishkaDocument.Resources.Changes.HighlightCode
 
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplyNoteDraft
@@ -1222,6 +1230,8 @@ defmodule MishkaDocument.NoteDraft do
                   "Cannot edit archived note draft. Please unarchive it first."
                 )
       end
+
+      change MishkaDocument.Resources.Changes.HighlightCode
 
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplyNoteDraft
