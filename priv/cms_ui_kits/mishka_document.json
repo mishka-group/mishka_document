@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.20.0",
+  "version": "2.21.0",
   "components": [
     {
       "name": "doc-workspace-list",
