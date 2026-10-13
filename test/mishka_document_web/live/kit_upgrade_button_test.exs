@@ -22,10 +22,13 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
   alias MishkaCmsCore.Runtime.Component
   alias MishkaCmsCore.Runtime.Handlers.UiKitUpgrade
   alias MishkaCmsCore.Runtime.Page
+  alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaCmsCore.Runtime.PageDraft
   alias MishkaCmsCore.Runtime.States.SiteState
+  alias MishkaDocument.Plugins.ShareCardTargets
   alias MishkaDocument.Provision
   alias MishkaDocument.Test.VersionHelpers
+  alias MishkaInstaller.Event.{Event, EventHandler}
 
   require Ash.Query
 
@@ -365,6 +368,39 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
       assert has_element?(
                view,
                ~s(#document-provision-form input[name="site_id"][value="#{other.id}"])
+             )
+
+      close(view)
+    end
+
+    # THE REDRAW BUTTON IS CORE'S, drawn once the documentation answers for its share cards on the
+    # site. The plugin is written to the event's chain by hand, whatever another test left there,
+    # and taken off when the test exits, since Mnesia is on disk.
+    test "ends with the documentation's Redraw share cards button once it names its cards", %{
+      conn: conn
+    } do
+      event = ShareCard.targets_event()
+
+      {:ok, _} =
+        Event.write(%{
+          name: ShareCardTargets,
+          event: event,
+          extension: :mishka_installer,
+          status: :started
+        })
+
+      :ok = EventHandler.do_compile(event, :start, false)
+
+      on_exit(fn ->
+        Event.unregister(:name, ShareCardTargets, false)
+        EventHandler.do_compile(event, :start, false)
+      end)
+
+      {:ok, view, _html} = live(conn, "/admin/dashboard/document")
+
+      assert has_element?(
+               view,
+               "#document-kit-upgrade-doctor #document-kit-upgrade-share-cards #document-kit-upgrade-share-cards-redraw"
              )
 
       close(view)

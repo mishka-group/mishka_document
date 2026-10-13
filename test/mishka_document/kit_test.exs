@@ -542,8 +542,43 @@ defmodule MishkaDocument.KitTest do
              "the bundle's directory is not in the package, so a hex install has nothing to read"
     end
 
-    test "ships exactly two hooks, one for the code windows and one for the examples" do
-      assert Enum.map(bundle()["js_hooks"], & &1["name"]) == ["doc-code-copy", "doc-example"]
+    test "ships exactly three hooks: the code windows', the examples' and the contents'" do
+      assert Enum.map(bundle()["js_hooks"], & &1["name"]) ==
+               ["doc-code-copy", "doc-example", "doc-sidebar-scroll"]
+    end
+
+    # THE CONTENTS KEEP THEIR PLACE ACROSS PAGES. A live navigation draws the next page with the box
+    # the contents scroll in at its top; the hook `doc-sidebar` mounts on its root puts the box back
+    # where the reader left it, per tab and per document, and brings the reader's entry into view
+    # only when it lies outside. It writes scrollTop and nothing else.
+    test "ships the hook doc-sidebar mounts to keep its contents' place" do
+      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-sidebar-scroll"))
+      content = hook["content"]
+
+      assert hook["format"] == "js"
+      assert hook["active"] == true
+      assert content =~ "export default DocSidebarScroll;"
+      assert content =~ "sessionStorage.setItem(this.key(), String(this.box.scrollTop))"
+      assert content =~ ~s|this.el.getAttribute("data-document")|
+      assert content =~ ~s|{ passive: true }|
+      assert content =~ "requestAnimationFrame"
+      assert content =~ "if (!this.el.isConnected || !this.shown) return;"
+      assert content =~ ~s|const ACTIVE = '[aria-current="page"]';|
+      assert content =~ ~s|const ITEMS = '[data-role="doc-sidebar-items"]';|
+
+      refute content =~
+               ~r/setAttribute|innerHTML|insertAdjacentHTML|\.style\b|classList|scrollIntoView/
+
+      sidebar = Enum.find(components(), &(&1["name"] == "doc-sidebar"))
+      scroll_hook = Enum.find(sidebar["helpers"], &(&1["name"] == "scroll_hook"))
+
+      assert sidebar["template"] =~ ~r/\A<nav\n  id=\{@id\}\n  phx-hook=\{scroll_hook\(\)\}\n/
+      assert sidebar["template"] =~ "data-document={@document && @document.id}"
+
+      assert scroll_hook["code"] =~
+               "MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name("
+
+      assert scroll_hook["code"] =~ ~s(name: "doc-sidebar-scroll")
     end
 
     # THE COPY BUTTON ON A CODE WINDOW IS ANSWERED IN THE BROWSER, by the hook `doc-section` mounts

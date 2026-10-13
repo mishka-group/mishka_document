@@ -43,12 +43,13 @@ defmodule MishkaDocument.Plugins.PageSeo do
     * `url` — the canonical address: the document's own address where it has one, with the page's
       under it, so the head names the one address a reader and a crawler are sent to; else the
       address asked;
-    * `vars` — `doc.title`, `doc.description`, `doc.url`, `doc.version`, `doc.published_at`,
-      `doc.modified_at` (the front page or the page of it this address shows), and
-      `workspace.name`, `workspace.description`, `workspace.url` (the document);
+    * `vars` — `doc.title`, `doc.description`, `doc.url`, `doc.version`, `doc.group`,
+      `doc.published_at`, `doc.modified_at` (the front page or the page of it this address shows),
+      and `workspace.name`, `workspace.description`, `workspace.url` (the document);
     * `card` — what its share card (`MishkaCmsCore.Runtime.ShareCard`) shows besides the title and
       description: "Documentation" above a document's front page, the document's name above one of
-      its pages, and the version;
+      its pages — `Guide · Navigation` under a group — and the version, on the front page the one
+      a reader lands on;
     * `var_docs` — those variables in the current locale, whether or not this request filled them.
       Called with no `params` — an editor asking which variables a page has — that is all it
       changes.
@@ -60,9 +61,58 @@ defmodule MishkaDocument.Plugins.PageSeo do
   of an index. That is why the read is the system's: a read as the visitor would leave a locked
   record out for exactly the visitor the page has to refuse.
 
-  A capture that names nothing a reader may open changes nothing else, and the page answers 404 as
-  it does without this. A note is drawn inside its page and has no address of its own, so its own
-  SEO is not read here.
+  ## What plugins add to it
+
+  The answer is handed to the `document:page:seo` mishka_installer event (`event/0`) through
+  `MishkaInstaller.Event.Hook.call/3`, and what it replies is the answer; a plugin may give the page
+  a share card of its own — `image` with `card: false` — or change any other default. A plugin that
+  opts in with `call/2` is handed, as `meta`:
+
+      %{
+        site_id: "…",
+        document: %{
+          name: "Guide",
+          slug: "guide",
+          path: "/guide/docs",
+          language: "en",
+          description: "How to use it.",
+          url: "https://example.com/guide/docs"
+        },
+        version: "2.0.0",
+        page: %{
+          slug: "breadcrumb",
+          title: "Breadcrumb",
+          description: "The start of its text.",
+          path: "navigation/breadcrumb",
+          parents: [%{slug: "navigation", title: "Navigation", group: true}]
+        },
+        url: "https://example.com/guide/docs/breadcrumb",
+        contents: [
+          %{title: "Breadcrumb", slug: "breadcrumb", group: false, current: true},
+          %{title: "Menu", slug: "menu", group: false, current: false}
+        ]
+      }
+
+  The answer keeps `redraw` as core handed it (`MishkaCmsCore.Runtime.Seo.given/2`): `true` when a
+  forced look at the share card asks for the head (`MishkaCmsCore.Runtime.ShareCard.specs/3`). A
+  plugin that draws a card of its own draws it again over its old file then.
+
+  `page` is `nil` on a document's front page, and `version` when it has no published version. A
+  `description` is the description meta the document or the page stores, else the one the head
+  is given here.
+  `parents` are the pages and groups the page is filed under, nearest last. `contents` are up to
+  seven entries of the page's level of the contents, in their order, the page among them marked
+  `current`; on a front page, the document's top level, its version's front page marked. A plugin
+  replies with the answer:
+
+      use MishkaInstaller.Event.Hook, event: "document:page:seo"
+
+      def call(seo, %{page: %{title: title}}), do: {:reply, %{seo | title: title <> " · Docs"}}
+      def call(seo, _meta), do: {:reply, seo}
+
+  A capture that names nothing a reader may open changes nothing else but `card`, `false`: the page
+  answers 404 as it does without this, and has no share card to draw. A note is drawn inside its
+  page and has no address of its own, so its own SEO is not read here.
 
   A module because a mishka_installer hook is one. Registered in `MishkaDocument.Application`.
   """
@@ -74,6 +124,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   alias MishkaCmsCore.Runtime.{Languages, Seo}
   alias MishkaCmsCore.Settings
+  alias MishkaInstaller.Event.Hook
   alias MishkaDocument.{Address, Provision, Section, Workspace, WorkspaceVersion}
 
   @workspace_fields [
@@ -115,22 +166,35 @@ defmodule MishkaDocument.Plugins.PageSeo do
   # How much of a page's text its description takes.
   @summary 160
 
+  @event "document:page:seo"
+
+  # How many of the contents round the page shown `document:page:seo` is handed.
+  @contents 7
+
   @impl true
   def call(%{record: "docs:document"} = seo), do: {:reply, :halt, front_page(seo)}
   def call(%{record: "docs:page"} = seo), do: {:reply, :halt, document_page(seo)}
   def call(seo), do: {:reply, seo}
 
-  defp front_page(seo) do
+  @doc "The mishka_installer event a documentation page's answer is handed to: `\"#{@event}\"`."
+  @spec event() :: String.t()
+  def event, do: @event
+
+  defp front_page(%{params: params} = seo) do
     seo = %{seo | var_docs: docs()}
 
-    case read(seo, []) do
+    case read(seo, versions: versions()) do
       %Workspace{} = workspace ->
+        {version, tree} = shown(workspace.versions, params["v"]) || {nil, []}
+
         answer(seo, workspace, %{
           page?: false,
           segments: [],
+          page: nil,
+          tree: tree,
           title: workspace.name,
           description: workspace.description,
-          version: nil,
+          version: version && version.version_number,
           published: workspace.inserted_at,
           modified: workspace.updated_at,
           seo_tags: workspace.seo_tags,
@@ -139,7 +203,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
         })
 
       nil ->
-        seo
+        named_nothing(seo)
     end
   end
 
@@ -154,6 +218,8 @@ defmodule MishkaDocument.Plugins.PageSeo do
       answer(seo, workspace, %{
         page?: true,
         segments: Map.get(Address.paths(tree), page.id, []),
+        page: page,
+        tree: tree,
         title: section.title,
         description: summary(section.content),
         version: version.version_number,
@@ -164,9 +230,14 @@ defmodule MishkaDocument.Plugins.PageSeo do
         permissions: section.effective_permissions
       })
     else
-      _nothing_shown -> seo
+      _nothing_shown -> named_nothing(seo)
     end
   end
+
+  # An address that names no document or page a reader may open answers 404, and has no share card:
+  # a look at the cards of every page of this kind (`MishkaCmsCore.Runtime.ShareCard.specs/3`) draws
+  # none for it.
+  defp named_nothing(seo), do: Map.put(seo, :card, false)
 
   # The document whose own address the page is at, else the one with no address of its own the
   # `workspace` capture names, in the page's language, on the page's site; `nil` when the request
@@ -227,7 +298,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
       sections:
         Ash.Query.select(Section, [
           :id,
+          :title,
           :slug,
+          :order_position,
           :parent_section_id,
           :front_page,
           :group_heading,
@@ -236,14 +309,10 @@ defmodule MishkaDocument.Plugins.PageSeo do
     )
   end
 
-  # The version a reader is shown — the one `asked` names, else the one marked latest, else the
-  # newest published — and its pages, or `nil` when there is none.
+  # The version a reader is shown (`MishkaDocument.Address.version_shown/2`) and its pages, or `nil`
+  # when there is none.
   defp shown(versions, asked) do
-    newest = Enum.sort_by(versions, &{moment(&1.published_at), moment(&1.inserted_at)}, :desc)
-
-    version =
-      Enum.find(newest, &(&1.version_number == asked)) ||
-        Enum.find(newest, & &1.is_latest_for_version) || List.first(newest)
+    version = Address.version_shown(versions, asked)
 
     case version do
       %WorkspaceVersion{sections: pages} when is_list(pages) -> {version, pages}
@@ -265,13 +334,15 @@ defmodule MishkaDocument.Plugins.PageSeo do
     end
   end
 
-  defp moment(%DateTime{} = at), do: DateTime.to_unix(at, :microsecond)
-  defp moment(_never), do: 0
-
   # What a share card (`MishkaCmsCore.Runtime.ShareCard`) shows of it: "Documentation" above a
-  # document's front page, the document's name above one of its pages, and the version.
-  defp card(workspace, %{page?: true} = record),
-    do: %{eyebrow: workspace.name, meta: version(record)}
+  # document's front page, the document's name above one of its pages — and the group it is filed
+  # under, where it is under one — and the version.
+  defp card(workspace, %{page?: true} = record) do
+    case group(record) do
+      nil -> %{eyebrow: workspace.name, meta: version(record)}
+      group -> %{eyebrow: "#{workspace.name} · #{group.title}", meta: version(record)}
+    end
+  end
 
   defp card(_workspace, record), do: %{eyebrow: gettext("Documentation"), meta: version(record)}
 
@@ -308,7 +379,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
       record.page? && {record.title, seo.url}
     ]
 
-    %{
+    answered = %{
       seo
       | title: record.title,
         description: record.description,
@@ -326,6 +397,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
               "doc.description" => record.description,
               "doc.url" => seo.url,
               "doc.version" => record.version,
+              "doc.group" => group_title(record),
               "doc.published_at" => published,
               "doc.modified_at" => modified,
               "workspace.name" => workspace.name,
@@ -334,7 +406,127 @@ defmodule MishkaDocument.Plugins.PageSeo do
             })
           )
     }
+
+    @event
+    |> Hook.call(answered, meta: described(seo, workspace, workspace_url, record))
+    |> handed_back(answered)
   end
+
+  defp handed_back(%{} = answer, _answered) when not is_struct(answer), do: answer
+  defp handed_back(_not_an_answer, answered), do: answered
+
+  # What `document:page:seo` is handed besides the answer: the document, the version, the page and
+  # the pages and groups it is filed under, and the contents round it — the page's level of them,
+  # the page marked `current`; the document's top level on its front page, its version's front page
+  # marked.
+  defp described(seo, workspace, workspace_url, record) do
+    %{
+      site_id: seo.site_id,
+      document: %{
+        name: workspace.name,
+        slug: workspace.slug,
+        path: workspace.path,
+        language: workspace.language,
+        description: stored_description(workspace.seo_tags) || workspace.description,
+        url: workspace_url
+      },
+      version: record.version,
+      page: described_page(record),
+      url: seo.url,
+      contents: contents(record)
+    }
+  end
+
+  defp described_page(%{page?: true, page: page} = record) do
+    %{
+      slug: page.slug,
+      title: record.title,
+      description: stored_description(record.seo_tags) || record.description,
+      path: Enum.join(record.segments, "/"),
+      parents:
+        record
+        |> parents()
+        |> Enum.map(&%{slug: &1.slug, title: &1.title, group: Address.group?(&1)})
+    }
+  end
+
+  defp described_page(_front_page), do: nil
+
+  # The description meta a document or a page stores, which its head shows over the one built here.
+  defp stored_description(tags) do
+    Enum.find_value(Seo.stored_tags(tags), fn
+      %{tag: "meta", attrs: %{"name" => "description"}, content: text} when is_binary(text) ->
+        if String.trim(text) != "", do: String.trim(text)
+
+      _other ->
+        nil
+    end)
+  end
+
+  # The pages and groups the page is drawn under, nearest last: each one's parent while it is among
+  # the version's pages, as the contents draw them. A chain deeper than twenty, which only a loop
+  # makes, stops there.
+  defp parents(%{page: %{} = page, tree: tree}),
+    do: climb(page, Map.new(tree, &{&1.id, &1}), [], 0)
+
+  defp parents(_front_page), do: []
+
+  defp climb(_page, _by_id, above, 20), do: above
+
+  defp climb(page, by_id, above, depth) do
+    case Map.get(by_id, page.parent_section_id) do
+      nil -> above
+      parent -> climb(parent, by_id, [parent | above], depth + 1)
+    end
+  end
+
+  # The nearest group the page is filed under; `nil` for none.
+  defp group(record), do: record |> parents() |> Enum.filter(&Address.group?/1) |> List.last()
+
+  defp group_title(record) do
+    case group(record) do
+      %{title: title} -> title
+      nil -> nil
+    end
+  end
+
+  # Up to `@contents` of the entries at the page's level of the contents, in their order, the page
+  # among them; the document's top level on its front page.
+  defp contents(%{tree: tree} = record) do
+    by_id = Map.new(tree, &{&1.id, &1})
+    level = level_of(record, by_id)
+    current = current(record, tree)
+
+    entries =
+      tree
+      |> Enum.filter(&(parent_id(&1, by_id) == level))
+      |> Enum.sort_by(&{&1.order_position || 0, &1.title, &1.id})
+
+    at = Enum.find_index(entries, &(&1.id == current)) || 0
+    start = at |> Kernel.-(div(@contents, 2)) |> min(length(entries) - @contents) |> max(0)
+
+    entries
+    |> Enum.slice(start, @contents)
+    |> Enum.map(
+      &%{title: &1.title, slug: &1.slug, group: Address.group?(&1), current: &1.id == current}
+    )
+  end
+
+  defp level_of(%{page?: true, page: page}, by_id), do: parent_id(page, by_id)
+  defp level_of(_front_page, _by_id), do: nil
+
+  defp current(%{page?: true, page: page}, _tree), do: page.id
+
+  defp current(_front_page, tree) do
+    case Address.page_at(tree, []) do
+      %{id: id} -> id
+      nil -> nil
+    end
+  end
+
+  # The page an entry is drawn under, when it is among the version's pages; `nil` at the top.
+  defp parent_id(%{parent_section_id: parent}, by_id) when is_map_key(by_id, parent), do: parent
+  defp parent_id(_top, _by_id), do: nil
 
   # A `BreadcrumbList` of each `{name, address}` that has an address; nothing when none has.
   defp breadcrumb(trail) do
@@ -461,7 +653,14 @@ defmodule MishkaDocument.Plugins.PageSeo do
       var(
         "doc.version",
         gettext("Version"),
-        gettext("The version this page is shown from. Empty on a document's front page.")
+        gettext(
+          "The version this page is shown from: the one a reader lands on, on the front page."
+        )
+      ),
+      var(
+        "doc.group",
+        gettext("Group"),
+        gettext("The group this page is filed under. Empty when it is under none.")
       ),
       var(
         "doc.published_at",

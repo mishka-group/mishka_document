@@ -30,8 +30,19 @@ defmodule MishkaDocument.ShareCardsTest do
 
   setup do
     site = create_site!(active: true)
-    workspace = create_workspace!(site_id: site.id, status: :active, slug: "guide")
-    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+    workspace =
+      create_workspace!(site_id: site.id, status: :active, slug: "guide", skip_version: true)
+
+    version =
+      create_workspace_version!(
+        workspace_id: workspace.id,
+        site_id: site.id,
+        status: :stable,
+        is_latest_for_version: true,
+        published_at: ~U[2026-01-01 00:00:00Z]
+      )
+
     %{site: site, workspace: workspace, version: version}
   end
 

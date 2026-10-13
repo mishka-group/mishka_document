@@ -212,6 +212,42 @@ defmodule MishkaDocument.Address do
   @spec addressed?(map()) :: boolean()
   def addressed?(section), do: not group?(section) or group_page?(section)
 
+  @doc """
+  The version a reader is shown among a document's published `versions`, each with its
+  `version_number`, `is_latest_for_version`, `published_at` and `inserted_at`: the one `asked` names
+  (`?v=`), else the one marked latest, else the newest published. `nil` when there is none.
+  """
+  @spec version_shown([map()], String.t() | nil) :: map() | nil
+  def version_shown(versions, asked) when is_list(versions) do
+    newest = Enum.sort_by(versions, &{moment(&1.published_at), moment(&1.inserted_at)}, :desc)
+
+    Enum.find(newest, &(&1.version_number == asked)) ||
+      Enum.find(newest, & &1.is_latest_for_version) || List.first(newest)
+  end
+
+  @doc """
+  The query a reader reaches `version` at among its document's published `versions`
+  (`version_shown/2`): `%{}` for the one shown when none is asked, `%{"v" => version_number}` for
+  another, and `nil` for one no `?v=` reaches — not among them, or sharing its number with a newer
+  one. Versions are told apart by their `id`.
+  """
+  @spec version_query(map(), [map()]) :: %{optional(String.t()) => String.t()} | nil
+  def version_query(%{id: id} = version, versions) when is_list(versions) do
+    cond do
+      match?(%{id: ^id}, version_shown(versions, nil)) ->
+        %{}
+
+      match?(%{id: ^id}, version_shown(versions, version.version_number)) ->
+        %{"v" => version.version_number}
+
+      true ->
+        nil
+    end
+  end
+
+  defp moment(%DateTime{} = at), do: DateTime.to_unix(at, :microsecond)
+  defp moment(_never), do: 0
+
   defp drawn_under(by_id, page) do
     case Map.get(by_id, page.parent_section_id) do
       nil -> nil

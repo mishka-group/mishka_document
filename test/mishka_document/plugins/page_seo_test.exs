@@ -17,7 +17,8 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
   alias MishkaCmsCore.Settings
   alias MishkaDocument.Plugins.PageSeo
   alias MishkaDocument.Provision
-  alias MishkaInstaller.Event.EventHandler
+  alias MishkaDocument.Test.Plugins.PageSeoAnswer
+  alias MishkaInstaller.Event.{Event, EventHandler}
   alias MishkaInstaller.Event.Hook
 
   @host "docs.example.com"
@@ -227,6 +228,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
                  "doc.description",
                  "doc.url",
                  "doc.version",
+                 "doc.group",
                  "doc.published_at",
                  "doc.modified_at",
                  "workspace.name",
@@ -434,7 +436,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
         given =
           given(site, :section, %{"lang" => "en", "workspace" => workspace, "section" => section})
 
-        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+        assert answer(given) == %{given | var_docs: answer(given).var_docs, card: false}
       end
     end
   end
@@ -492,7 +494,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
             section: %{"lang" => "en", "workspace" => "product", "section" => "install/steps"}
           ] do
         given = given(site, kind, params)
-        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+        assert answer(given) == %{given | var_docs: answer(given).var_docs, card: false}
       end
     end
 
@@ -789,7 +791,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
 
       for slug <- ["drafted", "persian", "missing"] do
         given = given(site, :workspace, %{"lang" => "en", "workspace" => slug})
-        assert answer(given) == %{given | var_docs: answer(given).var_docs}
+        assert answer(given) == %{given | var_docs: answer(given).var_docs, card: false}
       end
     end
   end
@@ -801,7 +803,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       for kind <- [:workspace, :section] do
         given = given(site, kind, %{})
         assert {answered, []} = reads_while(fn -> answer(given) end)
-        assert answered == %{given | var_docs: answered.var_docs}
+        assert answered == %{given | var_docs: answered.var_docs, card: false}
         assert "workspace.name" in keys(answered.var_docs)
       end
     end
@@ -880,6 +882,172 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
         MishkaDocument.Plugins.PageRecords.types(site.id)
 
       assert Enum.map(samples, & &1.params["section"]) == ["breadcrumb"]
+    end
+  end
+
+  describe "what it hands `document:page:seo`" do
+    setup %{site: site} do
+      Process.register(self(), :__page_seo_probe__)
+
+      {:ok, _} =
+        Event.write(%{
+          name: PageSeoAnswer,
+          event: PageSeo.event(),
+          extension: :mishka_installer,
+          status: :started
+        })
+
+      :ok = EventHandler.do_compile(PageSeo.event(), :start, false)
+
+      on_exit(fn ->
+        PageSeoAnswer.forget!()
+        Event.unregister(:name, PageSeoAnswer, false)
+        EventHandler.do_compile(PageSeo.event(), :start, false)
+      end)
+
+      document =
+        document!(site,
+          slug: "product",
+          name: "Product",
+          path: "/product/docs",
+          description: "All of it."
+        )
+
+      version = version!(site, document, version_number: "3.1.0", is_latest_for_version: true)
+      page!(site, version, "start", title: "Start", front_page: true, order_position: 0)
+
+      group =
+        page!(site, version, "navigation",
+          title: "Navigation",
+          group_heading: true,
+          order_position: 1
+        )
+
+      for {title, at} <-
+            Enum.with_index(~w(Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India)) do
+        page!(site, version, String.downcase(title),
+          title: title,
+          parent_section_id: group.id,
+          order_position: at,
+          content: "<p>#{title} text.</p>"
+        )
+      end
+
+      :ok
+    end
+
+    defp at_product(site, record, params) do
+      Seo.given(
+        %{
+          title: "Document page",
+          path: if(record == "docs:page", do: "/product/docs/*section", else: "/product/docs"),
+          language: "en",
+          seo: %{description: nil, schema: []}
+        },
+        site_id: site.id,
+        url: base() <> "/product/docs",
+        params: params,
+        record: record
+      )
+    end
+
+    defp asked do
+      assert_received {:page_seo_asked, _seo, meta}
+      meta
+    end
+
+    test "a page: its document, version, place, and the contents round it", %{site: site} do
+      answered = answer(at_product(site, "docs:page", %{"section" => "hotel"}))
+
+      assert answered.card.eyebrow == "Product · Navigation"
+      assert answered.vars["doc.group"] == "Navigation"
+
+      assert %{
+               site_id: site_id,
+               document: %{
+                 name: "Product",
+                 slug: "product",
+                 path: "/product/docs",
+                 language: "en",
+                 description: "All of it."
+               },
+               version: "3.1.0",
+               page: %{
+                 slug: "hotel",
+                 title: "Hotel",
+                 description: "Hotel text.",
+                 path: "hotel",
+                 parents: [%{slug: "navigation", title: "Navigation", group: true}]
+               },
+               url: url,
+               contents: contents
+             } = asked()
+
+      assert site_id == site.id
+      assert url == base() <> "/product/docs/hotel"
+
+      assert Enum.map(contents, &{&1.title, &1.current}) == [
+               {"Charlie", false},
+               {"Delta", false},
+               {"Echo", false},
+               {"Foxtrot", false},
+               {"Golf", false},
+               {"Hotel", true},
+               {"India", false}
+             ]
+    end
+
+    test "a front page: its document, the version a reader lands on, and its top level", %{
+      site: site
+    } do
+      answered = answer(at_product(site, "docs:document", %{}))
+
+      assert answered.card == %{eyebrow: "Documentation", meta: ["Version 3.1.0"]}
+      assert answered.vars["doc.version"] == "3.1.0"
+
+      assert %{document: %{name: "Product", url: url}, version: "3.1.0", page: nil} =
+               meta = asked()
+
+      assert url == base() <> "/product/docs"
+
+      assert Enum.map(meta.contents, &{&1.title, &1.group, &1.current}) == [
+               {"Start", false, true},
+               {"Navigation", true, false}
+             ]
+    end
+
+    test "its reply is the answer", %{site: site} do
+      PageSeoAnswer.answer!(fn seo, %{page: %{title: title}} ->
+        %{seo | image: "/cards/#{title}.jpg", card: false}
+      end)
+
+      answered = answer(at_product(site, "docs:page", %{"section" => "alpha"}))
+
+      assert {answered.image, answered.card} == {"/cards/Alpha.jpg", false}
+
+      assert %{image: "/cards/Alpha.jpg"} =
+               Seo.accept(answered, at_product(site, "docs:page", %{}))
+    end
+
+    test "hands on the description a page stores, which its head shows", %{site: site} do
+      [version] =
+        MishkaDocument.WorkspaceVersion
+        |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
+        |> Ash.read!(tenant: site.id)
+
+      page!(site, version, "juliet",
+        title: "Juliet",
+        content: "<p>Its text.</p>",
+        seo_tags: [%{tag: "meta", attrs: %{"name" => "description"}, content: "Its own words."}]
+      )
+
+      answer(at_product(site, "docs:page", %{"section" => "juliet"}))
+      assert %{page: %{description: "Its own words."}} = asked()
+    end
+
+    test "is not asked for a page it names nothing at", %{site: site} do
+      answer(at_product(site, "docs:page", %{"section" => "nowhere"}))
+      refute_received {:page_seo_asked, _seo, _meta}
     end
   end
 

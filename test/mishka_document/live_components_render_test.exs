@@ -2524,6 +2524,185 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  describe "doc-workspace-list with details" do
+    test "draws none unless asked", %{site: site} do
+      manual!(site)
+
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{per_page: 10})
+
+      assert Enum.empty?(drawn(view, ~s([data-role="doc-list-meta"])))
+    end
+
+    test "draws each document's version, pages, language and last change", %{site: site} do
+      %{document: document, pages: pages} = manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, show_details: true})
+
+      assert text_of(view, ~s([data-role="doc-list-version"])) == ["v1.0.0"]
+      assert text_of(view, ~s([data-role="doc-list-pages"])) == ["4 pages"]
+      assert text_of(view, ~s([data-role="doc-list-language-codes"])) == ["en"]
+
+      document =
+        Ash.get!(MishkaDocument.Workspace, document.id, action: :master_get, authorize?: false)
+
+      newest = Enum.max([document.updated_at | Enum.map(pages, & &1.updated_at)], DateTime)
+
+      assert [datetime] =
+               view
+               |> drawn(~s([data-role="doc-list-updated"] time))
+               |> Enum.map(&LazyHTML.attribute(&1, "datetime"))
+               |> List.flatten()
+
+      assert {:ok, ^newest, 0} = DateTime.from_iso8601(datetime)
+    end
+
+    test "counts the pages of the version a reader lands on, as the visitor may read them", %{
+      site: site
+    } do
+      %{document: document, version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Locked",
+        slug: "locked",
+        order_position: 4,
+        permissions: ["members:read"]
+      )
+
+      page!(site, version,
+        title: "Waiting",
+        slug: "waiting",
+        order_position: 5,
+        content_review_status: :pending
+      )
+
+      page!(site, version, title: "Group", slug: "group", order_position: 6, group_heading: true)
+
+      newer =
+        version!(site, document,
+          version_number: "2.0.0-beta",
+          status: :beta,
+          published_at: ~U[2026-02-01 00:00:00Z]
+        )
+
+      page!(site, newer, title: "Only in the beta", slug: "beta", order_position: 0)
+
+      member = create_user_with_permissions!(["members:read"], site_id: site.id)
+
+      {:ok, guest, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, show_details: true})
+
+      assert text_of(guest, ~s([data-role="doc-list-version"])) == ["v1.0.0"]
+      assert text_of(guest, ~s([data-role="doc-list-pages"])) == ["4 pages"]
+
+      {:ok, shown, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_details: true,
+          current_user: member
+        })
+
+      assert text_of(shown, ~s([data-role="doc-list-pages"])) == ["5 pages"]
+    end
+
+    test "says one page as one, in the words the page gave it", %{site: site} do
+      document = document!(site, name: "Leaflet", slug: "leaflet")
+      version = version!(site, document, version_number: "0.1.0", is_latest_for_version: true)
+      page!(site, version, title: "Only", slug: "only", order_position: 0)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_details: true,
+          one_page_text: "%{count} Seite",
+          version_text: "Version %{version}"
+        })
+
+      assert text_of(view, ~s([data-role="doc-list-pages"])) == ["1 Seite"]
+      assert text_of(view, ~s([data-role="doc-list-version"])) == ["Version 0.1.0"]
+    end
+
+    test "names every language a document is published in", %{site: site} do
+      {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["en", "fa"], site_id: site.id)
+      %{document: document} = manual!(site)
+
+      document!(site,
+        name: "میشکا",
+        slug: "mishka-cms-fa",
+        language: "fa",
+        language_group_id: document.language_group_id
+      )
+
+      create_component!(
+        site_id: site.id,
+        name: "my-languages-card",
+        template: ~S|<div data-role="languages">{Enum.join(@details.languages, " ")}</div>|,
+        attrs: [
+          %{name: "doc", type: "any", opts: %{"default" => nil}},
+          %{name: "href", type: "any", opts: %{"default" => nil}},
+          %{name: "details", type: "any", opts: %{"default" => nil}}
+        ],
+        active: true
+      )
+
+      {:ok, custom, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_details: true,
+          card: "my-languages-card"
+        })
+
+      assert text_of(custom, ~s([data-role="languages"])) == ["en fa"]
+
+      # The chips already name them, so the card does not say them twice.
+      {:ok, chips, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_details: true,
+          show_languages: true
+        })
+
+      assert Enum.empty?(drawn(chips, ~s([data-role="doc-list-language-codes"])))
+      assert Enum.sort(text_of(chips, ~s([data-role="doc-list-language"]))) == ["en", "fa"]
+    end
+
+    test "hands them to the author's own card", %{site: site} do
+      manual!(site)
+
+      create_component!(
+        site_id: site.id,
+        name: "my-detailed-card",
+        template:
+          ~s(<div data-role="mine">{@doc.name}: v{@details.version}, {@details.pages}</div>),
+        attrs: [
+          %{name: "doc", type: "any", opts: %{"default" => nil}},
+          %{name: "href", type: "any", opts: %{"default" => nil}},
+          %{name: "details", type: "any", opts: %{"default" => nil}}
+        ],
+        active: true
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_details: true,
+          card: "my-detailed-card"
+        })
+
+      assert text_of(view, ~s([data-role="mine"])) == ["Mishka CMS: v1.0.0, 4"]
+    end
+
+    test "has nothing to say about a version when none is published", %{site: site} do
+      document!(site, name: "Unwritten", slug: "unwritten")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, show_details: true})
+
+      assert Enum.empty?(drawn(view, ~s([data-role="doc-list-version"])))
+      assert text_of(view, ~s([data-role="doc-list-pages"])) == ["0 pages"]
+    end
+  end
+
   # ONE DOCUMENT, ONCE. A manual written in four languages is four rows sharing a group, and a
   # listing that showed all four showed the same manual four times over.
   describe "doc-workspace-list in one language" do
@@ -4000,6 +4179,38 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
 
       assert marked == ["Installation"]
+    end
+
+    # THE CONTENTS KEEP THEIR PLACE ACROSS PAGES through the kit's own hook, mounted on the block's
+    # root under the name the site's JavaScript registers the installed row by, and keyed on the
+    # document the root names.
+    test "mounts the kit's scroll hook on its root, naming its document", %{site: site} do
+      hook =
+        MishkaCmsCore.Runtime.JsHook
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(name == "doc-sidebar-scroll" and site_id == ^site.id)
+        |> Ash.Query.load([:is_global])
+        |> Ash.read_one!()
+
+      assert hook, "installing the kit wrote no doc-sidebar-scroll hook for the site"
+      assert hook.active
+
+      %{document: document} = manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-sidebar", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      root = drawn(view, ~s(#one[data-role="doc-sidebar"]))
+
+      registered =
+        MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name(hook, site.name)
+
+      assert registered == String.capitalize(site.name) <> "DocSidebarScroll"
+      assert LazyHTML.attribute(root, "phx-hook") == [registered]
+      assert LazyHTML.attribute(root, "data-document") == [document.id]
     end
 
     # NESTING IS THE WHOLE POINT OF A SIDEBAR. A child sits under its parent and is drawn only while
