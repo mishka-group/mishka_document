@@ -634,27 +634,40 @@ defmodule MishkaDocument.KitTest do
     end
 
     # AN EXAMPLE'S TOOLBAR IS ANSWERED IN THE BROWSER, by the hook `doc-example` mounts on its own
-    # root under the name `example_hook/0` asks the same rule for. It moves the choice onto the root
-    # and the buttons through the hook's JS commands, which a LiveView patch keeps, dresses the
-    # frame's page, and sizes the frame through its `height` attribute — never a style, which a
-    # site's CSP may refuse.
-    test "ships the hook doc-example mounts for the toolbar over its frame" do
+    # root under the name `example_hook/0` asks the same rule for. It moves the choice onto the root,
+    # the buttons and the example's stage through the hook's JS commands, which a LiveView patch
+    # keeps, opens the preview as a modal dialog, dresses the frame's page, and sizes the frame
+    # through its `width` and `height` attributes and scales it through CSSOM properties — never a
+    # style attribute, which a site's CSP may refuse.
+    test "ships the hook doc-example mounts for the toolbar over its example" do
       hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-example"))
+      content = hook["content"]
 
       assert hook["format"] == "js"
       assert hook["active"] == true
-      assert hook["content"] =~ "export default DocExample;"
-      assert hook["content"] =~ ~s([data-role="doc-example-option"])
-      assert hook["content"] =~ ~s([data-role="doc-example-frame"])
-      assert hook["content"] =~ "js.setAttribute(this.el, `data-frame-${action}`, value)"
-      assert hook["content"] =~ ~s|js.setAttribute(option, "aria-pressed"|
-      assert hook["content"] =~ ~s|root.setAttribute("data-theme", theme)|
-      assert hook["content"] =~ ~s|root.setAttribute("dir", dir)|
-      assert hook["content"] =~ ~s|this.js().setAttribute(this.frame, "height"|
-      assert hook["content"] =~ "new ResizeObserver("
+      assert content =~ "export default DocExample;"
+      assert content =~ ~s([data-role="doc-example-option"])
+      assert content =~ ~s([data-role="doc-example-frame"])
+      assert content =~ "js.setAttribute(this.el, `data-frame-${action}`, value)"
+      assert content =~ ~s|js.setAttribute(option, "aria-pressed"|
+      assert content =~ ~s|js.setAttribute(stage, "dir", value)|
+      assert content =~ "this.preview.showModal()"
+      assert content =~ ~s|frame.setAttribute("srcdoc", frame.getAttribute("data-document"))|
+      assert content =~ ~s|root.setAttribute("data-theme", theme)|
+      assert content =~ ~s|root.setAttribute("dir", dir)|
+      assert content =~ ~s|frame.setAttribute("width", String(width))|
+      assert content =~ ~s|frame.setAttribute("height", String(Math.max(height, 1)))|
+      assert content =~ "desktop: 1280, tablet: 768, mobile: 375"
+      assert content =~ "new ResizeObserver("
 
-      refute hook["content"] =~
-               ~r/setAttribute\(\s*["']style["']|\.style\b|innerHTML|insertAdjacentHTML|srcdoc\s*=/
+      assert content
+             |> then(&Regex.scan(~r/\.style\.(\w+)\s*=/, &1))
+             |> Enum.map(&List.last/1)
+             |> Enum.uniq() ==
+               ~w(transform width height)
+
+      refute content =~
+               ~r/setAttribute\(\s*[^,]+,\s*["']style["']|\.style\s*=|cssText|innerHTML|insertAdjacentHTML|srcdoc\s*=/
 
       example = Enum.find(components(), &(&1["name"] == "doc-example"))
       example_hook = Enum.find(example["helpers"], &(&1["name"] == "example_hook"))
@@ -668,15 +681,23 @@ defmodule MishkaDocument.KitTest do
       assert example_hook["code"] =~ ~s(name: "doc-example")
     end
 
-    # THE FRAME IS ALL THE EXAMPLE NEEDS AND NOTHING MORE: its page links the site's stylesheet and
-    # carries no script, and the sandbox grants only the same origin the hook reads it through.
-    test "draws its example in a frame that runs nothing" do
+    # THE EXAMPLE IS DRAWN ON THE PAGE, where its components' scripts run; its preview is a frame
+    # that holds all the example needs and nothing more: its page links the site's stylesheet and
+    # carries no script, and the sandbox grants only the same origin the hook reads it through. The
+    # dialog it opens in is the browser's once drawn, so a LiveView patch never closes it.
+    test "draws its example on the page, and a preview in a frame that runs nothing" do
       example = Enum.find(components(), &(&1["name"] == "doc-example"))
+      template = example["template"]
 
-      assert example["template"] =~ ~s(sandbox="allow-same-origin")
-      assert example["template"] =~ ~s(loading="lazy")
-      refute example["template"] =~ "allow-scripts"
-      refute example["template"] =~ ~r/\sstyle=/
+      assert template =~ ~s(data-role="doc-example-body")
+      assert template =~ "{example}"
+      assert template =~ ~s(phx-update="ignore")
+      assert template =~ ~s(<dialog)
+      assert template =~ ~s(sandbox="allow-same-origin")
+      assert template =~ "data-document={document}"
+      refute template =~ "srcdoc"
+      refute template =~ "allow-scripts"
+      refute template =~ ~r/\sstyle=/
 
       page = Enum.find(example["helpers"], &(&1["name"] == "frame_page"))
       refute page["code"] =~ "<script"
