@@ -4002,6 +4002,38 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert marked == ["Installation"]
     end
 
+    # THE CONTENTS KEEP THEIR PLACE ACROSS PAGES through the kit's own hook, mounted on the block's
+    # root under the name the site's JavaScript registers the installed row by, and keyed on the
+    # document the root names.
+    test "mounts the kit's scroll hook on its root, naming its document", %{site: site} do
+      hook =
+        MishkaCmsCore.Runtime.JsHook
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(name == "doc-sidebar-scroll" and site_id == ^site.id)
+        |> Ash.Query.load([:is_global])
+        |> Ash.read_one!()
+
+      assert hook, "installing the kit wrote no doc-sidebar-scroll hook for the site"
+      assert hook.active
+
+      %{document: document} = manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-sidebar", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      root = drawn(view, ~s(#one[data-role="doc-sidebar"]))
+
+      registered =
+        MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name(hook, site.name)
+
+      assert registered == String.capitalize(site.name) <> "DocSidebarScroll"
+      assert LazyHTML.attribute(root, "phx-hook") == [registered]
+      assert LazyHTML.attribute(root, "data-document") == [document.id]
+    end
+
     # NESTING IS THE WHOLE POINT OF A SIDEBAR. A child sits under its parent and is drawn only while
     # that branch is the one the reader is in.
     test "nests a page under its parent and opens the branch the reader is in", %{site: site} do
