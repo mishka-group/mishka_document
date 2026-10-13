@@ -246,6 +246,15 @@ defmodule MishkaDocument.Kit do
   the frame's own page. The example's height is read by a `ResizeObserver` once the browser has laid
   the page out, so mounting the hook reads no layout.
 
+  The `doc-sidebar-scroll` hook keeps a document's contents where the reader left them. `doc-sidebar`
+  mounts it on its own root, under the name `browser_name/2` gives it, with the document's id in
+  `data-document`. The contents scroll in the root's nearest ancestor whose `overflow-y` scrolls, or
+  the root itself; a live navigation draws that box again at its top, and the hook puts it back at
+  the position saved for that block and document in `sessionStorage`, then scrolls the entry marked
+  `aria-current="page"` into it only when it lies outside. The position is saved at most once a
+  frame from a passive scroll listener, and not while the block draws no entries. With no scrolling
+  box the hook does nothing. It writes `scrollTop` alone: no class, no style attribute, no markup.
+
   ### The stylesheet
 
   `doc-code-highlight` colours the code blocks in a page's body. A page is stored with its code
