@@ -57,17 +57,19 @@ defmodule MishkaDocument.Kit do
   Its toolbar — `doc-example-toolbar`, named by `toolbar_label` — turns the example left to right or
   right to left, and its `doc-example-open` button, saying `preview_text`, opens a still preview:
   a `<dialog>` (`doc-example-preview`, opened as a modal) inside a `phx-update="ignore"` element
-  whose id carries a digest of the example, so a LiveView patch never closes it and other content
-  draws a preview of its own. The preview says `preview_note` over a frame whose page is the same
-  `inner_block` turned into HTML: that page links the site's own stylesheet
-  (`MishkaCmsCore.Runtime.Compilers.Shared.site_css_href/1`, for the site the page is rendered
-  for), carries the theme as `<html data-theme>` and the direction as `<html dir>`, and holds no
-  script. The frame is `sandbox="allow-same-origin"` — the hook reads its page from outside — named
-  by `title` or `frame_label`, and carries its page in `data-document` until the preview first
-  opens. The preview's own toolbar (`doc-example-preview-toolbar`) switches its colours, its width
-  — a desktop's 1280 pixels, a tablet's 768 or a phone's 375, scaled down to fit a narrower
-  preview — and the direction, and its `doc-example-close` button, saying `close_text`, Escape and
-  a press on the backdrop close it.
+  whose id carries a digest of the words it is drawn with, so a LiveView patch never closes it and
+  other words draw a preview of their own. The preview says `preview_note` over a frame whose page
+  the hook writes when the preview first opens: it links the site's own stylesheet, which the frame
+  names in `data-stylesheet` (`MishkaCmsCore.Runtime.Compilers.Shared.site_css_href/1`, for the
+  site the page is rendered for), carries the theme as `<html data-theme>` and the direction as
+  `<html dir>`, holds no script, and its body is a copy of the example as the page draws it, taken
+  each time the preview opens. Nothing of that page is drawn with the example, so an example costs
+  a page, and a LiveView patch, its own markup and no more. The frame is
+  `sandbox="allow-same-origin"` — the hook reads its page from outside — and named by `title` or
+  `frame_label`. The preview's own toolbar (`doc-example-preview-toolbar`) switches its colours,
+  its width — a desktop's 1280 pixels, a tablet's 768 or a phone's 375, scaled down to fit a
+  narrower preview — and the direction, and its `doc-example-close` button, saying `close_text`,
+  Escape and a press on the backdrop close it.
 
   `theme` (light, dark; dark by default) and `device` (desktop, tablet, mobile; desktop) are what
   the preview is first drawn with, and `dir` (ltr, rtl; ltr) is what the example is first drawn
@@ -84,10 +86,8 @@ defmodule MishkaDocument.Kit do
   `data-collapsible` onto the root — again whenever the body changes size — and the button writes
   `data-expanded`. The cut clips only the example's height, so a popup still reaches past its sides.
 
-  A component that keeps state is drawn by LiveView on the page and is never HTML a frame could
-  hold: an example holding one is drawn on the page like any other, and its preview draws
-  `stateful_text` in place of its frame. A preview of a page's content, which draws every component
-  cold into a string, draws the example and its frame the same way.
+  An example holding a component that keeps state is drawn on the page like any other, and its
+  preview copies what the page draws of it.
 
   They draw themselves in plain HTML and Tailwind and call no other kit. A site that installed this
   extension and skipped Chelekom renders them; the components a documentation page is made of cannot
@@ -236,13 +236,15 @@ defmodule MishkaDocument.Kit do
   own root, under the name `MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`
   gives it. A press writes the choice onto the root's `data-frame-*`, the buttons' `aria-pressed`
   and, for a direction, the stage's `dir`, through the hook's JS commands, which a LiveView patch
-  keeps, and onto the frame's `<html>`. Opening the preview hands the frame its page and calls
-  `showModal/0`. The frame is drawn at its device's width and its page's height through its `width`
-  and `height` attributes — measured when the page loads, its fonts and pictures arrive, the
-  preview's width changes and after every choice — and scaled down to the preview's width through
-  CSSOM properties set from script, never a style attribute, so a site's CSP has nothing to refuse.
-  A link pressed in the frame closes the preview and leads the page itself there. No class and no
-  markup is written.
+  keeps, and onto the frame's `<html>`. Opening the preview writes the frame's page the first time,
+  copies the example on the page into its body every time, and calls `showModal/0`. The frame is
+  drawn at its device's width and its page's height through its `width` and `height` attributes —
+  measured when the page loads, its fonts and pictures arrive, the preview's width changes and
+  after every choice — and scaled down to the preview's width through CSSOM properties set from
+  script, never a style attribute, so a site's CSP has nothing to refuse. A link pressed in the
+  frame closes the preview and leads the page itself there. No class is written, and no markup but
+  the frame's own page. The example's height is read by a `ResizeObserver` once the browser has laid
+  the page out, so mounting the hook reads no layout.
 
   ### The stylesheet
 

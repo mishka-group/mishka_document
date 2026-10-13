@@ -654,7 +654,11 @@ defmodule MishkaDocument.KitTest do
       assert content =~ ~s|js.setAttribute(option, "aria-pressed"|
       assert content =~ ~s|js.setAttribute(stage, "dir", value)|
       assert content =~ "this.preview.showModal()"
-      assert content =~ ~s|frame.setAttribute("srcdoc", frame.getAttribute("data-document"))|
+      assert content =~ ~s|frame.setAttribute("srcdoc", this.skeleton())|
+      assert content =~ "page.importNode(node, true)"
+      assert content =~ ~s|this.frame.getAttribute("data-stylesheet")|
+      refute content =~ "data-document"
+      refute content =~ "<script"
       assert content =~ ~s|root.setAttribute("data-theme", theme)|
       assert content =~ ~s|root.setAttribute("dir", dir)|
       assert content =~ ~s|frame.setAttribute("width", String(width))|
@@ -684,27 +688,29 @@ defmodule MishkaDocument.KitTest do
     end
 
     # THE EXAMPLE IS DRAWN ON THE PAGE, where its components' scripts run; its preview is a frame
-    # that holds all the example needs and nothing more: its page links the site's stylesheet and
-    # carries no script, and the sandbox grants only the same origin the hook reads it through. The
-    # dialog it opens in is the browser's once drawn, so a LiveView patch never closes it.
+    # that holds all the example needs and nothing more: the page the hook writes into it links the
+    # site's stylesheet the frame names and carries no script, and the sandbox grants only the same
+    # origin the hook reads it through. Nothing of that page is drawn with the example: the hook
+    # builds it when the preview opens. The dialog it opens in is the browser's once drawn, so a
+    # LiveView patch never closes it.
     test "draws its example on the page, and a preview in a frame that runs nothing" do
       example = Enum.find(components(), &(&1["name"] == "doc-example"))
       template = example["template"]
 
       assert template =~ ~s(data-role="doc-example-body")
-      assert template =~ "{example}"
+      assert template =~ "{render_slot(@inner_block)}"
       assert template =~ ~s(phx-update="ignore")
       assert template =~ ~s(<dialog)
       assert template =~ ~s(sandbox="allow-same-origin")
-      assert template =~ "data-document={document}"
+      assert template =~ "data-stylesheet={stylesheet_href()}"
+      refute template =~ "data-document"
       refute template =~ "srcdoc"
       refute template =~ "allow-scripts"
       refute template =~ ~r/\sstyle=/
 
-      page = Enum.find(example["helpers"], &(&1["name"] == "frame_page"))
-      refute page["code"] =~ "<script"
+      refute Enum.any?(example["helpers"], &(&1["code"] =~ "Phoenix.HTML.Safe.to_iodata"))
 
-      link = Enum.find(example["helpers"], &(&1["name"] == "stylesheet_link"))
+      link = Enum.find(example["helpers"], &(&1["name"] == "stylesheet_href"))
       assert link["code"] =~ "MishkaCmsCore.Runtime.Compilers.Shared.site_css_href("
     end
 
