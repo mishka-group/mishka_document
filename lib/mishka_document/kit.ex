@@ -50,32 +50,44 @@ defmodule MishkaDocument.Kit do
   ### The example
 
   `[[component doc-example title="…"]]` around the markers of the components an example is made
-  of, then `[[/component]]`. Its `inner_block` is turned into HTML and drawn as the page of an
-  `<iframe srcdoc>`: that page links the site's own stylesheet
-  (`MishkaCmsCore.Runtime.Compilers.Shared.site_css_href/1`, for the site the page is rendered
-  for), carries the example's theme as `<html data-theme>` and its direction as `<html dir>`, and
-  holds no script. The frame is `sandbox="allow-same-origin"` — the hook reads its page from
-  outside — and `loading="lazy"`, named by `title` or `frame_label`.
+  of, then `[[/component]]`. Its `inner_block` is drawn on the page itself, in the example's
+  `doc-example-stage` and its `doc-example-body`, so the components' own hooks, events, popups and
+  breakpoints work there as anywhere on the page, in the page's own colours.
 
-  `theme` (light, dark; dark by default), `device` (desktop, tablet, mobile; desktop) and `dir`
-  (ltr, rtl; ltr) are what it is first drawn with, carried on its root as `data-frame-theme`,
-  `data-frame-device` and `data-frame-dir`; the frame is the page's whole width, 768 or 375
-  pixels, centred, and scrolls sideways in a narrower page. A toolbar over it —
-  `doc-example-toolbar`, its buttons `doc-example-option` with a `data-action` of theme, device or
-  dir, a `data-value` and `aria-pressed` — switches them. Every element says what it is in its
-  `data-role` for a site's stylesheet to restyle.
+  Its toolbar — `doc-example-toolbar`, named by `toolbar_label` — turns the example left to right or
+  right to left, and its `doc-example-open` button, saying `preview_text`, opens a still preview:
+  a `<dialog>` (`doc-example-preview`, opened as a modal) inside a `phx-update="ignore"` element
+  whose id carries a digest of the example, so a LiveView patch never closes it and other content
+  draws a preview of its own. The preview says `preview_note` over a frame whose page is the same
+  `inner_block` turned into HTML: that page links the site's own stylesheet
+  (`MishkaCmsCore.Runtime.Compilers.Shared.site_css_href/1`, for the site the page is rendered
+  for), carries the theme as `<html data-theme>` and the direction as `<html dir>`, and holds no
+  script. The frame is `sandbox="allow-same-origin"` — the hook reads its page from outside — named
+  by `title` or `frame_label`, and carries its page in `data-document` until the preview first
+  opens. The preview's own toolbar (`doc-example-preview-toolbar`) switches its colours, its width
+  — a desktop's 1280 pixels, a tablet's 768 or a phone's 375, scaled down to fit a narrower
+  preview — and the direction, and its `doc-example-close` button, saying `close_text`, Escape and
+  a press on the backdrop close it.
+
+  `theme` (light, dark; dark by default) and `device` (desktop, tablet, mobile; desktop) are what
+  the preview is first drawn with, and `dir` (ltr, rtl; ltr) is what the example is first drawn
+  with on the page and in the preview, carried on its root as `data-frame-theme`,
+  `data-frame-device` and `data-frame-dir`, and `dir` on the stage. Each choice is a
+  `doc-example-option` button with a `data-action` of theme, device or dir, a `data-value` and
+  `aria-pressed`. Every element says what it is in its `data-role` for a site's stylesheet to
+  restyle. Drawn without an id the example has no toolbar and no preview.
 
   An example taller than `collapse_height` pixels (320; 240, 400, 480 or 640, and 0 cuts none) is
   cut at that height under a fade until the `doc-example-expand` button in the `doc-example-foot`
   under it shows all of it, saying `expand_text` and then `collapse_text`. The root carries the
-  height as `data-collapse-height`; the hook measures the frame and writes `data-collapsible` onto
-  the root — again whenever a choice changes the example's height — and the button writes
-  `data-expanded`. The frame keeps its whole height inside the cut, and the toolbar works while it
-  is cut.
+  height as `data-collapse-height`; the hook measures the example's body and writes
+  `data-collapsible` onto the root — again whenever the body changes size — and the button writes
+  `data-expanded`. The cut clips only the example's height, so a popup still reaches past its sides.
 
   A component that keeps state is drawn by LiveView on the page and is never HTML a frame could
-  hold: an example holding one draws `stateful_text` in place of its frame on a live page. A
-  preview, which draws every component cold into a string, draws it in the frame.
+  hold: an example holding one is drawn on the page like any other, and its preview draws
+  `stateful_text` in place of its frame. A preview of a page's content, which draws every component
+  cold into a string, draws the example and its frame the same way.
 
   They draw themselves in plain HTML and Tailwind and call no other kit. A site that installed this
   extension and skipped Chelekom renders them; the components a documentation page is made of cannot
@@ -222,13 +234,15 @@ defmodule MishkaDocument.Kit do
 
   The `doc-example` hook answers an example's toolbar. The component of that name mounts it on its
   own root, under the name `MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`
-  gives it. A press writes
-  the choice onto the root's `data-frame-*` and the buttons' `aria-pressed` through the hook's JS
-  commands, which a LiveView patch keeps, and onto the frame's `<html>`; the frame's width is the
-  stylesheet's, keyed on `data-frame-device`. It keeps the frame as tall as its page through the
-  frame's `height` attribute — when the page loads, its fonts arrive, the frame's width changes and
-  after every choice — and leads a link pressed in the frame to the page itself. No style
-  attribute, no class and no markup is written.
+  gives it. A press writes the choice onto the root's `data-frame-*`, the buttons' `aria-pressed`
+  and, for a direction, the stage's `dir`, through the hook's JS commands, which a LiveView patch
+  keeps, and onto the frame's `<html>`. Opening the preview hands the frame its page and calls
+  `showModal/0`. The frame is drawn at its device's width and its page's height through its `width`
+  and `height` attributes — measured when the page loads, its fonts and pictures arrive, the
+  preview's width changes and after every choice — and scaled down to the preview's width through
+  CSSOM properties set from script, never a style attribute, so a site's CSP has nothing to refuse.
+  A link pressed in the frame closes the preview and leads the page itself there. No class and no
+  markup is written.
 
   ### The stylesheet
 
