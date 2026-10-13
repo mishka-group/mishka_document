@@ -217,6 +217,58 @@ defmodule MishkaDocument.Test.SectionFrontPageTest do
     end
   end
 
+  # A GROUP WITH A PAGE OF ITS OWN is read at its slug, while the pages under it still leave that
+  # slug out: a page under it of the same slug would be read at the group's own address.
+  describe "a group with a page of its own" do
+    test "is a group marked as having one", ctx do
+      assert {:ok, %{group_heading: true, group_page: true}} =
+               create(ctx, %{group_heading: true, group_page: true})
+
+      assert {:ok, %{group_page: false}} = create(ctx, %{slug: "plain"})
+    end
+
+    test "refuses a page under it of its own slug, which a group with no page allows", ctx do
+      {:ok, group} =
+        create(ctx, %{
+          group_heading: true,
+          group_page: true,
+          slug: "navigation",
+          title: "Navigation"
+        })
+
+      assert {:error, error} = create(ctx, %{slug: "navigation", parent_section_id: group.id})
+
+      assert Enum.any?(
+               messages(error),
+               &(&1 =~ "The page Navigation of this version is read at /navigation too")
+             )
+
+      assert {:ok, _breadcrumb} = create(ctx, %{slug: "breadcrumb", parent_section_id: group.id})
+
+      {:ok, plain} = create(ctx, %{group_heading: true, slug: "feedback"})
+      assert {:ok, _same} = create(ctx, %{slug: "feedback", parent_section_id: plain.id})
+    end
+
+    test "refuses a top page of its slug, and the page turned on over one", ctx do
+      {:ok, _group} = create(ctx, %{group_heading: true, group_page: true, slug: "navigation"})
+      assert {:error, _clash} = create(ctx, %{slug: "navigation"})
+
+      {:ok, media} = create(ctx, %{group_heading: true, slug: "media"})
+      {:ok, _under} = create(ctx, %{slug: "media", parent_section_id: media.id})
+
+      assert {:error, error} = write(ctx, media, %{group_page: true})
+      assert Enum.any?(messages(error), &(&1 =~ "is read at /media too"))
+    end
+
+    test "keeps the pages under it at their address", ctx do
+      {:ok, group} = create(ctx, %{group_heading: true, group_page: true, slug: "navigation"})
+      {:ok, _top} = create(ctx, %{slug: "breadcrumb", title: "Breadcrumb"})
+
+      assert {:error, error} = create(ctx, %{slug: "breadcrumb", parent_section_id: group.id})
+      assert Enum.any?(messages(error), &(&1 =~ "is read at /breadcrumb too"))
+    end
+  end
+
   test "the admin form marks it with a toggle, after Parent Section" do
     field = FormInfo.field(Section, :front_page)
 
@@ -233,5 +285,12 @@ defmodule MishkaDocument.Test.SectionFrontPageTest do
     group = FormInfo.field(Section, :group_heading)
     assert group, "the form has no Group field"
     assert group.type == :toggle
+
+    assert [_, _, :parent_section_id, :front_page, :group_heading, :group_page | _] =
+             references.fields
+
+    page = FormInfo.field(Section, :group_page)
+    assert page, "the form has no Group page field"
+    assert page.type == :toggle
   end
 end

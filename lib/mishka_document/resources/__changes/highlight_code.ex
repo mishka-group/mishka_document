@@ -1,6 +1,6 @@
 defmodule MishkaDocument.Resources.Changes.HighlightCode do
   @moduledoc """
-  Highlights the code blocks of a page's `content` — a section's or a section draft's — with Makeup,
+  Highlights the code blocks of a page's `content` — a section's, a note's or a draft of either — with Makeup,
   once, when it is written.
 
   A block is a `<pre>` holding one `<code class="language-x">` whose code is still plain text, and

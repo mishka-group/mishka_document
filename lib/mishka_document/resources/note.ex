@@ -320,7 +320,7 @@ defmodule MishkaDocument.Note do
       validator: {MishkaCmsCore.PlainText, :field},
       derives: "sanitize(trim) validate(string, not_empty, min_len=1, max_len=500)"
 
-    field :content, :string, derives: "sanitize(basic_html) validate(string, not_empty)"
+    field :content, :string, derives: "sanitize(html5) validate(string, not_empty)"
 
     field :order_position, :integer, derives: "validate(optional=[integer, min_len=0])"
 
@@ -378,7 +378,9 @@ defmodule MishkaDocument.Note do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
 
-      # Stores the components the sanitized content names, before the row is written.
+      # Highlights the code blocks of the sanitized content, before the row is written, and stores
+      # the components it names.
+      change MishkaDocument.Resources.Changes.HighlightCode
       change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
@@ -400,6 +402,7 @@ defmodule MishkaDocument.Note do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
+      change MishkaDocument.Resources.Changes.HighlightCode
       change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
@@ -420,6 +423,7 @@ defmodule MishkaDocument.Note do
                 field: :section_id, resource: MishkaDocument.Section},
                where: [changing(:section_id)]
 
+      change MishkaDocument.Resources.Changes.HighlightCode
       change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
@@ -441,6 +445,7 @@ defmodule MishkaDocument.Note do
         message dgettext_noop("errors", "Cannot edit archived note. Please unarchive it first.")
       end
 
+      change MishkaDocument.Resources.Changes.HighlightCode
       change MishkaDocument.Resources.Changes.ContentFacts
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
@@ -760,6 +765,14 @@ defmodule MishkaDocument.Note do
       allow_nil? true
       public? false
       description "The icon classes the content names, nil when it names none"
+    end
+
+    # WORKED OUT WITH THE CONTENT, never written by hand nor on a read —
+    # `MishkaDocument.Resources.Changes.ContentFacts`.
+    attribute :content_classes, {:array, :string} do
+      allow_nil? true
+      public? false
+      description "The classes the content writes, nil when it writes none"
     end
 
     attribute :order_position, :integer do

@@ -602,6 +602,26 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       page = answer(in_group(site, %{"section" => "breadcrumb"}))
       assert {page.title, page.url} == {"Breadcrumb", base() <> "/product/docs/breadcrumb"}
     end
+
+    test "names a group with a page of its own at its slug", %{site: site} do
+      [version] =
+        MishkaDocument.WorkspaceVersion
+        |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
+        |> Ash.read!(tenant: site.id)
+
+      overlays =
+        page!(site, version, "overlays", title: "Overlays", group_heading: true, group_page: true)
+
+      page!(site, version, "modal", title: "Modal", parent_section_id: overlays.id)
+
+      page = answer(in_group(site, %{"section" => "overlays"}))
+      assert {page.title, page.url} == {"Overlays", base() <> "/product/docs/overlays"}
+
+      page = answer(in_group(site, %{"section" => "modal"}))
+      assert {page.title, page.url} == {"Modal", base() <> "/product/docs/modal"}
+
+      assert answer(in_group(site, %{"section" => "overlays/modal"})).title == "Document page"
+    end
   end
 
   describe "who may open it" do
