@@ -140,6 +140,35 @@ defmodule MishkaDocument.ShareCardsTest do
       assert ShareCards.target(group) == nil
       assert {:record, "docs:page", %{"section" => "breadcrumb"}} = ShareCards.target(crumb)
     end
+
+    test "a group with a page of its own has its card at its slug", %{
+      site: site,
+      version: version
+    } do
+      group =
+        create_section!(
+          [
+            site_id: site.id,
+            workspace_version_id: version.id,
+            slug: "navigation",
+            group_heading: true,
+            group_page: true
+          ] ++ approved()
+        )
+
+      crumb =
+        create_section!(
+          [
+            site_id: site.id,
+            workspace_version_id: version.id,
+            slug: "breadcrumb",
+            parent_section_id: group.id
+          ] ++ approved()
+        )
+
+      assert {:record, "docs:page", %{"section" => "navigation"}} = ShareCards.target(group)
+      assert {:record, "docs:page", %{"section" => "breadcrumb"}} = ShareCards.target(crumb)
+    end
   end
 
   test "each plugin looks at its own record's card after it is saved, and only while it is shown",

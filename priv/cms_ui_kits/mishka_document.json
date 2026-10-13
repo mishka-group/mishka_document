@@ -432,7 +432,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  phx-hook={copy_hook()}\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_document == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_document != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @section == nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <.doc_extras\n      :if={@extras.header != []}\n      facts={@extras.header}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n\n    <.doc_tab_bar\n      :if={@extras.tabs != []}\n      id={@id}\n      extras={@extras}\n      open={open_tab(@extras, @shown_tab)}\n      docs_tab_text={@docs_tab_text}\n      tabs_label={@tabs_label}\n    />\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={landing_pages(@sections) != []}\n      data-role=\"doc-landing-items\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              landing_pages(@sections),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n\n    <section\n      :for={group <- landing_groups(@sections)}\n      id={\"#{@id}-group-#{group.id}\"}\n      data-role=\"doc-landing-group\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-6\"\n    >\n      <h2\n        data-role=\"doc-landing-group-title\"\n        class=\"text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n      >\n        {group.title}\n      </h2>\n\n      <ul class=\"mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2\">\n        <li\n          :for={\n            {page, href} <-\n              page_links(\n                group_pages(@sections, group),\n                @sections,\n                @doc_base,\n                @document,\n                @lang_param,\n                version_query(@version, @latest, @version_param)\n              )\n          }\n          id={\"#{@id}-root-#{page.id}\"}\n        >\n          <.link\n            :if={href}\n            navigate={href}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n          >\n            {page.title}\n          </.link>\n\n          <span\n            :if={is_nil(href)}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n          >\n            {page.title}\n          </span>\n        </li>\n      </ul>\n    </section>\n\n    <.doc_tab_panels\n      :if={@extras.tabs != []}\n      id={@id}\n      tabs={@extras.tabs}\n      open={open_tab(@extras, @shown_tab)}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != [] or (@crumb_current and @show_breadcrumb)}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n\n      <span :if={@crumb_current} data-role=\"doc-section-crumb\" aria-current=\"page\">\n        {@section.title}\n      </span>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <.doc_extras\n      :if={@extras.header != []}\n      facts={@extras.header}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n\n    <.doc_tab_bar\n      :if={@extras.tabs != []}\n      id={@id}\n      extras={@extras}\n      open={open_tab(@extras, @shown_tab)}\n      docs_tab_text={@docs_tab_text}\n      tabs_label={@tabs_label}\n    />\n\n    <%!-- A callout and an example an author places in a page's text are drawn by rich_content below,\n    so this block names them for the site's stylesheet: component_name=\"doc-callout\"\n    component_name=\"doc-example\" --%>\n    <%!-- The page's own text takes these styles, and a note's the same: an element with no class, and\n    nothing with a class between it and the body. A component drawn in the text carries classes, so\n    none of them reach its markup. --%>\n    <div\n      data-role=\"doc-section-body\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class={[\n        \"prose prose-sm max-w-none leading-relaxed\",\n        \"[&_a:not([class],&_[class]_*)]:underline\",\n        \"[&_h2:not([class],&_[class]_*)]:mb-2 [&_h2:not([class],&_[class]_*)]:mt-5\",\n        \"[&_h2:not([class],&_[class]_*)]:text-lg [&_h2:not([class],&_[class]_*)]:font-bold\",\n        \"[&_h3:not([class],&_[class]_*)]:mt-4 [&_h3:not([class],&_[class]_*)]:font-semibold\",\n        \"[&_img:not([class],&_[class]_*)]:rounded-lg\",\n        \"[&_li:not([class],&_[class]_*)]:ml-5\",\n        \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n        \"[&_p:not([class],&_[class]_*)]:mb-3\"\n      ]}\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div\n      :if={@show_notes and @notes != []}\n      data-role=\"doc-section-notes\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-6 space-y-5\"\n    >\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class={[\n            \"prose prose-sm max-w-none leading-relaxed\",\n            \"[&_a:not([class],&_[class]_*)]:underline\",\n            \"[&_li:not([class],&_[class]_*)]:ml-5\",\n            \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n            \"[&_p:not([class],&_[class]_*)]:mb-3\",\n            \"[&_code:not([class],&_[class]_*)]:rounded [&_code:not([class],&_[class]_*)]:bg-[#f0efea] [&_code:not([class],&_[class]_*)]:px-1\"\n          ]}\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <.doc_tab_panels\n      :if={@extras.tabs != []}\n      id={@id}\n      tabs={@extras.tabs}\n      open={open_tab(@extras, @shown_tab)}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-section\"\n  phx-hook={copy_hook()}\n  lang={(@document && @document.language) || nil}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <.component\n    :if={@document == nil and @asked_document == \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-idle\"\n    text={@idle_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={@document == nil and @asked_document != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <.component\n    :if={@document != nil and @section == nil and @wanted_slug != \"\"}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-section-missing\"\n    text={@missing_text}\n  />\n\n  <section\n    :if={@document != nil and @section == nil and @wanted_slug == \"\"}\n    data-role=\"doc-section-landing\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <h1 data-role=\"doc-landing-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n      {@document.name}\n    </h1>\n\n    <p\n      :if={@document.description}\n      data-role=\"doc-landing-description\"\n      class=\"mt-2 max-w-prose text-sm leading-relaxed text-[#6d6a63]\"\n    >\n      {@document.description}\n    </p>\n\n    <.doc_extras\n      :if={@extras.header != []}\n      facts={@extras.header}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n\n    <.doc_tab_bar\n      :if={@extras.tabs != []}\n      id={@id}\n      extras={@extras}\n      open={open_tab(@extras, @shown_tab)}\n      docs_tab_text={@docs_tab_text}\n      tabs_label={@tabs_label}\n    />\n\n    <p\n      :if={@sections == []}\n      data-role=\"doc-landing-empty\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-5 text-sm text-[#8a877f]\"\n    >\n      {@empty_text}\n    </p>\n\n    <ul\n      :if={landing_pages(@sections) != []}\n      data-role=\"doc-landing-items\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2\"\n    >\n      <li\n        :for={\n          {page, href} <-\n            page_links(\n              landing_pages(@sections),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        id={\"#{@id}-root-#{page.id}\"}\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n        >\n          {page.title}\n        </.link>\n\n        <span\n          :if={is_nil(href)}\n          data-role=\"doc-landing-link\"\n          class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n        >\n          {page.title}\n        </span>\n      </li>\n    </ul>\n\n    <section\n      :for={group <- landing_groups(@sections)}\n      id={\"#{@id}-group-#{group.id}\"}\n      data-role=\"doc-landing-group\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-6\"\n    >\n      <h2\n        data-role=\"doc-landing-group-title\"\n        class=\"text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n      >\n        <div\n          :for={\n            {_group, href} <-\n              page_links(\n                [group],\n                @sections,\n                @doc_base,\n                @document,\n                @lang_param,\n                version_query(@version, @latest, @version_param)\n              )\n          }\n          class=\"contents\"\n        >\n          <.link\n            :if={href}\n            navigate={href}\n            data-role=\"doc-landing-group-link\"\n            class=\"hover:text-[#5b57d6] hover:underline\"\n          >\n            {group.title}\n          </.link>\n\n          <span :if={is_nil(href)}>{group.title}</span>\n        </div>\n      </h2>\n\n      <ul class=\"mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2\">\n        <li\n          :for={\n            {page, href} <-\n              page_links(\n                group_pages(@sections, group),\n                @sections,\n                @doc_base,\n                @document,\n                @lang_param,\n                version_query(@version, @latest, @version_param)\n              )\n          }\n          id={\"#{@id}-root-#{page.id}\"}\n        >\n          <.link\n            :if={href}\n            navigate={href}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold hover:border-[#5b57d6] hover:text-[#5b57d6]\"\n          >\n            {page.title}\n          </.link>\n\n          <span\n            :if={is_nil(href)}\n            data-role=\"doc-landing-link\"\n            class=\"block rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm font-semibold\"\n          >\n            {page.title}\n          </span>\n        </li>\n      </ul>\n    </section>\n\n    <.doc_tab_panels\n      :if={@extras.tabs != []}\n      id={@id}\n      tabs={@extras.tabs}\n      open={open_tab(@extras, @shown_tab)}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n  </section>\n\n  <article\n    :if={@section != nil}\n    data-role=\"doc-section-article\"\n    class=\"rounded-[18px] border border-[#ecebe6] bg-white p-5 sm:p-7\"\n  >\n    <nav\n      :if={@crumbs != [] or (@crumb_current and @show_breadcrumb)}\n      data-role=\"doc-section-breadcrumb\"\n      aria-label=\"Breadcrumb\"\n      class=\"mb-3 flex flex-wrap items-center gap-1 text-xs text-[#8a877f]\"\n    >\n      <div\n        :for={\n          {crumb, href} <-\n            page_links(\n              @crumbs,\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link\n          :if={href}\n          navigate={href}\n          data-role=\"doc-section-crumb\"\n          class=\"after:ml-1 after:content-['/'] hover:underline\"\n        >\n          {crumb.title}\n        </.link>\n\n        <span :if={is_nil(href)} data-role=\"doc-section-crumb\" class=\"after:ml-1 after:content-['/']\">\n          {crumb.title}\n        </span>\n      </div>\n\n      <span :if={@crumb_current} data-role=\"doc-section-crumb\" aria-current=\"page\">\n        {@section.title}\n      </span>\n    </nav>\n\n    <div class=\"mb-4 flex flex-wrap items-baseline justify-between gap-3\">\n      <h1 data-role=\"doc-section-title\" class=\"text-2xl font-bold leading-tight sm:text-3xl\">\n        {@section.title}\n      </h1>\n\n      <span\n        :if={@show_version and @section.change_version}\n        data-role=\"doc-section-version\"\n        class=\"rounded-full border border-[#ecebe6] px-2 py-0.5 text-[11px] font-semibold text-[#8a877f]\"\n      >\n        v{@section.change_version}\n      </span>\n    </div>\n\n    <.doc_extras\n      :if={@extras.header != []}\n      facts={@extras.header}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n\n    <.doc_tab_bar\n      :if={@extras.tabs != []}\n      id={@id}\n      extras={@extras}\n      open={open_tab(@extras, @shown_tab)}\n      docs_tab_text={@docs_tab_text}\n      tabs_label={@tabs_label}\n    />\n\n    <%!-- A callout, an example and the cards of the pages under a page, which an author places in a\n    page's text, are drawn by rich_content below, so this block names them for the site's\n    stylesheet: component_name=\"doc-callout\" component_name=\"doc-example\"\n    component_name=\"doc-section-cards\" --%>\n    <%!-- The page's own text takes these styles, and a note's the same: an element with no class, and\n    nothing with a class between it and the body. A component drawn in the text carries classes, so\n    none of them reach its markup. --%>\n    <div\n      data-role=\"doc-section-body\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class={[\n        \"prose prose-sm max-w-none leading-relaxed\",\n        \"[&_a:not([class],&_[class]_*)]:underline\",\n        \"[&_h2:not([class],&_[class]_*)]:mb-2 [&_h2:not([class],&_[class]_*)]:mt-5\",\n        \"[&_h2:not([class],&_[class]_*)]:text-lg [&_h2:not([class],&_[class]_*)]:font-bold\",\n        \"[&_h3:not([class],&_[class]_*)]:mt-4 [&_h3:not([class],&_[class]_*)]:font-semibold\",\n        \"[&_img:not([class],&_[class]_*)]:rounded-lg\",\n        \"[&_li:not([class],&_[class]_*)]:ml-5\",\n        \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n        \"[&_p:not([class],&_[class]_*)]:mb-3\"\n      ]}\n    >\n      <.rich_content\n        id={\"#{@id}-body\"}\n        html={@body}\n        site={site_name()}\n        current_user={@current_user}\n      />\n    </div>\n\n    <div\n      :if={@show_notes and @notes != []}\n      data-role=\"doc-section-notes\"\n      hidden={open_tab(@extras, @shown_tab) != \"\"}\n      class=\"mt-6 space-y-5\"\n    >\n      <section\n        :for={note <- @notes}\n        id={note.anchor}\n        data-role=\"doc-section-note\"\n        class=\"scroll-mt-24 rounded-[14px] border border-[#ecebe6] bg-[#fbfbf9] p-4\"\n      >\n        <h2 data-role=\"doc-note-title\" class=\"mb-2 text-base font-bold leading-tight\">\n          {note.title}\n        </h2>\n\n        <div\n          data-role=\"doc-note-body\"\n          class={[\n            \"prose prose-sm max-w-none leading-relaxed\",\n            \"[&_a:not([class],&_[class]_*)]:underline\",\n            \"[&_li:not([class],&_[class]_*)]:ml-5\",\n            \"[&_ul>li:not([class],&_[class]_*)]:list-disc [&_ol>li:not([class],&_[class]_*)]:list-decimal\",\n            \"[&_p:not([class],&_[class]_*)]:mb-3\",\n            \"[&_code:not([class],&_[class]_*)]:rounded [&_code:not([class],&_[class]_*)]:bg-[#f0efea] [&_code:not([class],&_[class]_*)]:px-1\"\n          ]}\n        >\n          <.rich_content\n            id={\"#{@id}-#{note.anchor}\"}\n            html={note.html}\n            site={site_name()}\n            current_user={@current_user}\n          />\n        </div>\n      </section>\n    </div>\n\n    <.doc_tab_panels\n      :if={@extras.tabs != []}\n      id={@id}\n      tabs={@extras.tabs}\n      open={open_tab(@extras, @shown_tab)}\n      copy_text={@copy_text}\n      copied_text={@copied_text}\n      copy_label={@copy_label}\n    />\n\n    <nav\n      :if={@show_pager and (@previous != nil or @next != nil)}\n      data-role=\"doc-section-pager\"\n      aria-label=\"Pages of this document\"\n      class=\"mt-8 flex flex-wrap items-stretch justify-between gap-3 border-t border-[#ecebe6] pt-4\"\n    >\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@previous),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-prev\" class=\"rounded-[12px] border border-[#ecebe6] px-3 py-2 text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@previous_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n\n      <div\n        :for={\n          {page, href} <-\n            page_links(\n              List.wrap(@next),\n              @sections,\n              @doc_base,\n              @document,\n              @lang_param,\n              version_query(@version, @latest, @version_param)\n            )\n        }\n        class=\"contents\"\n      >\n        <.link :if={href} navigate={href} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm hover:border-[#5b57d6]\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </.link>\n\n        <div :if={is_nil(href)} data-role=\"doc-section-next\" class=\"ml-auto rounded-[12px] border border-[#ecebe6] px-3 py-2 text-end text-sm\">\n          <span class=\"block text-[11px] uppercase tracking-[0.08em] text-[#8a877f]\">\n            {@next_text}\n          </span>\n          <span class=\"block font-semibold\">{page.title}</span>\n        </div>\n      </div>\n    </nav>\n  </article>\n</div>\n",
       "attrs": [
         {
           "name": "workspace",
@@ -759,7 +759,7 @@
         {
           "name": "page_links",
           "args": "pages, sections, base, document, lang_param, extra",
-          "code": "# EACH PAGE OF `document` WITH ITS ADDRESS, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`), or a group, which is only a heading — so the template\n# draws that page as a word rather than as a link to nothing. A page's address holds the pages it is\n# filed under (`section_paths/1`).\npaths = section_paths(sections)\n\nEnum.map(pages, fn\n  %{group_heading: true} = group ->\n    {group, nil}\n\n  page ->\n    {page, document_href(base, document, Map.get(paths, page.id, [page.slug]), lang_param, extra)}\nend)\n"
+          "code": "# EACH PAGE OF `document` WITH ITS ADDRESS, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`), or a group with no page of its own, which is only a\n# heading — so the template draws that page as a word rather than as a link to nothing. A page's\n# address holds the pages it is filed under (`section_paths/1`).\npaths = section_paths(sections)\n\nEnum.map(pages, fn page ->\n  case page.group_heading == true and page.group_page != true do\n    true ->\n      {page, nil}\n\n    false ->\n      {page, document_href(base, document, Map.get(paths, page.id, [page.slug]), lang_param, extra)}\n  end\nend)\n"
         },
         {
           "name": "version_query",
@@ -814,7 +814,7 @@
         {
           "name": "sections_of",
           "args": "version, visitor",
-          "code": "# EVERY APPROVED PAGE OF THE VERSION, unpaged: the trail above a page, the pages either side of it\n# and the document's own front page are all read off this one list, and a list that stopped at the\n# twentieth would give a document of thirty pages a front page missing ten of them.\nrequire Ash.Query\n\ncase version do\n  nil ->\n    []\n\n  %{id: id} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(\n      :public_list_at_workspace_version,\n      %{workspace_version_id: id},\n      read_as(visitor)\n    )\n    |> Ash.Query.select([\n      :id,\n      :title,\n      :slug,\n      :order_position,\n      :parent_section_id,\n      :front_page,\n      :group_heading,\n      :language,\n      :change_version\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.sort_by(&{&1.order_position || 0, &1.title, &1.id})\nend\n"
+          "code": "# EVERY APPROVED PAGE OF THE VERSION, unpaged: the trail above a page, the pages either side of it\n# and the document's own front page are all read off this one list, and a list that stopped at the\n# twentieth would give a document of thirty pages a front page missing ten of them.\nrequire Ash.Query\n\ncase version do\n  nil ->\n    []\n\n  %{id: id} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(\n      :public_list_at_workspace_version,\n      %{workspace_version_id: id},\n      read_as(visitor)\n    )\n    |> Ash.Query.select([\n      :id,\n      :title,\n      :slug,\n      :order_position,\n      :parent_section_id,\n      :front_page,\n      :group_heading,\n      :group_page,\n      :language,\n      :change_version\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.sort_by(&{&1.order_position || 0, &1.title, &1.id})\nend\n"
         },
         {
           "name": "section_body",
@@ -909,7 +909,7 @@
         {
           "name": "reading_order",
           "args": "sections",
-          "code": "# THE ORDER A READER GOES THROUGH A DOCUMENT IN — a page, then the pages filed under it, then the\n# next page beside it, which is the order `doc-sidebar` draws them in. Taking the flat list instead\n# puts a child of the first chapter between two chapters, because a page's position is counted among\n# its siblings and not among its uncles, and Next then leaves the chapter the reader is in. A group\n# is no stop on the way: it has no page to read.\nby_id = Map.new(sections, &{&1.id, &1})\n\nsections\n|> Enum.group_by(&effective_parent(by_id, &1))\n|> descend(nil, 0)\n|> Enum.reject(&(&1.group_heading == true))\n"
+          "code": "# THE ORDER A READER GOES THROUGH A DOCUMENT IN — a page, then the pages filed under it, then the\n# next page beside it, which is the order `doc-sidebar` draws them in. Taking the flat list instead\n# puts a child of the first chapter between two chapters, because a page's position is counted among\n# its siblings and not among its uncles, and Next then leaves the chapter the reader is in. A group\n# is no stop on the way, unless it has a page of its own to read.\nby_id = Map.new(sections, &{&1.id, &1})\n\nsections\n|> Enum.group_by(&effective_parent(by_id, &1))\n|> descend(nil, 0)\n|> Enum.reject(&(&1.group_heading == true and &1.group_page != true))\n"
         },
         {
           "name": "section_paths",
@@ -919,17 +919,27 @@
         {
           "name": "path_up",
           "args": "by_id, section, gathered, depth",
-          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # NOR A GROUP'S: it is only a heading, and the pages under it are addressed as if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # A GROUP WITH A PAGE OF ITS OWN IS READ AT ITS SLUG: the first step is the page being addressed,\n  # and the group's own page is addressed by its slug.\n  {%{group_heading: true, group_page: true} = group, 0} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), [group.slug | gathered], 1)\n\n  # NOR A GROUP'S, above the page addressed: it is a heading, and the pages under it are addressed as\n  # if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
         },
         {
           "name": "section_at_path",
           "args": "sections, wanted",
-          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is only a heading, and never the page at an address.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(&1.group_heading != true and Map.get(paths, &1.id) == asked))\n"
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is the page at an address only when it has a page of its own (`group_page`).\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\n\nEnum.find(\n  sections,\n  &((&1.group_heading != true or &1.group_page == true) and Map.get(paths, &1.id) == asked)\n)\n"
         },
         {
           "name": "note_blocks",
-          "args": "notes, labels, id",
-          "code": "Enum.map(notes, fn note ->\n  anchor = \"note-\" <> to_string(note.id)\n\n  %{\n    id: note.id,\n    anchor: anchor,\n    title: note.title,\n    html: code_windows(clean(note.content), labels, \"#{id}-#{anchor}\")\n  }\nend)\n"
+          "args": "notes, labels, id, placement",
+          "code": "Enum.map(notes, fn note ->\n  anchor = \"note-\" <> to_string(note.id)\n\n  %{\n    id: note.id,\n    anchor: anchor,\n    title: note.title,\n    html: code_windows(placed_cards(clean(note.content), placement), labels, \"#{id}-#{anchor}\")\n  }\nend)\n"
+        },
+        {
+          "name": "placement",
+          "args": "section, assigns",
+          "code": "# WHAT A `doc-section-cards` PLACED IN THIS PAGE IS TOLD, as the attributes of its marker: the page\n# it is in (`placed_in`), and the base, the language key and the version key this block links with,\n# so its cards link as this block does. `nil` when no page is read.\ncase section do\n  nil ->\n    nil\n\n  %{id: id} ->\n    [\n      placed_in: id,\n      doc_base: assigns[:doc_base],\n      lang_param: assigns[:lang_param],\n      version_param: assigns[:version_param]\n    ]\n    |> Enum.map_join(fn {key, value} ->\n      ~s( #{key}=\"#{String.replace(trimmed(value), [\"\\\"\", \"]\", \"\\\\\"], \"\")}\")\n    end)\nend"
+        },
+        {
+          "name": "placed_cards",
+          "args": "html, placement",
+          "code": "# EVERY `doc-section-cards` MARKER IN THE TEXT, HANDED `placement` (`placement/2`) right after its\n# name, so the block lists the pages under the page it is drawn in. Only a marker in the text: one\n# inside `<pre>` or `<code>` is a page showing the syntax, and is left as it was written.\ncase is_binary(placement) and String.contains?(html, \"doc-section-cards\") do\n  false ->\n    html\n\n  true ->\n    marker = ~r/\\[\\[component((?:\\s|&nbsp;|&#160;|\\x{00A0})+)doc-section-cards(?![A-Za-z0-9_-])/u\n\n    ~r/<(pre|code)(?:\\s[^>]*)?>.*?<\\/\\1>/s\n    |> Regex.split(html, include_captures: true)\n    |> Enum.map_join(fn part ->\n      case Regex.match?(~r/\\A<(?:pre|code)[\\s>]/, part) do\n        true ->\n          part\n\n        false ->\n          Regex.replace(marker, part, fn _whole, space ->\n            \"[[component\" <> space <> \"doc-section-cards\" <> placement\n          end)\n      end\n    end)\nend"
         },
         {
           "name": "code_windows",
@@ -974,7 +984,7 @@
         {
           "name": "read_page",
           "args": "socket",
-          "code": "assigns = socket.assigns\nlanguage = asked_language(assigns)\nslug = asked_workspace(assigns)\npath = asked_path(assigns)\nworkspace = workspace_row(slug, path, language, trimmed(assigns[:workspace]) != \"\")\n# THE URL NAMED A DOCUMENT AND NOTHING ANSWERS IS A MISSING PAGE, not a page with a notice on it —\n# the same answer `MishkaCmsCore.ErrorsExceptions.NotFoundError` gives everywhere else in this CMS,\n# which LiveView converts exactly as a controller does.\n#\n# ONLY WHEN THE URL NAMED IT: a block PINNED to a document by its author — see `asked_workspace/1` —\n# is their content to fix, and taking the page down for it would be the worse answer.\nif workspace == nil and page_subject?(assigns) do\n  missing!(socket)\nend\n\nversions = versions_of(workspace)\nversion = pick_version(versions, from_url(assigns, :version_param))\nlatest = latest_of(versions)\nsections = sections_of(version, assigns[:current_user])\nwanted = from_url(assigns, :section_param)\n# NOTHING ASKED IS THE DOCUMENT'S OWN ADDRESS, which draws the version's front page when it has one\n# and the landing when it has not.\nfound = section_at_path(sections, wanted)\nsection = (found && section_body(found.id, assigns[:current_user])) || nil\n# AND A SECTION IT NAMED, on the page the document itself is the subject of. An author who PINNED a\n# document has put this block on a page of their own — a stray `?section=` in the URL is a bad link\n# into their page, not a missing page, and taking the whole thing down for it would be the worse\n# answer. The same line the blog draws between the URL's subject and an author's choice.\nif section == nil and wanted != \"\" and page_subject?(assigns) do\n  missing!(socket)\nend\n\nnotes = (section && assigns[:show_notes] && notes_of(section, assigns[:current_user])) || []\n{previous, next} = neighbours(reading_order(sections), section)\n# WHAT THE BUTTON ON EACH CODE BLOCK SAYS, from this block's own attributes (`code_window/2`).\nlabels = %{\n  copy: assigns[:copy_text],\n  copied: assigns[:copied_text],\n  label: assigns[:copy_label],\n  lines: collapse_lines(assigns),\n  expand: assigns[:expand_text],\n  collapse: assigns[:collapse_text]\n}\n\nPhoenix.Component.assign(socket,\n  document: workspace,\n  version: version,\n  latest: latest,\n  sections: sections,\n  section: section,\n  body:\n    (section &&\n       code_windows(\n         with_heading_ids(clean(section.rendered_content)),\n         labels,\n         \"#{assigns[:id]}-body\"\n       )) || \"\",\n  notes: note_blocks(notes, labels, assigns[:id]),\n  crumbs: (assigns[:show_breadcrumb] && crumbs_to(sections, section)) || [],\n  previous: previous,\n  next: next,\n  language: (workspace && workspace.language) || language,\n  asked_document: (path != \"\" && path) || slug,\n  wanted_slug: wanted,\n  extras: page_extras(assigns, workspace, version, latest, sections, section)\n)\n"
+          "code": "assigns = socket.assigns\nlanguage = asked_language(assigns)\nslug = asked_workspace(assigns)\npath = asked_path(assigns)\nworkspace = workspace_row(slug, path, language, trimmed(assigns[:workspace]) != \"\")\n# THE URL NAMED A DOCUMENT AND NOTHING ANSWERS IS A MISSING PAGE, not a page with a notice on it —\n# the same answer `MishkaCmsCore.ErrorsExceptions.NotFoundError` gives everywhere else in this CMS,\n# which LiveView converts exactly as a controller does.\n#\n# ONLY WHEN THE URL NAMED IT: a block PINNED to a document by its author — see `asked_workspace/1` —\n# is their content to fix, and taking the page down for it would be the worse answer.\nif workspace == nil and page_subject?(assigns) do\n  missing!(socket)\nend\n\nversions = versions_of(workspace)\nversion = pick_version(versions, from_url(assigns, :version_param))\nlatest = latest_of(versions)\nsections = sections_of(version, assigns[:current_user])\nwanted = from_url(assigns, :section_param)\n# NOTHING ASKED IS THE DOCUMENT'S OWN ADDRESS, which draws the version's front page when it has one\n# and the landing when it has not.\nfound = section_at_path(sections, wanted)\nsection = (found && section_body(found.id, assigns[:current_user])) || nil\n# AND A SECTION IT NAMED, on the page the document itself is the subject of. An author who PINNED a\n# document has put this block on a page of their own — a stray `?section=` in the URL is a bad link\n# into their page, not a missing page, and taking the whole thing down for it would be the worse\n# answer. The same line the blog draws between the URL's subject and an author's choice.\nif section == nil and wanted != \"\" and page_subject?(assigns) do\n  missing!(socket)\nend\n\nnotes = (section && assigns[:show_notes] && notes_of(section, assigns[:current_user])) || []\n{previous, next} = neighbours(reading_order(sections), section)\n# WHAT THE BUTTON ON EACH CODE BLOCK SAYS, from this block's own attributes (`code_window/2`).\nlabels = %{\n  copy: assigns[:copy_text],\n  copied: assigns[:copied_text],\n  label: assigns[:copy_label],\n  lines: collapse_lines(assigns),\n  expand: assigns[:expand_text],\n  collapse: assigns[:collapse_text]\n}\n\nplacement = placement(section, assigns)\n\nPhoenix.Component.assign(socket,\n  document: workspace,\n  version: version,\n  latest: latest,\n  sections: sections,\n  section: section,\n  body:\n    (section &&\n       code_windows(\n         placed_cards(with_heading_ids(clean(section.rendered_content)), placement),\n         labels,\n         \"#{assigns[:id]}-body\"\n       )) || \"\",\n  notes: note_blocks(notes, labels, assigns[:id], placement),\n  crumbs: (assigns[:show_breadcrumb] && crumbs_to(sections, section)) || [],\n  previous: previous,\n  next: next,\n  language: (workspace && workspace.language) || language,\n  asked_document: (path != \"\" && path) || slug,\n  wanted_slug: wanted,\n  extras: page_extras(assigns, workspace, version, latest, sections, section)\n)\n"
         },
         {
           "name": "asked_page",
@@ -1151,7 +1161,8 @@
       "dependencies": [
         "doc-notice",
         "doc-callout",
-        "doc-example"
+        "doc-example",
+        "doc-section-cards"
       ],
       "examples": [],
       "extra": {
@@ -1170,7 +1181,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<nav\n  id={@id}\n  {@rest}\n  data-role=\"doc-sidebar\"\n  aria-label=\"Document contents\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction((@document && @document.language) || \"\")}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-sidebar-heading\"\n    class=\"mb-3 text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n  >\n    {@heading}\n  </h2>\n\n  <form\n    :if={@show_filter}\n    id={\"#{@id}-filter\"}\n    phx-change=\"filter\"\n    phx-submit=\"filter\"\n    phx-target={@myself}\n    class=\"mb-3\"\n  >\n    <input\n      type=\"search\"\n      name=\"q\"\n      value={@query}\n      data-role=\"doc-sidebar-filter\"\n      placeholder={@filter_text}\n      autocomplete=\"off\"\n      phx-debounce=\"200\"\n      class=\"w-full rounded-[10px] border border-[#ecebe6] bg-white px-3 py-1.5 text-sm outline-none focus:border-[#5b57d6]\"\n    />\n  </form>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-sidebar-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-sidebar-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-empty\"\n    text={@empty_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections != [] and @items == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-none\"\n    text={@none_text}\n    quiet={true}\n  />\n\n  <ul\n    :if={not @loading and not @failed and @items != []}\n    data-role=\"doc-sidebar-items\"\n    class=\"space-y-0.5\"\n  >\n    <li\n      :for={\n        {item, href} <-\n          item_links(\n            @items,\n            @sections,\n            @doc_base,\n            @document,\n            @lang_param,\n            version_query(@version, @latest, @version_param)\n          )\n      }\n      id={\"#{@id}-item-#{item.section.id}\"}\n      data-role=\"doc-sidebar-item\"\n      data-depth={item.depth}\n      data-active={to_string(item.active)}\n      style={\"padding-inline-start: #{item.depth * 12}px\"}\n    >\n      <.link\n        :if={href}\n        navigate={href}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        aria-expanded={(item.parent? && to_string(item.open)) || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug hover:bg-[#f2f1fc]\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </.link>\n\n      <span\n        :if={is_nil(href) and not item.group?}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </span>\n\n      <span\n        :if={item.group?}\n        data-role=\"doc-sidebar-group\"\n        class=\"mt-3 block px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n      >\n        {item.section.title}\n      </span>\n    </li>\n  </ul>\n</nav>\n",
+      "template": "<nav\n  id={@id}\n  {@rest}\n  data-role=\"doc-sidebar\"\n  aria-label=\"Document contents\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction((@document && @document.language) || \"\")}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-sidebar-heading\"\n    class=\"mb-3 text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n  >\n    {@heading}\n  </h2>\n\n  <form\n    :if={@show_filter}\n    id={\"#{@id}-filter\"}\n    phx-change=\"filter\"\n    phx-submit=\"filter\"\n    phx-target={@myself}\n    class=\"mb-3\"\n  >\n    <input\n      type=\"search\"\n      name=\"q\"\n      value={@query}\n      data-role=\"doc-sidebar-filter\"\n      placeholder={@filter_text}\n      autocomplete=\"off\"\n      phx-debounce=\"200\"\n      class=\"w-full rounded-[10px] border border-[#ecebe6] bg-white px-3 py-1.5 text-sm outline-none focus:border-[#5b57d6]\"\n    />\n  </form>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-sidebar-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-sidebar-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-empty\"\n    text={@empty_text}\n    quiet={true}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @sections != [] and @items == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-sidebar-none\"\n    text={@none_text}\n    quiet={true}\n  />\n\n  <ul\n    :if={not @loading and not @failed and @items != []}\n    data-role=\"doc-sidebar-items\"\n    class=\"space-y-0.5\"\n  >\n    <li\n      :for={\n        {item, href} <-\n          item_links(\n            @items,\n            @sections,\n            @doc_base,\n            @document,\n            @lang_param,\n            version_query(@version, @latest, @version_param)\n          )\n      }\n      id={\"#{@id}-item-#{item.section.id}\"}\n      data-role=\"doc-sidebar-item\"\n      data-depth={item.depth}\n      data-active={to_string(item.active)}\n      style={\"padding-inline-start: #{item.depth * 12}px\"}\n    >\n      <.link\n        :if={href && not item.group?}\n        navigate={href}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        aria-expanded={(item.parent? && to_string(item.open)) || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug hover:bg-[#f2f1fc]\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </.link>\n\n      <span\n        :if={is_nil(href) and not item.group?}\n        data-role=\"doc-sidebar-link\"\n        aria-current={(item.active && \"page\") || nil}\n        class={[\n          \"block rounded-[8px] px-2 py-1 text-sm leading-snug\",\n          (item.active && \"bg-[#f2f1fc] font-semibold text-[#5b57d6]\") || \"text-[#3a382f]\"\n        ]}\n      >\n        {item.section.title}\n      </span>\n\n      <span\n        :if={is_nil(href) and item.group?}\n        data-role=\"doc-sidebar-group\"\n        class=\"mt-3 block px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n      >\n        {item.section.title}\n      </span>\n\n      <.link\n        :if={href && item.group?}\n        navigate={href}\n        data-role=\"doc-sidebar-group\"\n        data-page=\"true\"\n        aria-current={(item.active && \"page\") || nil}\n        class={[\n          \"mt-3 block rounded-[8px] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] hover:bg-[#f2f1fc] hover:text-[#5b57d6]\",\n          (item.active && \"bg-[#f2f1fc] text-[#5b57d6]\") || \"text-[#8a877f]\"\n        ]}\n      >\n        {item.section.title}\n      </.link>\n    </li>\n  </ul>\n</nav>\n",
       "attrs": [
         {
           "name": "heading",
@@ -1395,7 +1406,7 @@
         {
           "name": "item_links",
           "args": "items, sections, base, document, lang_param, extra",
-          "code": "# EACH ITEM WITH THE ADDRESS OF ITS PAGE, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`) — so the template draws that item as a word rather than\n# as a link to nothing. A page's address holds the pages it is filed under (`section_paths/1`).\npaths = section_paths(sections)\n\nEnum.map(items, fn item ->\n  href =\n    case {document, item.group?} do\n      {nil, _no_document} ->\n        nil\n\n      {_document, true} ->\n        nil\n\n      {found, false} ->\n        document_href(\n          base,\n          found,\n          Map.get(paths, item.section.id, [item.section.slug]),\n          lang_param,\n          extra\n        )\n    end\n\n  {item, href}\nend)\n"
+          "code": "# EACH ITEM WITH THE ADDRESS OF ITS PAGE, or `nil` where it has none — a document in a language\n# this site does not publish (`doc_href/5`), or a group with no page of its own — so the template\n# draws that item as a word rather than as a link to nothing. A page's address holds the pages it is\n# filed under (`section_paths/1`).\npaths = section_paths(sections)\n\nEnum.map(items, fn item ->\n  href =\n    case {document, item.group? and item.section.group_page != true} do\n      {nil, _no_document} ->\n        nil\n\n      {_document, true} ->\n        nil\n\n      {found, false} ->\n        document_href(\n          base,\n          found,\n          Map.get(paths, item.section.id, [item.section.slug]),\n          lang_param,\n          extra\n        )\n    end\n\n  {item, href}\nend)\n"
         },
         {
           "name": "version_query",
@@ -1450,7 +1461,7 @@
         {
           "name": "sections_of",
           "args": "version, visitor",
-          "code": "# EVERY APPROVED PAGE OF THE VERSION, unpaged: this list IS the document's contents, and one that\n# stopped at the twentieth would silently hide the rest of a thirty-page manual.\nrequire Ash.Query\n\ncase version do\n  nil ->\n    {:ok, []}\n\n  %{id: id} ->\n    with {:ok, found} <-\n           MishkaDocument.Section\n           |> Ash.Query.for_read(\n             :public_list_at_workspace_version,\n             %{workspace_version_id: id},\n             read_as(visitor)\n           )\n           |> Ash.Query.select([\n             :id,\n             :title,\n             :slug,\n             :order_position,\n             :parent_section_id,\n             :front_page,\n             :group_heading\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      {:ok, Enum.sort_by(found, &{&1.order_position || 0, &1.title, &1.id})}\n    end\nend\n"
+          "code": "# EVERY APPROVED PAGE OF THE VERSION, unpaged: this list IS the document's contents, and one that\n# stopped at the twentieth would silently hide the rest of a thirty-page manual.\nrequire Ash.Query\n\ncase version do\n  nil ->\n    {:ok, []}\n\n  %{id: id} ->\n    with {:ok, found} <-\n           MishkaDocument.Section\n           |> Ash.Query.for_read(\n             :public_list_at_workspace_version,\n             %{workspace_version_id: id},\n             read_as(visitor)\n           )\n           |> Ash.Query.select([\n             :id,\n             :title,\n             :slug,\n             :order_position,\n             :parent_section_id,\n             :front_page,\n             :group_heading,\n             :group_page\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      {:ok, Enum.sort_by(found, &{&1.order_position || 0, &1.title, &1.id})}\n    end\nend\n"
         },
         {
           "name": "rooted?",
@@ -1470,12 +1481,12 @@
         {
           "name": "path_up",
           "args": "by_id, section, gathered, depth",
-          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # NOR A GROUP'S: it is only a heading, and the pages under it are addressed as if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # A GROUP WITH A PAGE OF ITS OWN IS READ AT ITS SLUG: the first step is the page being addressed,\n  # and the group's own page is addressed by its slug.\n  {%{group_heading: true, group_page: true} = group, 0} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), [group.slug | gathered], 1)\n\n  # NOR A GROUP'S, above the page addressed: it is a heading, and the pages under it are addressed as\n  # if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
         },
         {
           "name": "section_at_path",
           "args": "sections, wanted",
-          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is only a heading, and never the page at an address.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(&1.group_heading != true and Map.get(paths, &1.id) == asked))\n"
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is the page at an address only when it has a page of its own (`group_page`).\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\n\nEnum.find(\n  sections,\n  &((&1.group_heading != true or &1.group_page == true) and Map.get(paths, &1.id) == asked)\n)\n"
         },
         {
           "name": "ancestors",
@@ -1500,7 +1511,7 @@
         {
           "name": "matching",
           "args": "sections, query, active",
-          "code": "# A GROUP STAYS WHILE ONE OF ITS PAGES MATCHES, as the heading those pages are listed under, and\n# goes when none does: its own title is no page to find.\nneedle = String.downcase(query)\nby_id = Map.new(sections, &{&1.id, &1})\n\nfound =\n  Enum.filter(\n    sections,\n    &(&1.group_heading != true and String.contains?(String.downcase(&1.title), needle))\n  )\n\nunder = Enum.group_by(found, &group_of(by_id, &1, 0))\n\nitem = fn section, depth ->\n  %{\n    section: section,\n    depth: depth,\n    active: section.id == active,\n    parent?: false,\n    open: false,\n    group?: section.group_heading == true\n  }\nend\n\nEnum.flat_map(sections, fn section ->\n  cond do\n    Map.has_key?(under, section.id) ->\n      [item.(section, 0) | Enum.map(Map.fetch!(under, section.id), &item.(&1, 1))]\n\n    section in Map.get(under, nil, []) ->\n      [item.(section, 0)]\n\n    true ->\n      []\n  end\nend)\n"
+          "code": "# A GROUP STAYS WHILE ONE OF ITS PAGES MATCHES, as the heading those pages are listed under, and\n# goes when none does: its own title is no page to find — unless it has a page of its own.\nneedle = String.downcase(query)\nby_id = Map.new(sections, &{&1.id, &1})\n\nfound =\n  Enum.filter(\n    sections,\n    &((&1.group_heading != true or &1.group_page == true) and\n        String.contains?(String.downcase(&1.title), needle))\n  )\n\nunder = Enum.group_by(found, &group_of(by_id, &1, 0))\n\nitem = fn section, depth ->\n  %{\n    section: section,\n    depth: depth,\n    active: section.id == active,\n    parent?: false,\n    open: false,\n    group?: section.group_heading == true\n  }\nend\n\nEnum.flat_map(sections, fn section ->\n  cond do\n    Map.has_key?(under, section.id) ->\n      [item.(section, 0) | Enum.map(Map.fetch!(under, section.id), &item.(&1, 1))]\n\n    section in Map.get(under, nil, []) ->\n      [item.(section, 0)]\n\n    true ->\n      []\n  end\nend)\n"
         },
         {
           "name": "items_of",
@@ -1835,7 +1846,7 @@
         {
           "name": "section_at",
           "args": "version, wanted, visitor",
-          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE, and by its whole address: the\n# version's pages are read as a tree, the one whose own part of the address is the one asked is\n# picked — headless/switch, a slug being unique only among the pages under one parent, and nothing\n# asked the front page — and that one alone is read for its text.\nrequire Ash.Query\n\ncase {version, trimmed(wanted)} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {%{id: id}, asked} ->\n    pages =\n      MishkaDocument.Section\n      |> Ash.Query.for_read(\n        :public_list_at_workspace_version,\n        %{workspace_version_id: id},\n        read_as(visitor)\n      )\n\n    with {:ok, tree} <-\n           pages\n           |> Ash.Query.select([:id, :slug, :parent_section_id, :front_page, :group_heading])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      case section_at_path(tree, asked) do\n        nil ->\n          {:ok, nil}\n\n        %{id: found} ->\n          pages\n          |> Ash.Query.filter(id == ^found)\n          |> Ash.Query.load([:rendered_content])\n          |> Ash.read(tenant: site_id(), page: [limit: 1])\n          |> first_row()\n      end\n    end\nend\n"
+          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE, and by its whole address: the\n# version's pages are read as a tree, the one whose own part of the address is the one asked is\n# picked — headless/switch, a slug being unique only among the pages under one parent, and nothing\n# asked the front page — and that one alone is read for its text.\nrequire Ash.Query\n\ncase {version, trimmed(wanted)} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {%{id: id}, asked} ->\n    pages =\n      MishkaDocument.Section\n      |> Ash.Query.for_read(\n        :public_list_at_workspace_version,\n        %{workspace_version_id: id},\n        read_as(visitor)\n      )\n\n    with {:ok, tree} <-\n           pages\n           |> Ash.Query.select([\n             :id,\n             :slug,\n             :parent_section_id,\n             :front_page,\n             :group_heading,\n             :group_page\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      case section_at_path(tree, asked) do\n        nil ->\n          {:ok, nil}\n\n        %{id: found} ->\n          pages\n          |> Ash.Query.filter(id == ^found)\n          |> Ash.Query.load([:rendered_content])\n          |> Ash.read(tenant: site_id(), page: [limit: 1])\n          |> first_row()\n      end\n    end\nend\n"
         },
         {
           "name": "rooted?",
@@ -1855,12 +1866,12 @@
         {
           "name": "path_up",
           "args": "by_id, section, gathered, depth",
-          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # NOR A GROUP'S: it is only a heading, and the pages under it are addressed as if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # A GROUP WITH A PAGE OF ITS OWN IS READ AT ITS SLUG: the first step is the page being addressed,\n  # and the group's own page is addressed by its slug.\n  {%{group_heading: true, group_page: true} = group, 0} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), [group.slug | gathered], 1)\n\n  # NOR A GROUP'S, above the page addressed: it is a heading, and the pages under it are addressed as\n  # if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
         },
         {
           "name": "section_at_path",
           "args": "sections, wanted",
-          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is only a heading, and never the page at an address.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(&1.group_heading != true and Map.get(paths, &1.id) == asked))\n"
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is the page at an address only when it has a page of its own (`group_page`).\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\n\nEnum.find(\n  sections,\n  &((&1.group_heading != true or &1.group_page == true) and Map.get(paths, &1.id) == asked)\n)\n"
         },
         {
           "name": "notes_of",
@@ -2271,7 +2282,7 @@
         {
           "name": "section_at",
           "args": "version, wanted, visitor",
-          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE, and by its whole address: the\n# version's pages are read as a tree and the one whose own part of the address is the one asked is\n# picked — headless/switch, a slug being unique only among the pages under one parent, and nothing\n# asked the front page. It comes back with that address, which is what the entry for its own edition\n# leads back to.\nrequire Ash.Query\n\ncase {version, trimmed(wanted)} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {%{id: id}, asked} ->\n    with {:ok, tree} <-\n           MishkaDocument.Section\n           |> Ash.Query.for_read(\n             :public_list_at_workspace_version,\n             %{workspace_version_id: id},\n             read_as(visitor)\n           )\n           |> Ash.Query.select([\n             :id,\n             :slug,\n             :parent_section_id,\n             :front_page,\n             :group_heading,\n             :section_lineage_id,\n             :language_group_id\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      case section_at_path(tree, asked) do\n        nil -> {:ok, nil}\n        found -> {:ok, %{section: found, address: Map.get(section_paths(tree), found.id)}}\n      end\n    end\nend\n"
+          "code": "# THE PAGE IS FOUND THROUGH ITS VERSION AND NEVER BY SLUG ALONE, and by its whole address: the\n# version's pages are read as a tree and the one whose own part of the address is the one asked is\n# picked — headless/switch, a slug being unique only among the pages under one parent, and nothing\n# asked the front page. It comes back with that address, which is what the entry for its own edition\n# leads back to.\nrequire Ash.Query\n\ncase {version, trimmed(wanted)} do\n  {nil, _no_version} ->\n    {:ok, nil}\n\n  {%{id: id}, asked} ->\n    with {:ok, tree} <-\n           MishkaDocument.Section\n           |> Ash.Query.for_read(\n             :public_list_at_workspace_version,\n             %{workspace_version_id: id},\n             read_as(visitor)\n           )\n           |> Ash.Query.select([\n             :id,\n             :slug,\n             :parent_section_id,\n             :front_page,\n             :group_heading,\n             :group_page,\n             :section_lineage_id,\n             :language_group_id\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      case section_at_path(tree, asked) do\n        nil -> {:ok, nil}\n        found -> {:ok, %{section: found, address: Map.get(section_paths(tree), found.id)}}\n      end\n    end\nend\n"
         },
         {
           "name": "rooted?",
@@ -2291,17 +2302,17 @@
         {
           "name": "path_up",
           "args": "by_id, section, gathered, depth",
-          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # NOR A GROUP'S: it is only a heading, and the pages under it are addressed as if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # A GROUP WITH A PAGE OF ITS OWN IS READ AT ITS SLUG: the first step is the page being addressed,\n  # and the group's own page is addressed by its slug.\n  {%{group_heading: true, group_page: true} = group, 0} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), [group.slug | gathered], 1)\n\n  # NOR A GROUP'S, above the page addressed: it is a heading, and the pages under it are addressed as\n  # if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
         },
         {
           "name": "section_at_path",
           "args": "sections, wanted",
-          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is only a heading, and never the page at an address.\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\nEnum.find(sections, &(&1.group_heading != true and Map.get(paths, &1.id) == asked))\n"
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is the page at an address only when it has a page of its own (`group_page`).\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\n\nEnum.find(\n  sections,\n  &((&1.group_heading != true or &1.group_page == true) and Map.get(paths, &1.id) == asked)\n)\n"
         },
         {
           "name": "lineage_slugs",
           "args": "versions, page, visitor",
-          "code": "# THE SAME PAGE IN EVERY OTHER VERSION, AT ITS ADDRESS THERE, IN ONE READ. A page cloned forward\n# keeps its `section_lineage_id`, so this is what \"the same page\" means across versions — and asking\n# version by version would be a read per entry in the switch. Each version's pages come whole,\n# because a page's address holds the pages it is filed under in that version.\nrequire Ash.Query\n\ncase {Enum.map(versions, & &1.id), page} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {_ids, %{section: %{section_lineage_id: nil}}} ->\n    %{}\n\n  {wanted, %{section: %{section_lineage_id: lineage}}} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([\n      :id,\n      :slug,\n      :parent_section_id,\n      :front_page,\n      :group_heading,\n      :workspace_version_id,\n      :section_lineage_id\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Enum.flat_map(fn {version_id, pages} ->\n      case Enum.find(pages, &(&1.group_heading != true and &1.section_lineage_id == lineage)) do\n        nil -> []\n        found -> [{version_id, Map.get(section_paths(pages), found.id)}]\n      end\n    end)\n    |> Map.new()\nend\n"
+          "code": "# THE SAME PAGE IN EVERY OTHER VERSION, AT ITS ADDRESS THERE, IN ONE READ. A page cloned forward\n# keeps its `section_lineage_id`, so this is what \"the same page\" means across versions — and asking\n# version by version would be a read per entry in the switch. Each version's pages come whole,\n# because a page's address holds the pages it is filed under in that version.\nrequire Ash.Query\n\ncase {Enum.map(versions, & &1.id), page} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {_ids, %{section: %{section_lineage_id: nil}}} ->\n    %{}\n\n  {wanted, %{section: %{section_lineage_id: lineage}}} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([\n      :id,\n      :slug,\n      :parent_section_id,\n      :front_page,\n      :group_heading,\n      :group_page,\n      :workspace_version_id,\n      :section_lineage_id\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Enum.flat_map(fn {version_id, pages} ->\n      case Enum.find(\n             pages,\n             &((&1.group_heading != true or &1.group_page == true) and\n                 &1.section_lineage_id == lineage)\n           ) do\n        nil -> []\n        found -> [{version_id, Map.get(section_paths(pages), found.id)}]\n      end\n    end)\n    |> Map.new()\nend\n"
         },
         {
           "name": "variants_of",
@@ -2316,7 +2327,7 @@
         {
           "name": "translated_slugs",
           "args": "version_ids, page, visitor",
-          "code": "# THE SAME PAGE IN EVERY OTHER LANGUAGE, AT ITS ADDRESS THERE, IN ONE READ. Translations of one page\n# share a `language_group_id`, and the slug is the fallback for an edition whose author never linked\n# them — a Persian page called `installation` is still the Persian `installation`. Each version's\n# pages come whole, because a page's address holds the pages it is filed under in that version.\nrequire Ash.Query\n\ncase {version_ids, page} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {wanted, %{section: %{slug: slug, language_group_id: group}}} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([\n      :id,\n      :slug,\n      :parent_section_id,\n      :front_page,\n      :group_heading,\n      :workspace_version_id,\n      :language_group_id\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Enum.flat_map(fn {version_id, pages} ->\n      named = Enum.reject(pages, &(&1.group_heading == true))\n      linked = Enum.find(named, &(not is_nil(group) and &1.language_group_id == group))\n\n      case linked || Enum.find(named, &(&1.slug == slug)) do\n        nil -> []\n        found -> [{version_id, Map.get(section_paths(pages), found.id)}]\n      end\n    end)\n    |> Map.new()\nend\n"
+          "code": "# THE SAME PAGE IN EVERY OTHER LANGUAGE, AT ITS ADDRESS THERE, IN ONE READ. Translations of one page\n# share a `language_group_id`, and the slug is the fallback for an edition whose author never linked\n# them — a Persian page called `installation` is still the Persian `installation`. Each version's\n# pages come whole, because a page's address holds the pages it is filed under in that version.\nrequire Ash.Query\n\ncase {version_ids, page} do\n  {[], _no_versions} ->\n    %{}\n\n  {_ids, nil} ->\n    %{}\n\n  {wanted, %{section: %{slug: slug, language_group_id: group}}} ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([\n      :id,\n      :slug,\n      :parent_section_id,\n      :front_page,\n      :group_heading,\n      :group_page,\n      :workspace_version_id,\n      :language_group_id\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> link_rows()\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Enum.flat_map(fn {version_id, pages} ->\n      named = Enum.reject(pages, &(&1.group_heading == true and &1.group_page != true))\n      linked = Enum.find(named, &(not is_nil(group) and &1.language_group_id == group))\n\n      case linked || Enum.find(named, &(&1.slug == slug)) do\n        nil -> []\n        found -> [{version_id, Map.get(section_paths(pages), found.id)}]\n      end\n    end)\n    |> Map.new()\nend\n"
         },
         {
           "name": "landing_or_page",
@@ -3083,6 +3094,377 @@
       ],
       "extra": {
         "icon": "frame",
+        "ui_kit": "mishka_document"
+      },
+      "site_id": null
+    },
+    {
+      "name": "doc-section-cards",
+      "description": "The pages filed under one page of a document, as cards — each its title, its summary, the badges a plugin puts on it and the way into it — read on their own, filtered to what the visitor may read. Placed in a page's text as [[component doc-section-cards]], it lists the pages under that page.",
+      "type": "navigations",
+      "format": "heex",
+      "stateful": true,
+      "active": true,
+      "precompile": false,
+      "required": false,
+      "priority": 0,
+      "template": "<section\n  id={@id}\n  {@rest}\n  data-role=\"doc-cards\"\n  lang={(@document && @document.language) || nil}\n  dir={text_direction((@document && @document.language) || \"\")}\n  class=\"my-6 text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-cards-heading\"\n    class=\"mb-3 text-xs font-bold uppercase tracking-[0.08em] text-[#8a877f]\"\n  >\n    {@heading}\n  </h2>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-cards-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-cards-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @cards == []}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-cards-empty\"\n    text={@empty_text}\n  />\n\n  <ul\n    :if={not @loading and not @failed and @cards != []}\n    data-role=\"doc-cards-items\"\n    class=\"grid grid-cols-1 gap-3 sm:grid-cols-2\"\n  >\n    <li\n      :for={card <- @cards}\n      id={\"#{@id}-card-#{card.id}\"}\n      data-role=\"doc-cards-item\"\n      class=\"min-w-0\"\n    >\n      <.link\n        :if={card.href}\n        navigate={card.href}\n        data-role=\"doc-cards-link\"\n        class=\"flex h-full flex-col gap-2 rounded-[18px] border border-[#ecebe6] bg-white p-4 transition-colors hover:border-[#5b57d6]\"\n      >\n        <.doc_card card={card} show_description={@show_description} />\n      </.link>\n\n      <div\n        :if={is_nil(card.href)}\n        data-role=\"doc-cards-link\"\n        class=\"flex h-full flex-col gap-2 rounded-[18px] border border-[#ecebe6] bg-white p-4\"\n      >\n        <.doc_card card={card} show_description={@show_description} />\n      </div>\n    </li>\n  </ul>\n</section>\n",
+      "attrs": [
+        {
+          "name": "heading",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The words above the cards. Left empty, no heading is drawn."
+          }
+        },
+        {
+          "name": "parent",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The page whose pages are listed, in the document of the page this block is drawn in: its address under the document — forms, headless/tabs — or its slug, which also names a group with no page of its own. Left empty, the page this block is drawn in."
+          }
+        },
+        {
+          "name": "placed_in",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The page this block is drawn in, by its id. doc-section fills it in for a block placed in a page's text or in one of its notes; an author leaves it empty."
+          }
+        },
+        {
+          "name": "doc_base",
+          "type": "any",
+          "opts": {
+            "default": "/docs",
+            "doc": "Where documents with no address of their own live — /docs, say. doc-section hands it the one it links with; a document with an Address of its own is linked there instead, its pages under it."
+          }
+        },
+        {
+          "name": "lang_param",
+          "type": "any",
+          "opts": {
+            "default": "lang",
+            "doc": "The query key the language travels under, written onto every link. doc-section hands it the one it links with."
+          }
+        },
+        {
+          "name": "version_param",
+          "type": "any",
+          "opts": {
+            "default": "v",
+            "doc": "The URL key a version number travels under, written onto every link while the version read is not the latest. doc-section hands it the one it links with."
+          }
+        },
+        {
+          "name": "show_description",
+          "type": "boolean",
+          "opts": {
+            "default": true,
+            "doc": "Draw each page's summary under its title: the description its own SEO gives it, else the start of its text."
+          }
+        },
+        {
+          "name": "show_badges",
+          "type": "boolean",
+          "opts": {
+            "default": true,
+            "doc": "Draw under each title the badges a plugin puts on that page, asked on document:page:extras with card: true."
+          }
+        },
+        {
+          "name": "empty_text",
+          "type": "string",
+          "opts": {
+            "default": "No pages are filed under this one yet.",
+            "doc": "What a reader is told when the page has no published page under it that they may read."
+          }
+        },
+        {
+          "name": "loading_text",
+          "type": "string",
+          "opts": {
+            "default": "Loading the pages…",
+            "doc": "What a screen reader is told while the read is running."
+          }
+        },
+        {
+          "name": "error_text",
+          "type": "string",
+          "opts": {
+            "default": "The pages could not be loaded.",
+            "doc": "What a reader is told when the read failed."
+          }
+        },
+        {
+          "name": "retry_text",
+          "type": "string",
+          "opts": {
+            "default": "Try again",
+            "doc": "The way out of a failed read."
+          }
+        },
+        {
+          "name": "current_user",
+          "type": "any",
+          "opts": {
+            "default": null,
+            "doc": "The signed-in reader, handed down by the page as current_user. A page locked to permissions it does not hold is left out; without one, every locked one is."
+          }
+        },
+        {
+          "name": "rest",
+          "type": "global",
+          "opts": {}
+        }
+      ],
+      "slots": [],
+      "helpers": [
+        {
+          "name": "mount",
+          "args": "socket",
+          "code": "{:ok,\n Phoenix.Component.assign(socket,\n   asked: nil,\n   loading: true,\n   failed: false,\n   document: nil,\n   cards: []\n )}"
+        },
+        {
+          "name": "update",
+          "args": "_assigns, socket",
+          "code": "{:ok, load(socket)}"
+        },
+        {
+          "name": "site_id",
+          "args": "",
+          "code": "__MODULE__.__component_information__([:private, :site_id])\n"
+        },
+        {
+          "name": "read_as",
+          "args": "visitor",
+          "code": "# THE VISITOR THE READ IS FOR, AS ITS ACTOR, so a document or a page of one locked to permissions\n# it does not hold is left out of what is listed, and a page with nobody signed in reads as a guest.\n# The tenant goes with it, because a public action that checks its tenant does so as it is prepared.\n[actor: visitor, tenant: site_id()]\n"
+        },
+        {
+          "name": "trimmed",
+          "args": "value",
+          "code": "case value do\n  binary when is_binary(binary) -> String.trim(binary)\n  nil -> \"\"\n  other -> to_string(other)\nend\n"
+        },
+        {
+          "name": "text_direction",
+          "args": "language",
+          "code": "case trimmed(language) do\n  code when code in ~w(fa ar he ur ps ckb dv yi) -> \"rtl\"\n  _left_to_right_or_unknown -> \"auto\"\nend\n"
+        },
+        {
+          "name": "first_row",
+          "args": "result",
+          "code": "case result do\n  {:ok, %{results: [found | _rest]}} -> {:ok, found}\n  {:ok, [found | _rest]} -> {:ok, found}\n  {:ok, _nothing} -> {:ok, nil}\n  {:error, reason} -> {:error, reason}\n  _unreadable -> {:error, :unreadable}\nend\n"
+        },
+        {
+          "name": "rows",
+          "args": "result",
+          "code": "# A TUPLE RATHER THAN A LIST, so a read that failed is the block's error rather than an empty one.\ncase result do\n  {:ok, %{results: found}} -> {:ok, found}\n  {:ok, found} when is_list(found) -> {:ok, found}\n  {:error, reason} -> {:error, reason}\n  _unreadable -> {:error, :unreadable}\nend\n"
+        },
+        {
+          "name": "moment",
+          "args": "value",
+          "code": "# A TIME AS A NUMBER, because these are sorted in memory and two `%DateTime{}` structs compare by\n# Erlang term order rather than by when they happened. A version nobody published sorts oldest.\ncase value do\n  %DateTime{} = at -> DateTime.to_unix(at, :microsecond)\n  _never -> 0\nend\n"
+        },
+        {
+          "name": "doc_href",
+          "args": "base, segments, language, lang_param, extra",
+          "code": "# THE ADDRESS OF AN EDITION, built by `site_path/2` for the site the page renders for — in the\n# template and in the task a block reads in alike, because `MishkaGervaz.Messages.start_async/4`\n# hands the task the page's site. Each segment is appended to the base, and a `:lang` in the base —\n# in any position, /:lang/docs or /docs/:lang — is filled with the language of the edition being\n# linked to, not the one the page is read in, which is the only way a link to an edition in ANOTHER\n# language can be built. The address is the one the site's URL mode gives that language:\n# /docs/<document> in a first language the site leaves unprefixed, /fa/docs/<document> in Persian. A\n# base without the segment carries the language as a query key instead, so nothing appends it twice.\n# An edition whose language this site does not publish, or cannot be read, gets no link rather than\n# a link to a 404.\nnumbered = Enum.with_index(segments)\npattern = Enum.reduce(numbered, to_string(base), fn {_segment, at}, acc -> acc <> \"/:segment#{at}\" end)\n\ncaptures =\n  numbered\n  |> Map.new(fn {segment, at} -> {\"segment#{at}\", to_string(segment)} end)\n  |> Map.put(\"lang\", trimmed(language))\n\ncase site_path(pattern, captures) do\n  nil ->\n    nil\n\n  path ->\n    in_path? = \":lang\" in String.split(to_string(base), \"/\")\n\n    query =\n      case {in_path?, trimmed(lang_param), trimmed(language)} do\n        {false, key, code} when key != \"\" and code != \"\" -> Map.put(extra, key, code)\n        _carried_by_the_path_or_not_asked_for -> extra\n      end\n\n    case URI.encode_query(query) do\n      \"\" -> path\n      encoded -> path <> \"?\" <> encoded\n    end\nend\n"
+        },
+        {
+          "name": "document_href",
+          "args": "base, document, segments, lang_param, extra",
+          "code": "# THE ADDRESS OF A DOCUMENT, OR OF ONE OF ITS PAGES. A document with an Address of its own is read\n# there and its pages under it — /product/docs/headless/switch — and that address is one edition's,\n# so no `?lang=` is written onto it; any other is read under the base, by its slug.\ncase document do\n  %{path: own} when is_binary(own) and own != \"\" ->\n    doc_href(own, segments, document.language, \"\", extra)\n\n  _read_by_its_slug ->\n    doc_href(base, [document.slug | segments], document.language, lang_param, extra)\nend\n"
+        },
+        {
+          "name": "version_query",
+          "args": "version, latest, version_param",
+          "code": "# THE VERSION IS IN THE URL ONLY WHILE IT IS NOT THE LATEST ONE. Carrying ?v=0.0.6 around a document\n# whose latest version is 0.0.6 pins every link a reader shares to a number that will be old next\n# week, and the same page then reads as an archived one.\nkey = trimmed(version_param)\n\ncase {version, latest} do\n  {nil, _no_versions} -> %{}\n  {_asked, nil} -> %{}\n  {%{id: same}, %{id: same}} -> %{}\n  {%{version_number: number}, _older} when key != \"\" -> %{key => to_string(number)}\n  _no_key_to_write_it_under -> %{}\nend\n"
+        },
+        {
+          "name": "latest_of",
+          "args": "versions",
+          "code": "# VERSION NUMBERS ARE TEXT, so \"0.0.10\" sorts under \"0.0.9\" and the newest is whichever one an\n# editor marked latest — falling back to the most recently published when nobody has.\nEnum.find(versions, & &1.is_latest_for_version) || List.first(versions)\n"
+        },
+        {
+          "name": "rooted?",
+          "args": "by_id, section, depth",
+          "code": "# WHETHER WALKING UP FROM A PAGE EVER REACHES THE TOP. A pair of pages filed under each other is\n# reachable from neither end, and a tree built without asking would either drop both of them out of\n# the contents or walk between them for ever. Twenty steps is deeper than any manual and cheap.\ncase {section, depth} do\n  {nil, _gone} ->\n    true\n\n  {_deep, walked} when walked >= 20 ->\n    false\n\n  {%{parent_section_id: nil}, _at_the_top} ->\n    true\n\n  {%{parent_section_id: parent}, _keep_going} ->\n    case Map.get(by_id, parent) do\n      nil -> true\n      found -> rooted?(by_id, found, depth + 1)\n    end\nend\n"
+        },
+        {
+          "name": "effective_parent",
+          "args": "by_id, section",
+          "code": "# THE PARENT A PAGE IS DRAWN UNDER, which is not always the parent it names. A parent still waiting\n# on a review is not published, and hanging its children off it would drop them out of the contents\n# altogether — so they surface at the top instead, and so does anything in a loop.\nparent = section.parent_section_id\n\ncond do\n  is_nil(parent) -> nil\n  not Map.has_key?(by_id, parent) -> nil\n  not rooted?(by_id, section, 0) -> nil\n  true -> parent\nend\n"
+        },
+        {
+          "name": "section_paths",
+          "args": "sections",
+          "code": "# EACH PAGE'S OWN PART OF ITS ADDRESS — the slugs of the pages it is drawn under, then its own:\n# headless/switch. The parents are the ones `effective_parent/2` draws it under, so a page's address\n# is where the reader finds it in the contents. A slug is unique among the pages under one parent,\n# so the same one under two parents is two addresses. The front page's is empty (`path_up/4`).\nby_id = Map.new(sections, &{&1.id, &1})\nMap.new(sections, &{&1.id, path_up(by_id, &1, [], 0)})\n"
+        },
+        {
+          "name": "path_up",
+          "args": "by_id, section, gathered, depth",
+          "code": "case {section, depth} do\n  {nil, _at_the_top} ->\n    gathered\n\n  {_deep, walked} when walked >= 20 ->\n    gathered\n\n  # A FRONT PAGE'S SLUG IS NO PART OF ANY ADDRESS. It is drawn at the document's own address, and the\n  # pages filed under it sit directly under that.\n  {%{front_page: true} = front, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, front)), gathered, depth + 1)\n\n  # A GROUP WITH A PAGE OF ITS OWN IS READ AT ITS SLUG: the first step is the page being addressed,\n  # and the group's own page is addressed by its slug.\n  {%{group_heading: true, group_page: true} = group, 0} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), [group.slug | gathered], 1)\n\n  # NOR A GROUP'S, above the page addressed: it is a heading, and the pages under it are addressed as\n  # if it were not there.\n  {%{group_heading: true} = group, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, group)), gathered, depth + 1)\n\n  {page, _keep_going} ->\n    path_up(by_id, Map.get(by_id, effective_parent(by_id, page)), [page.slug | gathered], depth + 1)\nend\n"
+        },
+        {
+          "name": "section_at_path",
+          "args": "sections, wanted",
+          "code": "# THE PAGE AN ADDRESS NAMES: the one whose own part of the address is exactly the one asked —\n# headless/switch. A slug is unique among the pages under one parent, not in the document, so\n# `switch` alone may be two pages. Nothing asked is the document's own address, which is the\n# version's front page when it has one: the one page whose own part of the address is empty. A group\n# is the page at an address only when it has a page of its own (`group_page`).\nasked = String.split(trimmed(wanted), \"/\", trim: true)\npaths = section_paths(sections)\n\nEnum.find(\n  sections,\n  &((&1.group_heading != true or &1.group_page == true) and Map.get(paths, &1.id) == asked)\n)\n"
+        },
+        {
+          "name": "uuid",
+          "args": "value",
+          "code": "# AN ID IS A UUID OR NOTHING. A marker an author typed by hand may carry any text, and a filter on\n# a text that is no UUID is a failed read rather than an empty one.\ncase Ecto.UUID.cast(trimmed(value)) do\n  {:ok, id} -> id\n  :error -> nil\nend"
+        },
+        {
+          "name": "placed_page",
+          "args": "id, visitor",
+          "code": "# THE PAGE THIS BLOCK IS DRAWN IN, read as the visitor: a page they may not read lists nothing.\nrequire Ash.Query\n\ncase uuid(id) do\n  nil ->\n    {:ok, nil}\n\n  found ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(id == ^found)\n    |> Ash.Query.select([:id, :workspace_version_id])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend"
+        },
+        {
+          "name": "version_of",
+          "args": "page",
+          "code": "# THE VERSION THE PAGE IS IN, through the public read, so a draft version reads as none. AS THE\n# SYSTEM, as every block reads a document and its versions: a page whose own lock opens is drawn\n# inside a document that does not.\nrequire Ash.Query\n\ncase page do\n  nil ->\n    {:ok, nil}\n\n  %{workspace_version_id: id} ->\n    MishkaDocument.WorkspaceVersion\n    |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n    |> Ash.Query.filter(id == ^id)\n    |> Ash.Query.select([\n      :id,\n      :workspace_id,\n      :version_number,\n      :is_latest_for_version,\n      :published_at,\n      :inserted_at\n    ])\n    |> Ash.read(tenant: site_id(), page: [limit: 1])\n    |> first_row()\nend"
+        },
+        {
+          "name": "document_of",
+          "args": "version",
+          "code": "# THE DOCUMENT THE VERSION IS OF, and every version of it it publishes — the latest of which is\n# the one a link names no version for (`version_query/3`). AS THE SYSTEM, as `version_of/1` reads.\nrequire Ash.Query\n\ncase version do\n  nil ->\n    {:ok, {nil, nil}}\n\n  %{workspace_id: id} ->\n    with {:ok, document} <-\n           MishkaDocument.Workspace\n           |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n           |> Ash.Query.filter(id == ^id)\n           |> Ash.Query.select([:id, :slug, :path, :language])\n           |> Ash.read(tenant: site_id(), page: [limit: 1])\n           |> first_row(),\n         {:ok, versions} <-\n           MishkaDocument.WorkspaceVersion\n           |> Ash.Query.for_read(:public_list, %{}, authorize?: false)\n           |> Ash.Query.filter(workspace_id == ^id)\n           |> Ash.Query.select([\n             :id,\n             :version_number,\n             :is_latest_for_version,\n             :published_at,\n             :inserted_at\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      newest = Enum.sort_by(versions, &{moment(&1.published_at), moment(&1.inserted_at), &1.id}, :desc)\n      {:ok, {document, latest_of(newest)}}\n    end\nend"
+        },
+        {
+          "name": "sections_of",
+          "args": "version, visitor",
+          "code": "# EVERY APPROVED PAGE OF THE VERSION THE VISITOR MAY READ, unpaged — the read `doc-sidebar` draws\n# the contents with, so a card leads where the contents do, and a page locked to the visitor is no\n# card.\nrequire Ash.Query\n\ncase version do\n  nil ->\n    {:ok, []}\n\n  %{id: id} ->\n    with {:ok, found} <-\n           MishkaDocument.Section\n           |> Ash.Query.for_read(\n             :public_list_at_workspace_version,\n             %{workspace_version_id: id},\n             read_as(visitor)\n           )\n           |> Ash.Query.select([\n             :id,\n             :title,\n             :slug,\n             :order_position,\n             :parent_section_id,\n             :front_page,\n             :group_heading,\n             :group_page\n           ])\n           |> Ash.read(tenant: site_id(), page: false)\n           |> rows() do\n      {:ok, Enum.sort_by(found, &{&1.order_position || 0, &1.title, &1.id})}\n    end\nend"
+        },
+        {
+          "name": "parent_of",
+          "args": "sections, placed, asked",
+          "code": "# THE PAGE WHOSE PAGES ARE LISTED: the one `parent` names — by its address, else by a slug only\n# one page of the version has, which is how a group with no page of its own is named — or, named\n# by nothing, the page this block is drawn in.\ncase {placed, trimmed(asked)} do\n  {nil, _no_page} ->\n    nil\n\n  {%{id: id}, \"\"} ->\n    Enum.find(sections, &(&1.id == id))\n\n  {_placed, wanted} ->\n    case section_at_path(sections, wanted) do\n      nil ->\n        case Enum.filter(sections, &(&1.slug == wanted)) do\n          [only] -> only\n          _none_or_several -> nil\n        end\n\n      found ->\n        found\n    end\nend"
+        },
+        {
+          "name": "children_of",
+          "args": "sections, parent",
+          "code": "# THE PAGES FILED UNDER `parent`, in the order the contents draw them: under the parent\n# `effective_parent/2` draws each one under, so a page whose own parent is not published is no\n# child here, as it is not in the contents. A group with no page of its own gives up its pages in\n# its place — it has no page to lead to.\ncase parent do\n  nil ->\n    []\n\n  %{id: id} ->\n    by_id = Map.new(sections, &{&1.id, &1})\n\n    sections\n    |> Enum.group_by(&effective_parent(by_id, &1))\n    |> listed(id, 0)\nend"
+        },
+        {
+          "name": "listed",
+          "args": "by_parent, parent_id, depth",
+          "code": "case depth >= 20 do\n  true ->\n    []\n\n  false ->\n    by_parent\n    |> Map.get(parent_id, [])\n    |> Enum.flat_map(fn page ->\n      case page.group_heading == true and page.group_page != true do\n        true -> listed(by_parent, page.id, depth + 1)\n        false -> [page]\n      end\n    end)\nend"
+        },
+        {
+          "name": "parents_of",
+          "args": "by_id, section, gathered, depth",
+          "code": "# THE PAGES AND GROUPS A PAGE IS FILED UNDER, nearest last, as `doc-section` tells a plugin.\ncase {Map.get(by_id, effective_parent(by_id, section)), depth} do\n  {nil, _at_the_top} -> gathered\n  {_deep, walked} when walked >= 20 -> gathered\n  {parent, _keep_going} -> parents_of(by_id, parent, [parent | gathered], depth + 1)\nend"
+        },
+        {
+          "name": "summaries_of",
+          "args": "pages, visitor, wanted",
+          "code": "# EACH PAGE'S SUMMARY, by id: the description its own SEO gives it, else the start of its text.\n# Only the pages with no description of their own are read for their text.\nrequire Ash.Query\n\nids = Enum.map(pages, & &1.id)\n\ncase {wanted == true, ids} do\n  {false, _not_drawn} ->\n    {:ok, %{}}\n\n  {true, []} ->\n    {:ok, %{}}\n\n  {true, _some} ->\n    read = fn found, fields ->\n      MishkaDocument.Section\n      |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n      |> Ash.Query.filter(id in ^found)\n      |> Ash.Query.select([:id | fields])\n      |> Ash.read(tenant: site_id(), page: false)\n      |> rows()\n    end\n\n    with {:ok, tagged} <- read.(ids, [:seo_tags]),\n         described = Map.new(tagged, &{&1.id, seo_description(&1.seo_tags)}),\n         untold = for({id, nil} <- described, do: id),\n         {:ok, texts} <- (untold == [] && {:ok, []}) || read.(untold, [:content]) do\n      {:ok, Map.merge(described, Map.new(texts, &{&1.id, summary(&1.content)}))}\n    end\nend"
+        },
+        {
+          "name": "seo_description",
+          "args": "tags",
+          "code": "# THE DESCRIPTION A PAGE'S OWN SEO GIVES IT: its `<meta name=\"description\">`.\ntags\n|> List.wrap()\n|> Enum.find_value(fn\n  %{\"tag\" => \"meta\", \"attrs\" => %{\"name\" => \"description\"}, \"content\" => text} -> plain(text)\n  %{tag: \"meta\", attrs: %{\"name\" => \"description\"}, content: text} -> plain(text)\n  _other -> nil\nend)"
+        },
+        {
+          "name": "summary",
+          "args": "html",
+          "code": "# THE START OF A PAGE'S TEXT, as words: a hundred and sixty characters at most.\ntext =\n  html\n  |> to_string()\n  |> String.replace(~r/<[^>]*>/, \" \")\n  |> String.replace(~r/\\[\\[\\/?(?:component|slot)[^\\]]*\\]\\]/, \" \")\n  |> String.replace(\"&nbsp;\", \" \")\n  |> String.replace(\"&lt;\", \"<\")\n  |> String.replace(\"&gt;\", \">\")\n  |> String.replace(\"&quot;\", \"\\\"\")\n  |> String.replace(\"&#39;\", \"'\")\n  |> String.replace(\"&amp;\", \"&\")\n  |> String.replace(~r/\\s+/u, \" \")\n  |> String.trim()\n\ncond do\n  text == \"\" -> nil\n  String.length(text) <= 160 -> text\n  true -> String.slice(text, 0, 159) |> String.trim_trailing() |> Kernel.<>(\"…\")\nend"
+        },
+        {
+          "name": "plain",
+          "args": "value",
+          "code": "# A WORD A PLUGIN HANDS OVER, AS TEXT: a string, a number or an atom. Anything else, and an empty\n# string, is no word. The template escapes it.\ncase value do\n  nil -> nil\n  binary when is_binary(binary) -> (String.trim(binary) != \"\" && binary) || nil\n  number when is_number(number) -> to_string(number)\n  atom when is_atom(atom) -> Atom.to_string(atom)\n  _not_a_word -> nil\nend\n"
+        },
+        {
+          "name": "tone_of",
+          "args": "tone",
+          "code": "# A TONE IS A WORD A STYLESHEET KEYS ON, as `data-tone`: lower-case letters, digits and `-`. Any\n# other is `neutral`.\nword = plain(tone) || \"neutral\"\n\ncase Regex.match?(~r/\\A[a-z][a-z0-9-]{0,31}\\z/, word) do\n  true -> word\n  false -> \"neutral\"\nend\n"
+        },
+        {
+          "name": "badge_given",
+          "args": "given",
+          "code": "case given do\n  %{text: text} ->\n    case plain(text) do\n      nil -> []\n      word -> [%{text: word, tone: tone_of(Map.get(given, :tone))}]\n    end\n\n  _not_a_badge ->\n    []\nend\n"
+        },
+        {
+          "name": "badge_class",
+          "args": "tone",
+          "code": "case tone do\n  \"primary\" -> \"border-[#dcdaf7] bg-[#f4f4fd] text-[#5b57d6]\"\n  \"secondary\" -> \"border-[#f3d5e4] bg-[#fdf3f8] text-[#a3366e]\"\n  \"success\" -> \"border-[#cfe8d6] bg-[#f0f9f3] text-[#2f7a4b]\"\n  \"info\" -> \"border-[#cfe3f3] bg-[#f1f7fc] text-[#2a6493]\"\n  \"warning\" -> \"border-[#f1dfb8] bg-[#fdf8ec] text-[#8a6116]\"\n  \"danger\" -> \"border-[#f0d6d6] bg-[#fdf7f7] text-[#9a3b3b]\"\n  _neutral -> \"border-[#ecebe6] bg-white text-[#6d6a63]\"\nend\n"
+        },
+        {
+          "name": "badges_of",
+          "args": "document, version, sections, page",
+          "code": "# THE BADGES A PLUGIN PUTS ON A PAGE, asked on `document:page:extras` as `doc-section` asks it for\n# the page itself, with `card: true`: a card is drawn from what the plugin holds, and a plugin\n# answering it fetches nothing. Only the header's badges are drawn; an event that cannot run, and an\n# answer of any other shape, adds none.\nby_id = Map.new(sections, &{&1.id, &1})\npaths = section_paths(sections)\n\nasked = %{\n  site_id: site_id(),\n  document: %{slug: document.slug, path: document.path, language: document.language},\n  version: version && version.version_number,\n  page: %{\n    slug: page.slug,\n    title: page.title,\n    path: Enum.join(Map.get(paths, page.id, [page.slug]), \"/\"),\n    parents:\n      Enum.map(\n        parents_of(by_id, page, [], 0),\n        &%{slug: &1.slug, title: &1.title, group: &1.group_heading == true}\n      )\n  },\n  header: [],\n  tabs: [],\n  card: true\n}\n\ncase MishkaInstaller.Event.Hook.call(\"document:page:extras\", asked) do\n  %{header: header} when is_list(header) ->\n    Enum.flat_map(header, fn\n      %{kind: :badges, items: items} when is_list(items) -> Enum.flat_map(items, &badge_given(&1))\n      _not_badges -> []\n    end)\n\n  _not_an_answer ->\n    []\nend"
+        },
+        {
+          "name": "cards_of",
+          "args": "asked, document, version, latest, sections, pages, summaries",
+          "code": "# EACH PAGE AS THE CARD DRAWS IT: its title, its address, its summary and its badges.\npaths = section_paths(sections)\nextra = version_query(version, latest, asked.version_param)\n\nEnum.map(pages, fn page ->\n  %{\n    id: page.id,\n    title: page.title,\n    href:\n      document_href(\n        asked.doc_base,\n        document,\n        Map.get(paths, page.id, [page.slug]),\n        asked.lang_param,\n        extra\n      ),\n    description: Map.get(summaries, page.id),\n    badges: (asked.show_badges && badges_of(document, version, sections, page)) || []\n  }\nend)"
+        },
+        {
+          "name": "doc_card",
+          "args": "assigns",
+          "code": "# ONE CARD'S INSIDE: the page's title, its badges and its summary.\n~H\"\"\"\n<span data-role=\"doc-cards-title\" class=\"block text-base font-semibold leading-tight\">\n  {@card.title}\n</span>\n<span\n  :if={@card.badges != []}\n  data-role=\"doc-cards-badges\"\n  class=\"flex flex-wrap items-center gap-1.5\"\n>\n  <span\n    :for={badge <- @card.badges}\n    data-role=\"doc-cards-badge\"\n    data-tone={badge.tone}\n    class={[\"rounded-full border px-2 py-0.5 text-[11px] font-semibold\", badge_class(badge.tone)]}\n  >{badge.text}</span>\n</span>\n<span\n  :if={@show_description and @card.description}\n  data-role=\"doc-cards-description\"\n  dir=\"auto\"\n  class=\"block text-sm leading-relaxed text-[#6d6a63]\"\n>\n  {@card.description}\n</span>\n\"\"\""
+        },
+        {
+          "name": "handle_event",
+          "args": "\"retry\", _params, socket",
+          "code": "{:noreply,\n socket\n |> Phoenix.Component.assign(:asked, nil)\n |> load()}"
+        },
+        {
+          "name": "handle_async",
+          "args": ":cards, {:ok, result}, socket",
+          "code": "{:noreply, arrived(socket, result)}"
+        },
+        {
+          "name": "handle_async",
+          "args": ":cards, {:exit, _reason}, socket",
+          "code": "# A READ THAT DIED TAKES THE BLOCK'S OWN STATE WITH IT AND NOTHING ELSE: the page around it is\n# still standing, and this is what it draws instead of the cards.\n{:noreply, Phoenix.Component.assign(socket, loading: false, failed: true)}"
+        },
+        {
+          "name": "site_name",
+          "args": "",
+          "code": "# THE SITE'S NAME, NOT ITS ID, because that is what a component is addressed by: the runtime hashes\n# a module out of (component name, site name). Every `<.component …/>` below draws a sibling of this\n# one, which lives on the same site as this one and nowhere else.\n__MODULE__.__component_information__([:private, :site])\n"
+        },
+        {
+          "name": "asked",
+          "args": "assigns",
+          "code": "%{\n  visitor: assigns[:current_user],\n  placed_in: trimmed(assigns[:placed_in]),\n  parent: trimmed(assigns[:parent]),\n  doc_base: assigns[:doc_base],\n  lang_param: assigns[:lang_param],\n  version_param: assigns[:version_param],\n  show_description: assigns[:show_description] == true,\n  show_badges: assigns[:show_badges] == true\n}"
+        },
+        {
+          "name": "fetch",
+          "args": "asked",
+          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error. A\n# block placed in no page, or in one the visitor may not read, lists nothing.\nwith {:ok, placed} <- placed_page(asked.placed_in, asked.visitor),\n     {:ok, version} <- version_of(placed),\n     {:ok, {document, latest}} <- document_of(version),\n     {:ok, sections} <- sections_of(document && version, asked.visitor),\n     pages = children_of(sections, parent_of(sections, placed, asked.parent)),\n     {:ok, summaries} <- summaries_of(pages, asked.visitor, asked.show_description) do\n  case document do\n    nil ->\n      {:ok, %{document: nil, cards: []}}\n\n    found ->\n      {:ok,\n       %{\n         document: found,\n         cards: cards_of(asked, found, version, latest, sections, pages, summaries)\n       }}\n  end\nend"
+        },
+        {
+          "name": "arrived",
+          "args": "socket, {:ok, data}",
+          "code": "Phoenix.Component.assign(socket,\n  loading: false,\n  failed: false,\n  document: data.document,\n  cards: data.cards\n)"
+        },
+        {
+          "name": "arrived",
+          "args": "socket, {:error, _reason}",
+          "code": "Phoenix.Component.assign(socket, loading: false, failed: true, cards: [])"
+        },
+        {
+          "name": "cold?",
+          "args": "socket",
+          "code": "# NO PROCESS AT ALL, WHICH IS NOT THE SAME AS NOT CONNECTED. `connected?/1` answers false twice:\n# on the builder's canvas and the Preview, where `MishkaCmsCore.Runtime.LiveViewHelpers.cold/2`\n# renders this block with no LiveView behind it, and on the first HTTP render of a real page, where\n# there IS a process and the socket connects a moment later. Only the first has nobody to hand a\n# task's answer to; the second must NOT read here, or the page's HTTP response waits for every\n# block on it and then throws the rows away, because the mount that follows reads them again.\nsocket.private[:runtime_cold] == true\n"
+        },
+        {
+          "name": "load",
+          "args": "socket",
+          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] do\n  ^asked ->\n    socket\n\n  before ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) or is_nil(before) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` answers in it what it answers in the template.\n        |> MishkaGervaz.Messages.start_async(:cards, fn -> fetch(asked) end)\n    end\nend"
+        }
+      ],
+      "permissions": [],
+      "dependencies": [
+        "doc-notice"
+      ],
+      "examples": [],
+      "extra": {
+        "icon": "card",
         "ui_kit": "mishka_document"
       },
       "site_id": null

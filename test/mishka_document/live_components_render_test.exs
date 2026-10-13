@@ -1342,6 +1342,395 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # A GROUP WITH A PAGE OF ITS OWN is read at its slug like any page, while the pages under it keep
+  # their address as if it were not there; every block links to it, and a lock or a review keeps it
+  # from a visitor as it keeps any page.
+  describe "a group with a page of its own" do
+    test "is read at its slug, while its pages keep their address", %{site: site} do
+      paged_group!(site)
+      attrs = %{path: "/mishka/docs", lang_param: ""}
+
+      {:ok, group, _html} =
+        mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => "navigation"}))
+
+      assert text_of(group, ~s([data-role="doc-section-title"])) == ["Navigation"]
+      assert [body] = text_of(group, ~s([data-role="doc-section-body"]))
+      assert body =~ "Ways to move around a site."
+
+      {:ok, crumb, _html} =
+        mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => "breadcrumb"}))
+
+      assert text_of(crumb, ~s([data-role="doc-section-title"])) == ["Breadcrumb"]
+
+      assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(attrs, :params, %{"section" => "navigation/breadcrumb"})
+        )
+      end
+    end
+
+    test "is a heading in the contents that links to it, current while it is read",
+         %{site: site} do
+      paged_group!(site)
+      attrs = %{path: "/mishka/docs", lang_param: ""}
+
+      {:ok, on_group, _html} =
+        mount_page(site, "doc-sidebar", Map.put(attrs, :params, %{"section" => "navigation"}))
+
+      assert text_of(on_group, ~s([data-role="doc-sidebar-group"])) == ["Navigation", "Feedback"]
+      assert hrefs(on_group, ~s([data-role="doc-sidebar-group"])) == ["/mishka/docs/navigation"]
+
+      assert hrefs(on_group, ~s([data-role="doc-sidebar-group"][aria-current="page"])) ==
+               ["/mishka/docs/navigation"]
+
+      assert hrefs(on_group, ~s([data-role="doc-sidebar-link"])) == [
+               "/mishka/docs/getting-started",
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/menu",
+               "/mishka/docs/alert",
+               "/mishka/docs/upgrading"
+             ]
+
+      {:ok, elsewhere, _html} =
+        mount_page(site, "doc-sidebar", Map.put(attrs, :params, %{"section" => "upgrading"}))
+
+      assert hrefs(elsewhere, ~s([data-role="doc-sidebar-group"])) == ["/mishka/docs/navigation"]
+      assert hrefs(elsewhere, ~s([data-role="doc-sidebar-group"][aria-current="page"])) == []
+    end
+
+    test "is linked from the landing and the trail, and Previous and Next stop on it",
+         %{site: site} do
+      paged_group!(site)
+      attrs = %{path: "/mishka/docs", lang_param: ""}
+
+      {:ok, landing, _html} = mount_page(site, "doc-section", Map.put(attrs, :params, %{}))
+
+      assert hrefs(landing, ~s([data-role="doc-landing-group-link"])) == [
+               "/mishka/docs/navigation"
+             ]
+
+      assert text_of(landing, ~s([data-role="doc-landing-group-title"])) ==
+               ["Navigation", "Feedback"]
+
+      {:ok, first, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.put(attrs, :params, %{"section" => "getting-started"})
+        )
+
+      assert hrefs(first, ~s([data-role="doc-section-next"])) == ["/mishka/docs/navigation"]
+
+      {:ok, group, _html} =
+        mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => "navigation"}))
+
+      assert hrefs(group, ~s([data-role="doc-section-prev"])) == ["/mishka/docs/getting-started"]
+      assert hrefs(group, ~s([data-role="doc-section-next"])) == ["/mishka/docs/breadcrumb"]
+
+      {:ok, crumb, _html} =
+        mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => "breadcrumb"}))
+
+      assert hrefs(crumb, ~s([data-role="doc-section-crumb"])) == ["/mishka/docs/navigation"]
+      assert hrefs(crumb, ~s([data-role="doc-section-prev"])) == ["/mishka/docs/navigation"]
+    end
+
+    test "is what the table of contents and the switch read there", %{site: site} do
+      paged_group!(site)
+      attrs = %{path: "/mishka/docs", lang_param: "", params: %{"section" => "navigation"}}
+
+      {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
+
+      assert text_of(toc, ~s([data-role="doc-toc-link"])) == [
+               "Where to start",
+               "Where to go next"
+             ]
+
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+      assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == ["/mishka/docs/navigation"]
+    end
+
+    test "is a missing page to a visitor it is locked to, and while it waits for review",
+         %{site: site} do
+      %{version: version} = paged_group!(site)
+      member = create_user_with_permissions!(["members:read"], site_id: site.id)
+
+      page!(site, version,
+        title: "Members",
+        slug: "members",
+        order_position: 5,
+        group_heading: true,
+        group_page: true,
+        permissions: ["members:read"]
+      )
+
+      page!(site, version,
+        title: "Overlays",
+        slug: "overlays",
+        order_position: 6,
+        group_heading: true,
+        group_page: true,
+        content_review_status: :pending
+      )
+
+      attrs = %{path: "/mishka/docs", lang_param: ""}
+
+      for section <- ["members", "overlays"] do
+        assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+          mount_page(site, "doc-section", Map.put(attrs, :params, %{"section" => section}))
+        end
+      end
+
+      {:ok, shown, _html} =
+        mount_page(
+          site,
+          "doc-section",
+          Map.merge(attrs, %{params: %{"section" => "members"}, current_user: member})
+        )
+
+      assert text_of(shown, ~s([data-role="doc-section-title"])) == ["Members"]
+    end
+  end
+
+  # THE PAGES UNDER A PAGE, AS CARDS, placed in its text as `[[component doc-section-cards /]]`:
+  # `doc-section` tells the block which page it is in, and the block reads that page's published
+  # pages itself, as the contents read them for the same visitor.
+  describe "doc-section-cards" do
+    test "lists the published pages under the page it is placed in, in order, as cards",
+         %{site: site} do
+      paged_group!(site)
+
+      view = navigation_page(site)
+
+      assert text_of(view, ~s([data-role="doc-cards-title"])) == ["Breadcrumb", "Menu"]
+
+      assert hrefs(view, ~s([data-role="doc-cards-link"])) == [
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/menu"
+             ]
+
+      assert text_of(view, ~s([data-role="doc-cards-description"])) == [
+               "A trail of links back up the site.",
+               "A list of links that opens from a button."
+             ]
+
+      [grid] = Enum.to_list(drawn(view, ~s([data-role="doc-cards-items"])))
+      [classes] = LazyHTML.attribute(grid, "class")
+      assert "grid-cols-1" in String.split(classes)
+      assert "sm:grid-cols-2" in String.split(classes)
+
+      assert [body] = text_of(view, ~s([data-role="doc-section-body"]))
+      assert body =~ "Ways to move around a site."
+    end
+
+    test "leaves out a page locked to the visitor, and shows it to one who holds it",
+         %{site: site} do
+      paged_group!(site)
+      member = create_user_with_permissions!(["members:read"], site_id: site.id)
+
+      assert text_of(navigation_page(site), ~s([data-role="doc-cards-title"])) ==
+               ["Breadcrumb", "Menu"]
+
+      assert text_of(navigation_page(site, member), ~s([data-role="doc-cards-title"])) ==
+               ["Breadcrumb", "Menu", "Mega menu"]
+    end
+
+    test "says so when no page is filed under the page", %{site: site} do
+      %{version: version} = paged_group!(site)
+
+      page!(site, version,
+        title: "Lonely",
+        slug: "lonely",
+        order_position: 7,
+        content: "<p>[[component doc-section-cards /]]</p>"
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "lonely"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-cards-empty"])) == [
+               "No pages are filed under this one yet."
+             ]
+
+      assert text_of(view, ~s([data-role="doc-cards-item"])) == []
+    end
+
+    test "lists the pages under the page its parent names, a group with no page by its slug",
+         %{site: site} do
+      %{version: version} = paged_group!(site)
+
+      page!(site, version,
+        title: "Overview",
+        slug: "overview",
+        order_position: 8,
+        content:
+          ~s(<p>[[component doc-section-cards parent="navigation" /]]</p>) <>
+            ~s(<p>[[component doc-section-cards parent="feedback" show_description=false /]]</p>)
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "overview"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-cards-title"])) == ["Breadcrumb", "Menu", "Alert"]
+      assert hrefs(view, ~s([data-role="doc-cards-link"])) |> List.last() == "/mishka/docs/alert"
+      assert length(text_of(view, ~s([data-role="doc-cards-description"]))) == 2
+    end
+
+    test "leaves a marker in code as it was written", %{site: site} do
+      %{version: version} = paged_group!(site)
+
+      page!(site, version,
+        title: "Syntax",
+        slug: "syntax",
+        order_position: 9,
+        content: "<p>Write <code>[[component doc-section-cards /]]</code> on a page.</p>"
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "syntax"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-cards"])) == []
+
+      assert text_of(view, ~s([data-role="doc-section-body"] code)) == [
+               "[[component doc-section-cards /]]"
+             ]
+    end
+
+    test "reads on its own, handed the page it is in", %{site: site} do
+      %{group: group} = paged_group!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section-cards", %{placed_in: group.id, lang_param: ""})
+
+      assert hrefs(view, ~s([data-role="doc-cards-link"])) == [
+               "/mishka/docs/breadcrumb",
+               "/mishka/docs/menu"
+             ]
+
+      {:ok, nowhere, _html} = mount_page(site, "doc-section-cards", %{placed_in: "not-a-page"})
+      assert text_of(nowhere, ~s([data-role="doc-cards-empty"])) != []
+    end
+
+    test "is recorded among the components the page's text names", %{site: site} do
+      %{group: group} = paged_group!(site)
+
+      assert document_page(site, group.slug).content_components == ["doc-section-cards"]
+    end
+  end
+
+  # WHAT A PLUGIN PUTS ON A PAGE'S CARD: the badges of the header it answers for that page, asked
+  # with `card: true` so it answers from what it holds.
+  describe "doc-section-cards's badges" do
+    setup do
+      Process.register(self(), :__page_extras_probe__)
+
+      {:ok, _} =
+        Event.write(%{
+          name: PageExtras,
+          event: @extras_event,
+          extension: :mishka_installer,
+          status: :started
+        })
+
+      :ok = EventHandler.do_compile(@extras_event, :start, false)
+
+      on_exit(fn ->
+        PageExtras.forget!()
+        Event.unregister(:name, PageExtras, false)
+        EventHandler.do_compile(@extras_event, :start, false)
+      end)
+
+      :ok
+    end
+
+    test "draws the badges a plugin answers for each page, and nothing else of its header",
+         %{site: site} do
+      paged_group!(site)
+
+      PageExtras.answer!(fn
+        %{card: true, page: %{slug: slug}} = state ->
+          %{
+            state
+            | header: [
+                %{kind: :badges, items: [%{text: "Component", tone: :secondary}, %{text: slug}]},
+                %{kind: :command, label: "Install", value: "mix x"}
+              ],
+              tabs: [%{id: "props", label: "Props", kind: :list, items: []}]
+          }
+
+        state ->
+          state
+      end)
+
+      view = navigation_page(site)
+
+      assert text_of(view, ~s([data-role="doc-cards-badge"])) ==
+               ["Component", "breadcrumb", "Component", "menu"]
+
+      assert view
+             |> drawn(~s([data-role="doc-cards-badge"]))
+             |> LazyHTML.attribute("data-tone")
+             |> Enum.take(2) == ["secondary", "neutral"]
+
+      assert text_of(view, ~s([data-role="doc-cards"] [data-role="doc-extra-command"])) == []
+
+      site_id = site.id
+
+      assert_received {:page_extras_asked,
+                       %{
+                         site_id: ^site_id,
+                         card: true,
+                         document: %{slug: "paged", path: "/mishka/docs"},
+                         version: "1.0.0",
+                         page: %{
+                           slug: "breadcrumb",
+                           path: "breadcrumb",
+                           parents: [%{slug: "navigation", group: true}]
+                         }
+                       }}
+    end
+
+    test "asks nothing with show_badges off", %{site: site} do
+      %{version: version} = paged_group!(site)
+
+      page!(site, version,
+        title: "Plain",
+        slug: "plain",
+        order_position: 9,
+        content:
+          ~s(<p>[[component doc-section-cards parent="navigation" show_badges=false /]]</p>)
+      )
+
+      PageExtras.answer!(fn state ->
+        %{state | header: [%{kind: :badges, items: [%{text: "Never"}]}]}
+      end)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          params: %{"section" => "plain"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-cards-title"])) == ["Breadcrumb", "Menu"]
+      assert text_of(view, ~s([data-role="doc-cards-badge"])) == []
+      refute_received {:page_extras_asked, %{card: true}}
+    end
+  end
+
   # THE PAGE'S OWN TEXT IS STYLED, AND NOTHING A COMPONENT IN IT DRAWS. The body's and a note's
   # rules reach an element with no class and nothing with a class between it and the body: what the
   # editor writes carries no class, and a component's markup does — so a component drawn at the top,
@@ -1885,9 +2274,13 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     # A READ THAT FAILS IS THE BLOCK'S ERROR HERE TOO, reached through the read's own
     # `{:error, _}` and nothing that catches.
     test "and a read that fails draws the block's error", %{site: site} do
-      manual!(site)
+      %{pages: [placed | _rest]} = manual!(site)
 
-      asked = %{"workspace" => "mishka-cms", "params" => %{"section" => "installation"}}
+      asked = %{
+        "workspace" => "mishka-cms",
+        "params" => %{"section" => "installation"},
+        "placed_in" => placed.id
+      }
 
       failing =
         for component <- bundle_components(),
@@ -1908,7 +2301,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           name
         end
 
-      assert Enum.sort(failing) == ~w(doc-sidebar doc-switcher doc-toc doc-workspace-list)
+      assert Enum.sort(failing) ==
+               ~w(doc-section-cards doc-sidebar doc-switcher doc-toc doc-workspace-list)
     end
   end
 
@@ -2573,8 +2967,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert cut |> drawn(~s([data-role="doc-code-foot"] b)) |> Enum.count() == 0
     end
 
-    # A NOTE IS STORED AS BASIC HTML, which keeps no class, so its code block names no language; its
-    # window still carries the button.
+    # A NOTE IS STORED AS A PAGE'S TEXT IS, so its code block keeps its language, and its window
+    # carries the button.
     test "and draws a note's code blocks in windows as well", %{site: site} do
       %{pages: [_first, installation | _rest]} = manual!(site)
 
@@ -2589,7 +2983,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           params: %{"section" => "installation"}
         })
 
-      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code-lang"])) == [""]
+      assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code-lang"])) == [
+               "bash"
+             ]
 
       assert text_of(view, ~s([data-role="doc-note-body"] [data-role="doc-code"] > pre > code)) ==
                ["mix setup"]
@@ -4496,6 +4892,104 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 2)
 
     %{document: document, version: version, group: group}
+  end
+
+  # One manual at /mishka/docs: "Getting started", the group "Navigation" with a page of its own —
+  # its intro, a heading, and the cards of its pages — over "Breadcrumb" (an SEO description),
+  # "Menu" (a summary from its text), "Drafts" (waiting for review) and "Mega menu" (locked to
+  # members:read); the group "Feedback" with no page, over "Alert"; then "Upgrading".
+  defp paged_group!(site) do
+    :ok = SiteState.put_component(site.id, "doc-section-cards")
+    on_exit(fn -> SiteState.delete_component(site.id, "doc-section-cards") end)
+
+    document = document!(site, name: "Paged", slug: "paged", path: "/mishka/docs")
+    version = version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
+
+    page!(site, version, title: "Getting started", slug: "getting-started", order_position: 0)
+
+    group =
+      page!(site, version,
+        title: "Navigation",
+        slug: "navigation",
+        order_position: 1,
+        group_heading: true,
+        group_page: true,
+        content:
+          "<p>Ways to move around a site.</p><h2>Where to start</h2>" <>
+            "<p>[[component doc-section-cards /]]</p><h2>Where to go next</h2><p>Forms.</p>"
+      )
+
+    page!(site, version,
+      title: "Breadcrumb",
+      slug: "breadcrumb",
+      order_position: 0,
+      parent_section_id: group.id,
+      seo_tags: [
+        %{
+          tag: "meta",
+          attrs: %{"name" => "description"},
+          content: "A trail of links back up the site."
+        }
+      ]
+    )
+
+    page!(site, version,
+      title: "Menu",
+      slug: "menu",
+      order_position: 1,
+      parent_section_id: group.id,
+      content: "<p>A list of links that <b>opens</b> from a button.</p>"
+    )
+
+    page!(site, version,
+      title: "Drafts",
+      slug: "drafts",
+      order_position: 2,
+      parent_section_id: group.id,
+      content_review_status: :pending
+    )
+
+    page!(site, version,
+      title: "Mega menu",
+      slug: "mega-menu",
+      order_position: 3,
+      parent_section_id: group.id,
+      permissions: ["members:read"]
+    )
+
+    feedback =
+      page!(site, version,
+        title: "Feedback",
+        slug: "feedback",
+        order_position: 2,
+        group_heading: true,
+        content: nil
+      )
+
+    page!(site, version,
+      title: "Alert",
+      slug: "alert",
+      order_position: 0,
+      parent_section_id: feedback.id,
+      content: "<p>A message that asks for attention.</p>"
+    )
+
+    page!(site, version, title: "Upgrading", slug: "upgrading", order_position: 3)
+
+    %{document: document, version: version, group: group}
+  end
+
+  # The group's own page of `paged_group!/1`, read by `visitor`.
+  defp navigation_page(site, visitor \\ nil) do
+    {:ok, view, _html} =
+      mount_page(site, "doc-section", %{
+        path: "/mishka/docs",
+        lang_param: "",
+        params: %{"section" => "navigation"},
+        current_user: visitor
+      })
+
+    view
   end
 
   defp public_versions(site, document) do

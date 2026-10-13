@@ -30,7 +30,7 @@ defmodule MishkaDocument.KitTest do
   # a function component is markup the live ones hand their rows to. Splitting them here is what
   # lets every assertion below ask the right question of each — a function component has no socket,
   # so it has no `mount/1`, no `id={@id}` and nothing to aim an event at.
-  @live ~w(doc-workspace-list doc-section doc-sidebar doc-toc doc-switcher)
+  @live ~w(doc-workspace-list doc-section doc-sidebar doc-toc doc-switcher doc-section-cards)
 
   @functions ~w(doc-workspace-card doc-pager doc-notice doc-callout doc-example)
 
@@ -48,7 +48,9 @@ defmodule MishkaDocument.KitTest do
 
   # The reads of the document a page sits in and of its versions, the only ones made as the system:
   # a page whose own lock opens for the reader is drawn inside a document whose lock does not.
-  @frame_reads ~w(workspace_row versions_of)
+  # `doc-section-cards` reaches them from the page it is drawn in, through `version_of` and
+  # `document_of`.
+  @frame_reads ~w(workspace_row versions_of version_of document_of)
   @frame_resources ~w(Workspace WorkspaceVersion)
 
   # A read as the stored code writes it, in BOTH shapes it is written in: piped into `for_read/4`,
@@ -97,7 +99,7 @@ defmodule MishkaDocument.KitTest do
       assert bundle()["name"] == "mishka_document"
     end
 
-    test "ships exactly the ten components, each of the kind it is listed under" do
+    test "ships exactly the eleven components, each of the kind it is listed under" do
       assert Enum.map(components(), & &1["name"]) |> Enum.sort() == Enum.sort(@names)
 
       for component <- components() do
@@ -270,7 +272,7 @@ defmodule MishkaDocument.KitTest do
         end
 
       assert Enum.sort(started) ==
-               ~w(doc-section doc-sidebar doc-switcher doc-toc doc-workspace-list)
+               ~w(doc-section doc-section-cards doc-sidebar doc-switcher doc-toc doc-workspace-list)
     end
 
     # A READ THAT FAILS IS A TUPLE THE BLOCK DRAWS ITS ERROR FROM, on the builder's canvas as in a
