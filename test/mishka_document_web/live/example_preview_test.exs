@@ -321,4 +321,38 @@ defmodule MishkaDocumentWeb.Test.ExamplePreviewTest do
       assert ExamplePreview.sources("<p>No examples.</p>", source) == "<p>No examples.</p>"
     end
   end
+
+  describe "with_version/2" do
+    test "fills every {{doc.version}}, escaped, and leaves an escaped one as it is written" do
+      html =
+        ~s(<h2>Install {{doc.version}}</h2><p>{{ doc.version }}</p>) <>
+          ~s(<a href="https://example.com/blob/v{{doc.version}}/x">x</a>) <>
+          ~S(<p>\{{doc.version}} and {{doc.title}}</p>) <>
+          ~s(<pre><code>{:lib, "~&gt; {{doc.version}}"}</code></pre>)
+
+      assert ExamplePreview.with_version(html, "1.2.0") ==
+               ~s(<h2>Install 1.2.0</h2><p>1.2.0</p>) <>
+                 ~s(<a href="https://example.com/blob/v1.2.0/x">x</a>) <>
+                 ~s(<p>{{doc.version}} and {{doc.title}}</p>) <>
+                 ~s(<pre><code>{:lib, "~&gt; 1.2.0"}</code></pre>)
+
+      assert ExamplePreview.with_version(~s(<a href="{{doc.version}}">), ~s(1"<b>)) ==
+               ~s(<a href="1&quot;&lt;b&gt;">)
+
+      assert ExamplePreview.with_version("<p>{{doc.version}}</p>", nil) ==
+               "<p>{{doc.version}}</p>"
+
+      assert ExamplePreview.with_version("<p>None.</p>", "1.2.0") == "<p>None.</p>"
+    end
+
+    test "an example's preview draws the number of its page's version", %{conn: conn, site: site} do
+      page = page!(site, version!(site), example("Release {{doc.version}}"))
+
+      html = conn |> get("/_preview/doc-example/section/#{page.id}/0") |> html_response(200)
+
+      assert texts(html, ~s([data-role="doc-example-live"] [data-role="doc-callout"])) == [
+               "Release 1.0.0"
+             ]
+    end
+  end
 end
