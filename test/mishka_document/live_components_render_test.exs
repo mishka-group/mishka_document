@@ -788,6 +788,11 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     # THE RUNTIME DRAWS A MARKER'S COMPONENT ONLY BY A NAME `SiteState` KNOWS for the site, which a
     # booted site holds for every component it has and this suite's hand-saved one does not.
     defp example_page!(site, content, inside \\ ["doc-callout"]) do
+      {_page, article} = example_page_of!(site, content, inside)
+      LazyHTML.query(article, ~s([data-role="doc-section-body"]))
+    end
+
+    defp example_page_of!(site, content, inside, notes \\ []) do
       for name <- ["doc-example" | inside] do
         :ok = SiteState.put_component(site.id, name)
         on_exit(fn -> SiteState.delete_component(site.id, name) end)
@@ -795,23 +800,30 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       %{version: version} = manual!(site)
 
-      page!(site, version,
-        title: "Examples",
-        slug: "examples",
-        order_position: 9,
-        content: content
-      )
+      page =
+        page!(site, version,
+          title: "Examples",
+          slug: "examples",
+          order_position: 9,
+          content: content
+        )
+
+      for {note, place} <- Enum.with_index(notes) do
+        note!(site, page, title: "Note #{place}", order_position: place, content: note)
+      end
 
       {:ok, view, _html} =
         mount_page(site, "doc-section", %{
           workspace: "mishka-cms",
-          params: %{"section" => "examples"}
+          params: %{"section" => "examples"},
+          show_notes: true
         })
 
-      view
-      |> render_async(@async)
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(~s([data-role="doc-section-body"]))
+      {page,
+       view
+       |> render_async(@async)
+       |> LazyHTML.from_fragment()
+       |> LazyHTML.query(~s([data-role="doc-section-article"]))}
     end
 
     # The preview's frame, as drawn: empty until the hook gives it its page.
@@ -834,12 +846,13 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
     test "draws the example on the page, and an empty frame its preview fills when it opens",
          %{site: site} do
-      body =
-        example_page!(
+      {page, body} =
+        example_page_of!(
           site,
           ~s(<p>Before.</p>[[component doc-example title="A tip"]]) <>
             ~s([[component doc-callout tone="tip"]]Use <code>mix</code>[[/component]]) <>
-            "[[/component]]"
+            "[[/component]]",
+          ["doc-callout"]
         )
 
       assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
@@ -864,7 +877,10 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert LazyHTML.attribute(callout, "data-tone") == ["tip"]
       assert texts(callout, ~s([data-role="doc-callout-body"] > code)) == ["mix"]
       assert body |> LazyHTML.query(~s([data-role="doc-callout"])) |> Enum.count() == 1
-      assert body |> LazyHTML.query("p:not([data-role])") |> LazyHTML.text() == "Before."
+
+      assert body
+             |> LazyHTML.query(~s|[data-role="doc-section-body"] > p:not([data-role])|)
+             |> LazyHTML.text() == "Before."
 
       # The preview: a dialog the open button names, in an element LiveView leaves to the browser.
       [open] = example |> LazyHTML.query(~s([data-role="doc-example-open"])) |> Enum.to_list()
@@ -882,17 +898,26 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert LazyHTML.attribute(dialog, "aria-label") == ["A tip"]
       assert LazyHTML.attribute(dialog, "open") == []
 
-      assert texts(dialog, ~s([data-role="doc-example-preview-note"])) == [
-               "A still preview: the example's scripts do not run here. Its menus, tabs and " <>
-                 "other moving parts work on the page."
-             ]
+      assert dialog |> LazyHTML.query(~s([data-role="doc-example-preview-note"])) |> Enum.count() ==
+               0
 
       assert texts(dialog, ~s([data-role="doc-example-close-text"])) == ["Close"]
 
-      # Its frame is empty and carries no page: the hook writes one when the preview first opens,
-      # and copies the example on the page into it each time it opens.
+      # Its frame is empty and loads nothing: it names the page that draws the example alone, which
+      # the hook hands it as its `src` only when the preview opens.
       assert [frame] = Enum.to_list(LazyHTML.query(dialog, ~s([data-role="doc-example-frame"])))
-      assert LazyHTML.attribute(frame, "sandbox") == ["allow-same-origin"]
+
+      assert LazyHTML.attribute(frame, "sandbox") == [
+               "allow-scripts allow-same-origin allow-forms"
+             ]
+
+      assert LazyHTML.attribute(frame, "src") == []
+
+      assert LazyHTML.attribute(frame, "data-src") == [
+               "/_preview/doc-example/section/#{page.id}/0"
+             ]
+
+      assert LazyHTML.attribute(frame, "data-stylesheet") == []
       assert LazyHTML.attribute(frame, "srcdoc") == []
       assert LazyHTML.attribute(frame, "data-document") == []
       assert LazyHTML.attribute(frame, "title") == ["A tip"]
@@ -900,19 +925,17 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert dialog |> LazyHTML.query(~s([data-role="doc-callout"])) |> Enum.count() == 0
     end
 
-    # THE PREVIEW IS THE BROWSER'S ONCE DRAWN, under an id named after the words it is drawn with:
-    # the same words draw the same id, whatever the example holds, and other words another one.
-    test "names its preview after the words it is drawn with", %{site: site} do
-      body =
-        example_page!(
-          site,
+    # THE PREVIEW IS THE BROWSER'S ONCE DRAWN, under an id named after the words it is drawn with and
+    # the place of its example: drawn again, each keeps its id; another example, or another place,
+    # draws another one.
+    test "names its preview after the words it is drawn with and its place", %{site: site} do
+      content =
+        "[[component doc-example]][[component doc-callout]]Same.[[/component]][[/component]]" <>
           "[[component doc-example]][[component doc-callout]]Same.[[/component]][[/component]]" <>
-            "[[component doc-example]][[component doc-callout]]Other.[[/component]][[/component]]" <>
-            ~s([[component doc-example title="Named"]][[component doc-callout]]Same.[[/component]]) <>
-            "[[/component]]"
-        )
+          ~s([[component doc-example title="Named"]][[component doc-callout]]Same.[[/component]]) <>
+          "[[/component]]"
 
-      keys =
+      keys = fn body ->
         body
         |> LazyHTML.query(~s([data-role="doc-example"]))
         |> Enum.map(fn example ->
@@ -925,9 +948,27 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
           String.replace_prefix(holder, "#{id}-preview-", "")
         end)
+      end
 
-      assert [same, same, other] = keys
-      assert same != other
+      drawn = keys.(example_page!(site, content))
+
+      assert [_first, _second, _third] = drawn
+      assert drawn |> Enum.uniq() |> length() == 3
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "examples"}
+        })
+
+      again =
+        view
+        |> render_async(@async)
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s([data-role="doc-section-body"]))
+        |> keys.()
+
+      assert again == drawn
     end
 
     # A TALL EXAMPLE IS CUT, but the browser is what knows how tall it is: the root says the height,
@@ -1067,40 +1108,60 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert body |> LazyHTML.query("b") |> Enum.count() == 0
     end
 
-    # THE FRAME DRAWS THE EXAMPLE AS THE SITE DRAWS IT, so the page the hook writes into it links the
-    # stylesheet the site's own pages link — once the site has one — which the frame names.
-    test "names the site's own stylesheet for the frame's page", %{site: site} do
-      content =
-        "[[component doc-example]][[component doc-callout]]Styled.[[/component]][[/component]]"
+    # THE FRAME NAMES THE PAGE THAT DRAWS ITS EXAMPLE ALONE, by the example's place among the
+    # examples of the page's text or of a note's — none counted inside code — and that page draws
+    # exactly that example. Nothing is loaded for it until the preview opens: no frame has a `src`.
+    test "names for each frame the page that draws its own example alone", %{
+      conn: conn,
+      site: site
+    } do
+      example = fn text ->
+        "[[component doc-example]][[component doc-callout]]#{text}[[/component]][[/component]]"
+      end
 
-      unstyled = example_page!(site, content)
+      {page, body} =
+        example_page_of!(
+          site,
+          ~s(<pre><code>[[component doc-example]]Code[[/component]]</code></pre>) <>
+            example.("First") <>
+            "<p>Between.</p>" <>
+            "[[component doc-callout]]" <> example.("Inside") <> "[[/component]]",
+          ["doc-callout"],
+          ["<p>Note.</p>" <> example.("In the note")]
+        )
 
-      assert unstyled
-             |> LazyHTML.query(~s([data-role="doc-example"]))
-             |> frame()
-             |> LazyHTML.attribute("data-stylesheet") == []
+      [note] =
+        MishkaDocument.Note
+        |> Ash.Query.filter(section_id == ^page.id)
+        |> Ash.read!(tenant: site.id, authorize?: false)
 
-      :ok =
-        MishkaCmsCore.Runtime.States.AssetsState.save(%{
-          id: site.name,
-          type: "css",
-          value: "body{}",
-          hash: "0123abcd",
-          updated_at: DateTime.utc_now()
-        })
+      frames = LazyHTML.query(body, ~s([data-role="doc-example-frame"]))
 
-      on_exit(fn -> MishkaCmsCore.Runtime.States.AssetsState.delete(site.name, "css") end)
+      assert LazyHTML.attribute(frames, "data-src") == [
+               "/_preview/doc-example/section/#{page.id}/0",
+               "/_preview/doc-example/section/#{page.id}/1",
+               "/_preview/doc-example/note/#{note.id}/0"
+             ]
 
-      {:ok, view, _html} =
-        mount_page(site, "doc-section", %{
-          workspace: "mishka-cms",
-          params: %{"section" => "examples"}
-        })
+      assert LazyHTML.attribute(frames, "src") == []
+      refute LazyHTML.to_html(body) =~ ~s( src="/_preview/)
 
-      assert view
-             |> drawn(~s([data-role="doc-example"]))
-             |> frame()
-             |> LazyHTML.attribute("data-stylesheet") == ["/assets/css/#{site.name}/0123abcd.css"]
+      conn =
+        conn
+        |> Map.put(:host, site.host)
+        |> Map.update!(:req_headers, &[{"host", site.host} | List.keydelete(&1, "host", 0)])
+
+      drawn =
+        for [src] <- Enum.map(frames, &LazyHTML.attribute(&1, "data-src")) do
+          conn
+          |> get(src)
+          |> html_response(200)
+          |> LazyHTML.from_document()
+          |> LazyHTML.query(~s([data-role="doc-example-live"] [data-role="doc-callout-body"]))
+          |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
+        end
+
+      assert drawn == [["First"], ["Inside"], ["In the note"]]
     end
 
     # A COMPONENT THAT KEEPS STATE IS DRAWN BY LIVEVIEW, ON THE PAGE: the example draws it on the
@@ -1164,8 +1225,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
 
     # A PREVIEW RENDERS CONTENT TO A STRING, with no LiveView to draw on: the example is drawn there
-    # as on a page, with its preview's empty frame.
-    test "draws the same example and frame where content is rendered to a string", %{site: site} do
+    # as on a page, with no preview of its own.
+    test "draws the same example, with no preview, where content is rendered to a string",
+         %{site: site} do
       for name <- ["doc-example", "doc-callout"] do
         :ok = SiteState.put_component(site.id, name)
         on_exit(fn -> SiteState.delete_component(site.id, name) end)
@@ -1191,8 +1253,19 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
              |> LazyHTML.attribute("data-tone") == ["info"]
 
       assert LazyHTML.attribute(example, "data-frame-dir") == ["rtl"]
-      assert example |> frame() |> Enum.count() == 1
-      assert example |> frame() |> LazyHTML.attribute("data-document") == []
+
+      # Content drawn anywhere but a page of a document says nowhere the example is written, so it
+      # has no preview: the toolbar turns its direction and offers nothing more.
+      assert example |> frame() |> Enum.count() == 0
+
+      assert example |> LazyHTML.query(~s([data-role="doc-example-open"])) |> Enum.count() ==
+               0
+
+      assert texts(
+               example,
+               ~s([data-role="doc-example-toolbar"] [data-role="doc-example-option-text"])
+             ) ==
+               ~w(LTR RTL)
     end
   end
 

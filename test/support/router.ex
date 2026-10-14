@@ -48,6 +48,27 @@ defmodule MishkaDocument.TestRouter do
     plug :set_actor, :user
   end
 
+  # The CMS's public pipeline as far as an extension's own public route reads it: the site of the
+  # host, the visitor, and the response headers with their Content-Security-Policy and its nonce.
+  pipeline :public do
+    plug :accepts, ["html"]
+    plug :fetch_session
+    plug :fetch_live_flash
+    plug :put_root_layout, html: {MishkaDocument.TestLayouts, :root}
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
+    plug MishkaCmsCore.Runtime.Plugs.SiteLookupPlug
+    plug :load_from_session
+    plug :confirm_tenant
+    plug MishkaCmsWeb.Runtime.Plugs.SecurityHeaders
+  end
+
+  scope "/" do
+    pipe_through [:public]
+
+    extension_routes(:public)
+  end
+
   scope "/api/json" do
     pipe_through [:api]
 
