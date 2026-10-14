@@ -379,4 +379,110 @@ defmodule MishkaDocumentWeb.Test.WorkspaceVersionCloneTest do
       assert saved.source_version_id == source.id
     end
   end
+
+  describe "deleting and making independent" do
+    defp delete_button(version), do: ~s(button[phx-click="delete"][phx-value-id="#{version.id}"])
+
+    defp detach_button(version),
+      do: ~s(button[phx-value-event="detach"][phx-value-id="#{version.id}"])
+
+    defp confirm_of(view, selector) do
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.attribute("data-confirm")
+      |> List.first()
+    end
+
+    defp clone!(source, actor, number) do
+      WorkspaceVersion
+      |> Ash.Changeset.for_create(
+        :clone,
+        %{source_version_id: source.id, version_number: number},
+        actor: actor,
+        tenant: actor.site_id
+      )
+      |> Ash.create!()
+    end
+
+    setup %{site: site, source: source} do
+      admin = create_user_with_permissions!([@workspace, @section], site_id: site.id)
+      child = clone!(source, admin, "0.0.10")
+      grandchild = clone!(child, admin, "1.0.0")
+      {:ok, child: child, grandchild: grandchild}
+    end
+
+    test "the delete confirmation warns of every version cloned from it", %{
+      conn: conn,
+      site: site,
+      workspace: workspace,
+      source: source,
+      grandchild: grandchild
+    } do
+      view = conn |> log_in([@workspace, @section], site) |> open_versions(workspace)
+
+      assert confirm_of(view, delete_button(source)) =~
+               "deleting 0.0.9 also deletes 2 versions cloned from it — 0.0.10, 1.0.0 — with all their pages and notes"
+
+      assert confirm_of(view, delete_button(grandchild)) ==
+               "Permanently delete this version? This cannot be undone."
+    end
+
+    test "deleting the source takes its clones off the list", %{
+      conn: conn,
+      site: site,
+      workspace: workspace,
+      source: source,
+      child: child,
+      grandchild: grandchild
+    } do
+      view = conn |> log_in([@workspace, @section], site) |> open_versions(workspace)
+
+      view |> element(delete_button(source)) |> render_click()
+      render_async(view, 5_000)
+
+      assert versions(workspace, site) == []
+
+      for version <- [source, child, grandchild] do
+        refute has_element?(view, delete_button(version))
+      end
+    end
+
+    test "Make independent is offered on a clone only, and unties it", %{
+      conn: conn,
+      site: site,
+      workspace: workspace,
+      source: source,
+      child: child
+    } do
+      view = conn |> log_in([@workspace, @section], site) |> open_versions(workspace)
+
+      refute has_element?(view, detach_button(source))
+      assert has_element?(view, detach_button(child))
+
+      assert confirm_of(view, detach_button(child)) ==
+               "0.0.10 will no longer be tied to 0.0.9; deleting 0.0.9 will not delete it."
+
+      view |> element(detach_button(child)) |> render_click()
+      render_async(view, 5_000)
+
+      assert %{source_version_id: nil} =
+               Ash.get!(WorkspaceVersion, child.id, tenant: site.id, authorize?: false)
+
+      refute has_element?(view, detach_button(child))
+    end
+
+    test "an admin who may not write pages is not offered Make independent", %{
+      conn: conn,
+      site: site,
+      workspace: workspace,
+      child: child
+    } do
+      view = conn |> log_in([@workspace], site) |> open_versions(workspace)
+
+      assert has_element?(view, delete_button(child))
+      refute has_element?(view, detach_button(child))
+    end
+  end
 end

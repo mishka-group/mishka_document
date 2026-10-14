@@ -142,6 +142,9 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
 
   defp count(resource, site), do: Ash.count!(resource, tenant: site.id, authorize?: false)
 
+  defp reload(version),
+    do: Ash.get!(WorkspaceVersion, version.id, tenant: version.site_id, authorize?: false)
+
   describe ":clone" do
     test "writes a draft version of the source's document, not the latest, naming the source", %{
       source: source,
@@ -613,6 +616,219 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
 
       assert Ash.get!(WorkspaceVersion, version.id, tenant: site.id, authorize?: false).source_version_id ==
                source.id
+    end
+  end
+
+  describe "deleting a version" do
+    defp make_latest(workspace, site) do
+      create_workspace_version!(
+        workspace_id: workspace.id,
+        site_id: site.id,
+        version_number: "9.9.9",
+        is_latest_for_version: true
+      )
+    end
+
+    defp destroy(version, actor) do
+      version
+      |> reload()
+      |> Ash.Changeset.for_destroy(:destroy, %{}, actor: actor, tenant: version.site_id)
+      |> Ash.destroy()
+    end
+
+    defp gone?(version),
+      do:
+        match?(
+          {:error, _},
+          Ash.get(WorkspaceVersion, version.id, tenant: version.site_id, authorize?: false)
+        )
+
+    defp sections_of(version, site),
+      do:
+        Section
+        |> Ash.Query.filter(workspace_version_id == ^version.id)
+        |> Ash.count!(tenant: site.id, authorize?: false)
+
+    test "deletes its own pages and notes, and leaves its source", %{
+      source: source,
+      admin: admin,
+      site: site,
+      workspace: workspace
+    } do
+      make_latest(workspace, site)
+      {:ok, copy} = clone(source, admin)
+      notes = count(Note, site)
+
+      assert :ok = destroy(copy, admin)
+
+      assert gone?(copy)
+      assert sections_of(copy, site) == 0
+      assert count(Note, site) == notes - 3
+      refute gone?(source)
+      assert sections_of(source, site) == 6
+    end
+
+    test "deletes every version cloned from it, however deep, with their pages and notes", %{
+      source: source,
+      admin: admin,
+      site: site,
+      workspace: workspace
+    } do
+      latest = make_latest(workspace, site)
+      {:ok, child} = clone(source, admin)
+      {:ok, grandchild} = clone(child, admin, %{version_number: "1.0.0"})
+
+      assert Ash.load!(source, :clone_numbers, actor: admin, tenant: site.id).clone_numbers ==
+               ["0.0.10", "1.0.0"]
+
+      assert :ok = destroy(source, admin)
+
+      assert gone?(source) and gone?(child) and gone?(grandchild)
+      refute gone?(latest)
+      assert count(Section, site) == 0
+      assert count(Note, site) == 0
+      assert count(WorkspaceVersionLineage, site) == 0
+    end
+
+    test "is refused, with nothing deleted, when a version cloned from it is the latest", %{
+      source: source,
+      admin: admin,
+      site: site,
+      workspace: workspace
+    } do
+      make_latest(workspace, site)
+      {:ok, child} = clone(source, admin)
+      {:ok, grandchild} = clone(child, admin, %{version_number: "1.0.0"})
+
+      grandchild
+      |> Ash.Changeset.for_update(:mark_as_latest, %{}, actor: admin, tenant: site.id)
+      |> Ash.update!()
+
+      pages = count(Section, site)
+
+      assert {:error, %Ash.Error.Invalid{} = error} = destroy(source, admin)
+      assert Exception.message(error) =~ "1.0.0, cloned from this version, is the latest"
+
+      refute gone?(source) or gone?(child) or gone?(grandchild)
+      assert count(Section, site) == pages
+    end
+  end
+
+  describe ":detach" do
+    defp detach(version, actor, action \\ :detach, tenant \\ :own) do
+      tenant = if tenant == :own, do: version.site_id, else: tenant
+
+      version
+      |> Ash.Changeset.for_update(action, %{}, actor: actor, tenant: tenant)
+      |> Ash.update()
+    end
+
+    test "unties the version and its pages; deleting the old source then leaves them", %{
+      source: source,
+      admin: admin,
+      site: site,
+      workspace: workspace
+    } do
+      create_workspace_version!(
+        workspace_id: workspace.id,
+        site_id: site.id,
+        version_number: "9.9.9",
+        is_latest_for_version: true
+      )
+
+      {:ok, copy} = clone(source, admin)
+      before = pages_of(copy, site)
+      archived = Enum.find(before, &(&1.slug == "button-fa"))
+      Ash.destroy!(archived, action: :destroy, tenant: site.id, authorize?: false)
+
+      Process.register(self(), :__version_cloned_probe__)
+
+      {:ok, _} =
+        Event.write(%{
+          name: VersionCloned,
+          event: MishkaDocument.Resources.Changes.DetachVersion.event(),
+          extension: :mishka_installer,
+          status: :started
+        })
+
+      :ok =
+        EventHandler.do_compile(
+          MishkaDocument.Resources.Changes.DetachVersion.event(),
+          :start,
+          false
+        )
+
+      on_exit(fn -> Event.unregister(:name, VersionCloned, false) end)
+
+      assert {:ok, detached} = detach(copy, admin)
+      assert detached.source_version_id == nil
+
+      assert_receive {:version_cloned, %{version_id: id, source_version_id: from, pages: 6}, _},
+                     5000
+
+      assert id == copy.id and from == source.id
+
+      after_detach = pages_of(copy, site)
+      assert Enum.all?(after_detach, &is_nil(&1.source_section_id))
+
+      assert Enum.sort(Enum.map(after_detach, & &1.section_lineage_id)) ==
+               before
+               |> Enum.reject(&(&1.id == archived.id))
+               |> Enum.map(& &1.section_lineage_id)
+               |> Enum.sort()
+
+      refute WorkspaceVersionLineage
+             |> Ash.Query.filter(new_version_id == ^copy.id)
+             |> Ash.exists?(tenant: site.id, authorize?: false)
+
+      notes = count(Note, site)
+
+      assert :ok =
+               source
+               |> reload()
+               |> Ash.Changeset.for_destroy(:destroy, %{}, actor: admin, tenant: site.id)
+               |> Ash.destroy()
+
+      assert %{source_version_id: nil} =
+               Ash.get!(WorkspaceVersion, copy.id, tenant: site.id, authorize?: false)
+
+      assert length(pages_of(copy, site)) == 5
+      assert count(Note, site) == notes - 3
+
+      assert {:ok, %{source_section_id: nil}} =
+               Ash.get(Section, archived.id,
+                 action: :get_archived,
+                 tenant: site.id,
+                 authorize?: false
+               )
+    end
+
+    test "a master detaches a version of any site", %{source: source, admin: admin, site: site} do
+      {:ok, copy} = clone(source, admin)
+      master = create_user_with_permissions!(["admin:dashboard:*"])
+
+      assert {:ok, %{source_version_id: nil}} = detach(copy, master, :master_detach, nil)
+      assert Enum.all?(pages_of(copy, site), &is_nil(&1.source_section_id))
+    end
+
+    test "is refused for a version with no source, and to an admin who may not write pages", %{
+      source: source,
+      admin: admin,
+      site: site
+    } do
+      assert {:error, %Ash.Error.Invalid{}} = detach(source, admin)
+
+      {:ok, copy} = clone(source, admin)
+
+      workspace_admin =
+        create_user_with_permissions!(["admin:dashboard:document:workspace"], site_id: site.id)
+
+      assert {:error, %Ash.Error.Forbidden{}} = detach(copy, workspace_admin)
+
+      assert %{source_version_id: source_id} =
+               Ash.get!(WorkspaceVersion, copy.id, tenant: site.id, authorize?: false)
+
+      assert source_id == source.id
     end
   end
 end

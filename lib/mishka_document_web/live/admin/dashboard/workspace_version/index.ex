@@ -9,6 +9,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   # The fields the clone form draws, each showing its own errors; any other is shown above them.
   @clone_fields [:version_number, :version_name, :description]
 
+  # A delete takes the versions cloned from the deleted one with it, and making one independent
+  # changes what deleting its source would take: the table reads every row again after either.
+  @rereads [:destroy, :master_destroy, :detach, :master_detach]
+
   @impl true
   def mount(%{"id" => workspace_id}, _session, socket) do
     current_user = socket.assigns.current_user
@@ -119,9 +123,9 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
         socket
       ) do
     if Map.get(data, :workspace_id) == socket.assigns.workspace_id do
-      send_update(MishkaGervaz.Table.Web.Live,
-        id: "workspace-versions-table",
-        pubsub_notification: notification
+      send_update(
+        MishkaGervaz.Table.Web.Live,
+        [id: "workspace-versions-table"] ++ refresh(notification)
       )
     end
 
@@ -205,6 +209,11 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   end
 
   defp created_message(_version), do: gettext("Workspace version created successfully")
+
+  defp refresh(%Ash.Notifier.Notification{action: %{name: name}}) when name in @rereads,
+    do: [gervaz_refresh: true]
+
+  defp refresh(notification), do: [pubsub_notification: notification]
 
   defp assign_clone(socket, source, form),
     do: assign(socket, clone_source: source, clone_form: form, clone_notice: [], cloning?: false)

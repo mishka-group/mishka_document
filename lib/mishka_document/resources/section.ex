@@ -1646,6 +1646,19 @@ defmodule MishkaDocument.Section do
       description "Moves a copied page into the language group of its original's copy"
     end
 
+    # A PAGE OF A VERSION MADE INDEPENDENT no longer names the page it was copied from, so deleting
+    # that page deletes nothing of this one — `MishkaDocument.WorkspaceVersion`'s `:detach`.
+    update :detach_source do
+      accept []
+      require_atomic? false
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change set_attribute(:source_section_id, nil)
+
+      description "Unties a copied page from the page it was copied from"
+    end
+
     update :update do
       primary? true
       require_atomic? false

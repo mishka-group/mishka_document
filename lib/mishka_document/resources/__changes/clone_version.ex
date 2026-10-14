@@ -78,6 +78,7 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
   require Ash.Query
 
   alias MishkaDocument.{Note, Section, SectionTag, Tag, WorkspaceVersion, WorkspaceVersionLineage}
+  alias MishkaDocument.Resources.Helpers.VersionClones
   alias MishkaInstaller.Event.Hook
 
   @event "document:version:cloned"
@@ -156,13 +157,24 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
   defp copies?(_changeset, _opts), do: true
 
   # The version to copy, read as the caller: under its tenant, or on any site for a master's action.
-  defp read_source(id, %{tenant: nil}, context),
-    do: version(Ash.get(WorkspaceVersion, id, [action: :master_get] ++ as_caller(context)))
-
-  defp read_source(id, %{tenant: tenant}, context),
+  defp read_source(id, %{tenant: nil} = changeset, context),
     do:
       version(
-        Ash.get(WorkspaceVersion, id, [action: :read, tenant: tenant] ++ as_caller(context))
+        Ash.get(
+          WorkspaceVersion,
+          id,
+          [action: :master_get] ++ VersionClones.as_caller(context, changeset.context)
+        )
+      )
+
+  defp read_source(id, %{tenant: tenant} = changeset, context),
+    do:
+      version(
+        Ash.get(
+          WorkspaceVersion,
+          id,
+          [action: :read, tenant: tenant] ++ VersionClones.as_caller(context, changeset.context)
+        )
       )
 
   defp version({:ok, %WorkspaceVersion{} = source}), do: {:ok, source}
@@ -176,8 +188,6 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
   end
 
   defp of_document(source, _changeset, _as), do: source
-
-  defp as_caller(context), do: [actor: context.actor, authorize?: context.authorize? != false]
 
   defp from_source(changeset, {:ok, source}, :clone, context) do
     changeset
@@ -219,16 +229,16 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
 
   defp copy_after_write(changeset, source, context) do
     changeset
-    |> Ash.Changeset.after_action(fn _changeset, version ->
-      copy(version, source, context)
+    |> Ash.Changeset.after_action(fn changeset, version ->
+      copy(version, source, VersionClones.as_caller(context, changeset.context))
     end)
     |> Ash.Changeset.after_transaction(fn _changeset, result ->
       announce(result, source, context.actor)
     end)
   end
 
-  defp copy(version, source, context) do
-    opts = [tenant: version.site_id] ++ as_caller(context)
+  defp copy(version, source, caller) do
+    opts = [tenant: version.site_id] ++ caller
 
     with {:ok, outline} <- outline(source.id, opts),
          plan = plan(outline),
