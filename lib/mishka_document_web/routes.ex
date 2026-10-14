@@ -26,7 +26,15 @@ defmodule MishkaDocumentWeb.Routes do
     ]
   end
 
-  def routes(:public), do: []
+  # One example of a page of a document drawn alone, live, for the frame of `doc-example`'s Preview
+  # dialog — see `MishkaDocumentWeb.ExamplePreviewController`.
+  def routes(:public) do
+    [
+      {:get, "/_preview/doc-example/:kind/:id/:index", MishkaDocumentWeb.ExamplePreviewController,
+       :show}
+    ]
+  end
+
   def routes(:api), do: []
   def routes(_), do: []
 end

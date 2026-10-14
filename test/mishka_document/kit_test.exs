@@ -699,9 +699,10 @@ defmodule MishkaDocument.KitTest do
     # AN EXAMPLE'S TOOLBAR IS ANSWERED IN THE BROWSER, by the hook `doc-example` mounts on its own
     # root under the name `example_hook/0` asks the same rule for. It moves the choice onto the root,
     # the buttons and the example's stage through the hook's JS commands, which a LiveView patch
-    # keeps, opens the preview as a modal dialog, dresses the frame's page, and sizes the frame
-    # through its `width` and `height` attributes and scales it through CSSOM properties — never a
-    # style attribute, which a site's CSP may refuse.
+    # keeps, opens the preview as a modal dialog, hands the frame the page that draws the example
+    # only then and takes it away when the preview closes, dresses the frame's page, and sizes the
+    # frame through its `width` and `height` attributes and scales it through CSSOM properties —
+    # never a style attribute, which a site's CSP may refuse.
     test "ships the hook doc-example mounts for the toolbar over its example" do
       hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-example"))
       content = hook["content"]
@@ -715,15 +716,22 @@ defmodule MishkaDocument.KitTest do
       assert content =~ ~s|js.setAttribute(option, "aria-pressed"|
       assert content =~ ~s|js.setAttribute(stage, "dir", value)|
       assert content =~ "this.preview.showModal()"
-      assert content =~ ~s|frame.setAttribute("srcdoc", this.skeleton())|
-      assert content =~ "page.importNode(node, true)"
-      assert content =~ ~s|this.frame.getAttribute("data-stylesheet")|
+      assert content =~ ~s|const src = frame && frame.getAttribute("data-src");|
+      assert content =~ ~s|frame.setAttribute("src", src);|
+      assert content =~ ~s|preview.addEventListener("close", this.onClosed)|
+      assert content =~ ~s|frame.removeAttribute("src");|
+      assert content =~ ~s|frame.contentWindow.location.replace("about:blank")|
+      assert content =~ ~s|page.addEventListener("click", this.onFollow, true)|
+      assert content =~ "new view.ResizeObserver("
+      refute content =~ "srcdoc"
+      refute content =~ "importNode"
+      refute content =~ "data-stylesheet"
       refute content =~ "data-document"
       refute content =~ "<script"
       assert content =~ ~s|root.setAttribute("data-theme", theme)|
       assert content =~ ~s|root.setAttribute("dir", dir)|
       assert content =~ ~s|frame.setAttribute("width", String(width))|
-      assert content =~ ~s|frame.setAttribute("height", String(Math.max(height, 1)))|
+      assert content =~ ~s|frame.setAttribute("height", String(height))|
       assert content =~ "desktop: 1280, tablet: 768, mobile: 375"
       assert content =~ "new ResizeObserver("
 
@@ -731,7 +739,7 @@ defmodule MishkaDocument.KitTest do
              |> then(&Regex.scan(~r/\.style\.(\w+)\s*=/, &1))
              |> Enum.map(&List.last/1)
              |> Enum.uniq() ==
-               ~w(transform width height)
+               ~w(visibility transform width height)
 
       refute content =~
                ~r/setAttribute\(\s*[^,]+,\s*["']style["']|\.style\s*=|cssText|innerHTML|insertAdjacentHTML|srcdoc\s*=/
@@ -748,13 +756,12 @@ defmodule MishkaDocument.KitTest do
       assert example_hook["code"] =~ ~s(name: "doc-example")
     end
 
-    # THE EXAMPLE IS DRAWN ON THE PAGE, where its components' scripts run; its preview is a frame
-    # that holds all the example needs and nothing more: the page the hook writes into it links the
-    # site's stylesheet the frame names and carries no script, and the sandbox grants only the same
-    # origin the hook reads it through. Nothing of that page is drawn with the example: the hook
-    # builds it when the preview opens. The dialog it opens in is the browser's once drawn, so a
-    # LiveView patch never closes it.
-    test "draws its example on the page, and a preview in a frame that runs nothing" do
+    # THE EXAMPLE IS DRAWN ON THE PAGE, where its components' scripts run; its preview is a frame of
+    # the page that draws the same example alone, live, which the frame names and is handed only when
+    # the preview opens. The sandbox grants that page its scripts, its forms and the same origin the
+    # hook dresses it through, and nothing else: no popups, no top navigation. The dialog it opens
+    # in is the browser's once drawn, so a LiveView patch never closes it.
+    test "draws its example on the page, and a preview in a frame of the page that draws it alone" do
       example = Enum.find(components(), &(&1["name"] == "doc-example"))
       template = example["template"]
 
@@ -762,17 +769,64 @@ defmodule MishkaDocument.KitTest do
       assert template =~ "{render_slot(@inner_block)}"
       assert template =~ ~s(phx-update="ignore")
       assert template =~ ~s(<dialog)
-      assert template =~ ~s(sandbox="allow-same-origin")
-      assert template =~ "data-stylesheet={stylesheet_href()}"
+      assert template =~ ~s(sandbox="allow-scripts allow-same-origin allow-forms")
+      assert template =~ "data-src={preview_src(@source)}"
+      refute template =~ ~r/\ssrc=/
+      refute template =~ "data-stylesheet"
       refute template =~ "data-document"
       refute template =~ "srcdoc"
-      refute template =~ "allow-scripts"
+      refute template =~ "allow-top-navigation"
+      refute template =~ "allow-popups"
+      refute template =~ "preview_note"
       refute template =~ ~r/\sstyle=/
 
       refute Enum.any?(example["helpers"], &(&1["code"] =~ "Phoenix.HTML.Safe.to_iodata"))
+      refute Enum.any?(example["helpers"], &(&1["name"] == "stylesheet_href"))
+      refute Enum.any?(example["attrs"], &(&1["name"] == "preview_note"))
 
-      link = Enum.find(example["helpers"], &(&1["name"] == "stylesheet_href"))
-      assert link["code"] =~ "MishkaCmsCore.Runtime.Compilers.Shared.site_css_href("
+      src = Enum.find(example["helpers"], &(&1["name"] == "preview_src"))
+      assert src["code"] =~ ~s|"/_preview/doc-example/" <> trimmed(source)|
+
+      # The page draws the example in the classes the example's body is drawn in on the page.
+      [body_class] =
+        Regex.run(~r/data-role="doc-example-body"\n\s+class="([^"]+)"/, template,
+          capture: :all_but_first
+        )
+
+      preview = File.read!("lib/mishka_document_web/live/example_preview.ex")
+      assert preview =~ ~s(data-role="doc-example-live"\n      class="#{body_class}")
+    end
+
+    # EACH EXAMPLE OF A PAGE'S TEXT AND OF ITS NOTES IS NAMED BY ITS PLACE, by the rule the page that
+    # draws one alone reads it by: `doc-section` writes it, word for word the rule
+    # `MishkaDocumentWeb.Live.ExamplePreview.sources/2` keeps, onto every example it draws.
+    test "names every example doc-section draws by the rule the preview page reads it by" do
+      section = Enum.find(components(), &(&1["name"] == "doc-section"))
+      sources = Enum.find(section["helpers"], &(&1["name"] == "example_sources"))
+      read = Enum.find(section["helpers"], &(&1["name"] == "read_page"))
+      notes = Enum.find(section["helpers"], &(&1["name"] == "note_blocks"))
+
+      assert sources["args"] == "html, source"
+
+      assert read["code"] =~
+               ~s|example_sources(clean(section.rendered_content), "section/\#{section.id}")|
+
+      assert notes["code"] =~ ~s|example_sources(clean(note.content), "note/\#{note.id}")|
+
+      preview = File.read!("lib/mishka_document_web/live/example_preview.ex")
+
+      for rule <- [
+            ~S"\[\[component(?:\s|&nbsp;|&#160;|\x{00A0})+doc-example(?![A-Za-z0-9_-])",
+            ~S"\A\[\[component(?:\s|&nbsp;|&#160;|\x{00A0})+doc-example\z",
+            ~S"<(pre|code)(?:\s[^>]*)?>.*?<\/\1>",
+            ~S"\A<(?:pre|code)[\s>]"
+          ] do
+        assert sources["code"] =~ rule, "doc-section counts examples by another rule than #{rule}"
+        assert preview =~ rule, "the preview page counts examples by another rule than #{rule}"
+      end
+
+      assert sources["code"] =~ ~S|{piece <> ~s( source="#{source}/#{n}"), n + 1}|
+      assert preview =~ ~S|{piece <> ~s( source="#{source}/#{n}"), n + 1}|
     end
 
     # A `<details>` DRAWN AS A MENU CLOSES WHEN THE READER LEAVES IT, on a click outside it and on
