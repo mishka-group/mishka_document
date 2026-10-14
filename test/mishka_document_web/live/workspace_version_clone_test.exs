@@ -449,6 +449,29 @@ defmodule MishkaDocumentWeb.Test.WorkspaceVersionCloneTest do
       end
     end
 
+    test "a clone made on the screen is named at once by its source's and ancestors' delete", %{
+      conn: conn,
+      site: site,
+      workspace: workspace,
+      source: source,
+      grandchild: grandchild
+    } do
+      view = conn |> log_in([@workspace, @section], site) |> open_versions(workspace)
+
+      view
+      |> element(~s(#{@clone_button}[phx-value-values*="#{grandchild.id}"]))
+      |> render_click()
+
+      view |> form(@form, clone: %{version_number: "2.0.0"}) |> render_submit()
+      render_async(view, 10_000)
+      render_async(view, 5_000)
+
+      assert confirm_of(view, delete_button(grandchild)) =~
+               "deleting 1.0.0 also deletes 1 version cloned from it — 2.0.0"
+
+      assert confirm_of(view, delete_button(source)) =~ "0.0.10, 1.0.0, 2.0.0"
+    end
+
     test "Make independent is offered on a clone only, and unties it", %{
       conn: conn,
       site: site,

@@ -9,8 +9,9 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   # The fields the clone form draws, each showing its own errors; any other is shown above them.
   @clone_fields [:version_number, :version_name, :description]
 
-  # A delete takes the versions cloned from the deleted one with it, and making one independent
-  # changes what deleting its source would take: the table reads every row again after either.
+  # A delete takes the versions cloned from the deleted one with it, and a clone made or made
+  # independent changes what deleting its source would take: the table reads every row again after
+  # each, so each row's delete confirmation names what it would take.
   @rereads [:destroy, :master_destroy, :detach, :master_detach]
 
   @impl true
@@ -212,6 +213,13 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
 
   defp refresh(%Ash.Notifier.Notification{action: %{name: name}}) when name in @rereads,
     do: [gervaz_refresh: true]
+
+  defp refresh(%Ash.Notifier.Notification{
+         action: %{type: :create},
+         data: %{source_version_id: id}
+       })
+       when is_binary(id),
+       do: [gervaz_refresh: true]
 
   defp refresh(notification), do: [pubsub_notification: notification]
 
