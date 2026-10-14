@@ -113,6 +113,8 @@ defmodule MishkaDocument.WorkspaceVersion do
     only_actions [
       :create,
       :master_create,
+      :clone,
+      :master_clone,
       :update,
       :master_update,
       :publish,
@@ -311,6 +313,23 @@ defmodule MishkaDocument.WorkspaceVersion do
 
           ui do
             label fn -> dgettext("mishka_gervaz", "Edit") end
+          end
+        end
+
+        # Sends `{:row_action, "clone", %{"id" => id}}` to the versions screen, which opens its
+        # clone form — `MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index`.
+        action :clone do
+          type :event
+          event "clone"
+
+          visible fn _record, state ->
+            state.archive_status == :active and
+              MishkaDocument.WorkspaceVersion.clone_allowed?(state.current_user)
+          end
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Clone") end
+            icon "hero-document-duplicate"
           end
         end
 
@@ -609,6 +628,48 @@ defmodule MishkaDocument.WorkspaceVersion do
       end
 
       description "Creates workspace version for master users - requires explicit site_id"
+    end
+
+    # A NEW VERSION COPIED FROM ANOTHER of the same document, with every page, note and tag of it —
+    # `MishkaDocument.Resources.Changes.CloneVersion`. It is a draft and not the latest; its
+    # workspace and site are the source's.
+    create :clone do
+      transaction? true
+      accept [:version_number, :version_name, :description]
+
+      argument :source_version_id, :uuid do
+        allow_nil? false
+        description "The version to copy"
+      end
+
+      validate present(:version_number)
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change MishkaDocument.Resources.Changes.CloneVersion
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
+                field: :source_version_id, resource: MishkaDocument.WorkspaceVersion}
+
+      description "Copies a version of the tenant's document, with its pages, notes and tags, into a new draft version"
+    end
+
+    create :master_clone do
+      transaction? true
+      accept [:version_number, :version_name, :description]
+
+      argument :source_version_id, :uuid do
+        allow_nil? false
+        description "The version to copy"
+      end
+
+      validate present(:version_number)
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
+
+      change MishkaDocument.Resources.Changes.CloneVersion
+
+      description "Copies a version of any site's document, with its pages, notes and tags, into a new draft version of that site (master users only)"
     end
 
     update :update do
@@ -912,6 +973,17 @@ defmodule MishkaDocument.WorkspaceVersion do
                       "admin:api:document:workspace"
                     ]}
     end
+
+    # A clone writes the source's pages and notes as well, which are the section area's.
+    policy action([:clone, :master_clone]) do
+      access_type :strict
+
+      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+                    permissions: [
+                      "admin:dashboard:document:section",
+                      "admin:api:document:section"
+                    ]}
+    end
   end
 
   # PubSub configuration for real-time updates
@@ -923,6 +995,8 @@ defmodule MishkaDocument.WorkspaceVersion do
 
     publish :create, [[nil, :site_id], "created"]
     publish :master_create, [[nil, :site_id], "created"]
+    publish :clone, [[nil, :site_id], "created"]
+    publish :master_clone, [[nil, :site_id], "created"]
     publish :update, [[nil, :site_id], "updated"]
     publish :publish, [[nil, :site_id], "updated"]
     publish :mark_as_latest, [[nil, :site_id], "updated"]
@@ -1115,5 +1189,18 @@ defmodule MishkaDocument.WorkspaceVersion do
       all_tenants? true
       nils_distinct? false
     end
+  end
+
+  @doc """
+  Whether `actor` may clone a version on the dashboard: it holds the workspace area, which writes
+  versions, and the section area, which writes their pages and notes — what `:clone` and
+  `:master_clone` ask.
+  """
+  @spec clone_allowed?(map() | nil) :: boolean()
+  def clone_allowed?(actor) do
+    Enum.all?(
+      ["admin:dashboard:document:workspace", "admin:dashboard:document:section"],
+      &MishkaCmsCore.Accounts.Checks.AccessPermissions.match?(actor, %{}, permissions: [&1])
+    )
   end
 end

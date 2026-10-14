@@ -29,6 +29,99 @@
     />
   </.modal>
 
+  <.modal
+    :if={@clone_source}
+    id="workspace-version-clone-modal"
+    show
+    on_cancel={JS.push("close_clone")}
+    width_class="max-w-xl"
+  >
+    <div id="workspace-version-clone" class="flex flex-col gap-[16px]">
+      <div class="pe-[28px]">
+        <h2
+          id="workspace-version-clone-modal-title"
+          class="text-[17px] font-bold tracking-[-0.01em] text-[#1b1a18]"
+        >
+          {gettext("Clone version")}
+        </h2>
+        <p
+          id="workspace-version-clone-modal-description"
+          class="mt-[4px] text-[12.5px] leading-[1.55] text-[#6d6a63]"
+        >
+          {gettext("Copy all pages and notes of %{version} into a new version.",
+            version: @clone_source.version_number
+          )}
+        </p>
+      </div>
+
+      <div
+        :if={@clone_notice != []}
+        id="clone-version-notice"
+        role="alert"
+        class="flex flex-col gap-[4px] rounded-xl border border-[#f0dcd8] bg-[#fdf3f1] px-[12px] py-[10px] text-[12.5px] text-[#c0473d]"
+      >
+        <p :for={message <- @clone_notice}>{message}</p>
+      </div>
+
+      <.form
+        for={@clone_form}
+        id="clone-version-form"
+        phx-change="validate_clone"
+        phx-submit="clone_version"
+      >
+        <.input
+          field={@clone_form[:version_number]}
+          label={gettext("New version number")}
+          placeholder={gettext("e.g., 1.0.0")}
+          dir="ltr"
+          autocomplete="off"
+          required
+          phx-debounce="300"
+        />
+        <.input
+          field={@clone_form[:version_name]}
+          label={gettext("Version name")}
+          placeholder={gettext("Optional friendly name")}
+          phx-debounce="300"
+        />
+        <.input
+          field={@clone_form[:description]}
+          type="textarea"
+          label={gettext("Description")}
+          rows="3"
+          phx-debounce="300"
+        />
+
+        <div class="mt-[10px] flex items-center justify-end gap-[8px]">
+          <.button
+            type="button"
+            id="clone-version-cancel"
+            variant="soft"
+            disabled={@cloning?}
+            phx-click={JS.exec("data-cancel", to: "#workspace-version-clone-modal")}
+          >
+            {gettext("Cancel")}
+          </.button>
+          <.button
+            id="clone-version-submit"
+            variant="primary"
+            disabled={@cloning?}
+            aria-busy={to_string(@cloning?)}
+            phx-disable-with={gettext("Copying pages and notes…")}
+          >
+            <%= if @cloning? do %>
+              <.icon name="hero-arrow-path" class="size-4 animate-spin" />
+              {gettext("Copying pages and notes…")}
+            <% else %>
+              <.icon name="hero-document-duplicate" class="size-4" />
+              {gettext("Clone version")}
+            <% end %>
+          </.button>
+        </div>
+      </.form>
+    </div>
+  </.modal>
+
   <.live_component
     :if={@url_state}
     module={MishkaGervaz.Table.Web.Live}
