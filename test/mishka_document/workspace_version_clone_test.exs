@@ -160,7 +160,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
       assert version.status == :draft
       assert version.is_latest_for_version == false
       assert version.published_at == nil
-      assert version.__metadata__.cloned == %{pages: 6, notes: 3, tags: 1}
+      assert version.__metadata__.cloned == %{pages: 6, notes: 3, tags: 1, from: "0.0.9"}
 
       assert %{is_latest_for_version: true} =
                Ash.get!(WorkspaceVersion, source.id, tenant: source.site_id, authorize?: false)
@@ -314,7 +314,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
       assert length(copies) == 4
       refute copy_of(copies, pages.alert)
       refute copy_of(copies, pages.alert_icon)
-      assert version.__metadata__.cloned == %{pages: 4, notes: 2, tags: 1}
+      assert version.__metadata__.cloned == %{pages: 4, notes: 2, tags: 1, from: "0.0.9"}
     end
 
     test "a version number the document already has is refused, and nothing is written", %{
@@ -460,6 +460,159 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
                  actor: admin
                )
                |> Ash.create()
+    end
+  end
+
+  describe ":create with a source" do
+    defp create(actor, params) do
+      WorkspaceVersion
+      |> Ash.Changeset.for_create(:create, params, actor: actor, tenant: actor.site_id)
+      |> Ash.create()
+    end
+
+    test "copies everything the clone does, keeping the status, latest and publishing given", %{
+      source: source,
+      admin: admin,
+      site: site,
+      workspace: workspace,
+      pages: pages
+    } do
+      published_at = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:second)
+
+      assert {:ok, version} =
+               create(admin, %{
+                 workspace_id: workspace.id,
+                 version_number: "1.0.0",
+                 status: :stable,
+                 is_latest_for_version: true,
+                 published_at: published_at,
+                 source_version_id: source.id
+               })
+
+      assert version.status == :stable
+      assert version.is_latest_for_version
+      assert version.published_at == published_at
+      assert version.source_version_id == source.id
+      assert version.__metadata__.cloned == %{pages: 6, notes: 3, tags: 1, from: "0.0.9"}
+
+      copies = pages_of(version, site)
+      assert length(copies) == 6
+
+      assert copy_of(copies, pages.alert_icon).parent_section_id ==
+               copy_of(copies, pages.alert).id
+
+      assert WorkspaceVersionLineage
+             |> Ash.Query.filter(
+               new_version_id == ^version.id and source_version_id == ^source.id
+             )
+             |> Ash.exists?(tenant: site.id, authorize?: false)
+
+      refute Ash.get!(WorkspaceVersion, source.id, tenant: site.id, authorize?: false).is_latest_for_version
+    end
+
+    test "with no source writes an empty version and no lineage, as before", %{
+      admin: admin,
+      site: site,
+      workspace: workspace
+    } do
+      lineages = count(WorkspaceVersionLineage, site)
+
+      assert {:ok, version} =
+               create(admin, %{
+                 workspace_id: workspace.id,
+                 version_number: "1.0.0",
+                 status: :draft
+               })
+
+      assert pages_of(version, site) == []
+      refute Map.has_key?(version.__metadata__, :cloned)
+      assert count(WorkspaceVersionLineage, site) == lineages
+    end
+
+    test "copy_pages: false only names the source", %{
+      source: source,
+      admin: admin,
+      site: site,
+      workspace: workspace
+    } do
+      assert {:ok, version} =
+               create(admin, %{
+                 workspace_id: workspace.id,
+                 version_number: "1.0.0",
+                 status: :draft,
+                 source_version_id: source.id,
+                 copy_pages: false
+               })
+
+      assert version.source_version_id == source.id
+      assert pages_of(version, site) == []
+    end
+
+    test "a source of another document is refused, and nothing is written", %{
+      source: source,
+      admin: admin,
+      site: site
+    } do
+      other = create_workspace!(site_id: site.id, skip_version: true)
+      versions = count(WorkspaceVersion, site)
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               create(admin, %{
+                 workspace_id: other.id,
+                 version_number: "1.0.0",
+                 status: :draft,
+                 source_version_id: source.id
+               })
+
+      assert Enum.any?(error.errors, &(Map.get(&1, :field) == :source_version_id))
+      assert count(WorkspaceVersion, site) == versions
+    end
+
+    test ":master_create copies too", %{source: source, site: site, workspace: workspace} do
+      master = create_user_with_permissions!(["admin:dashboard:*"])
+
+      assert {:ok, version} =
+               WorkspaceVersion
+               |> Ash.Changeset.for_create(
+                 :master_create,
+                 %{
+                   workspace_id: workspace.id,
+                   site_id: site.id,
+                   version_number: "1.0.0",
+                   status: :draft,
+                   source_version_id: source.id
+                 },
+                 actor: master
+               )
+               |> Ash.create()
+
+      assert length(pages_of(version, site)) == 6
+    end
+  end
+
+  describe "a version's source after it is created" do
+    test "no update takes a new one", %{source: source, admin: admin, site: site} do
+      {:ok, version} = clone(source, admin)
+      other = create_workspace_version!(workspace_id: source.workspace_id, site_id: site.id)
+      master = create_user_with_permissions!(["admin:dashboard:*"])
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               version
+               |> Ash.Changeset.for_update(:update, %{source_version_id: other.id},
+                 actor: admin,
+                 tenant: site.id
+               )
+               |> Ash.update()
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               version
+               |> Ash.Changeset.for_update(:master_update, %{source_version_id: other.id},
+                 actor: master
+               )
+               |> Ash.update()
+
+      assert Ash.get!(WorkspaceVersion, version.id, tenant: site.id, authorize?: false).source_version_id ==
+               source.id
     end
   end
 end

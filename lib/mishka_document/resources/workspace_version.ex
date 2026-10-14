@@ -399,6 +399,57 @@ defmodule MishkaDocument.WorkspaceVersion do
           end
         end
 
+        # The site a master writes for, given by the screen as the document's own.
+        field :site_id, :relation do
+          restricted true
+          show_on :create
+          readonly fn state -> Map.has_key?(state.defaults || %{}, :site_id) end
+          display_field :name
+          search_field :name
+          mode :search
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Site") end
+          end
+        end
+
+        # The version a new one is copied from, among its own document's versions — the form's
+        # `workspace_id` default, or the record's. Shown on an edit as the version it came from,
+        # which no update changes.
+        field :source_version_id, :relation do
+          mode :search
+          search_field :version_number
+          display_field &MishkaDocument.WorkspaceVersion.source_label/1
+          include_nil fn -> dgettext("mishka_gervaz", "None — an empty version") end
+          readonly fn state -> state.mode == :update end
+
+          visible fn state ->
+            state.mode == :update or
+              MishkaDocument.WorkspaceVersion.clone_allowed?(state.current_user)
+          end
+
+          depends_on :site_id
+
+          load fn query, state ->
+            Ash.Query.filter_input(query, %{
+              site_id: MishkaDocument.WorkspaceVersion.form_site_id(state),
+              workspace_id: MishkaDocument.WorkspaceVersion.form_workspace_id(state)
+            })
+          end
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Clone from") end
+            placeholder fn -> dgettext("mishka_gervaz", "Search a version of this document") end
+
+            description fn ->
+              dgettext(
+                "mishka_gervaz",
+                "Every page, note and tag of that version is copied into the new one."
+              )
+            end
+          end
+        end
+
         field :status, :select do
           required true
 
@@ -440,7 +491,7 @@ defmodule MishkaDocument.WorkspaceVersion do
 
       groups do
         group :version_info do
-          fields [:version_number, :version_name, :status]
+          fields [:site_id, :version_number, :version_name, :status, :source_version_id]
 
           ui do
             label fn -> dgettext("mishka_gervaz", "Version Information") end
@@ -548,7 +599,13 @@ defmodule MishkaDocument.WorkspaceVersion do
       end
 
       argument :source_version_id, :uuid do
-        description "Optional source version to clone from"
+        description "Optional version to start from: its pages, notes and tags are copied into the new one"
+      end
+
+      argument :copy_pages, :boolean do
+        default true
+
+        description "Whether a version given a source starts as a copy of its pages, notes and tags"
       end
 
       change fn changeset, context ->
@@ -563,6 +620,8 @@ defmodule MishkaDocument.WorkspaceVersion do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
                 field: :source_version_id, resource: MishkaDocument.WorkspaceVersion}
+
+      change {MishkaDocument.Resources.Changes.CloneVersion, as: :create}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -606,7 +665,13 @@ defmodule MishkaDocument.WorkspaceVersion do
       end
 
       argument :source_version_id, :uuid do
-        description "Optional source version to clone from"
+        description "Optional version to start from: its pages, notes and tags are copied into the new one"
+      end
+
+      argument :copy_pages, :boolean do
+        default true
+
+        description "Whether a version given a source starts as a copy of its pages, notes and tags"
       end
 
       change fn changeset, context ->
@@ -618,6 +683,8 @@ defmodule MishkaDocument.WorkspaceVersion do
           changeset
         end
       end
+
+      change {MishkaDocument.Resources.Changes.CloneVersion, as: :create}
 
       # Add metadata for event tracking
       change fn changeset, _context ->
@@ -676,17 +743,14 @@ defmodule MishkaDocument.WorkspaceVersion do
       primary? true
       require_atomic? false
       transaction? true
-      accept @admin_fields |> List.delete(:site_id)
+      # A version's source is the one it was created from; it does not change after.
+      accept @admin_fields -- [:site_id, :source_version_id]
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
                 field: :workspace_id, resource: MishkaDocument.Workspace},
                where: [changing(:workspace_id)]
-
-      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
-                field: :source_version_id, resource: MishkaDocument.WorkspaceVersion},
-               where: [changing(:source_version_id)]
 
       change MishkaDocument.Resources.Changes.EnsureSingleLatestVersion
 
@@ -720,7 +784,7 @@ defmodule MishkaDocument.WorkspaceVersion do
       description "Updates workspace version for master users - bypasses multi-tenancy, prevents site_id changes"
       require_atomic? false
       transaction? true
-      accept @admin_fields |> List.delete(:site_id) |> List.delete(:workspace_id)
+      accept @admin_fields -- [:site_id, :workspace_id, :source_version_id]
       multitenancy :bypass
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
@@ -1202,5 +1266,35 @@ defmodule MishkaDocument.WorkspaceVersion do
       ["admin:dashboard:document:workspace", "admin:dashboard:document:section"],
       &MishkaCmsCore.Accounts.Checks.AccessPermissions.match?(actor, %{}, permissions: [&1])
     )
+  end
+
+  @doc """
+  How a version is named in a list of versions to pick: its number, and its name when it has one.
+  """
+  @spec source_label(map()) :: String.t()
+  def source_label(%{version_number: number, version_name: name})
+      when is_binary(name) and name != "",
+      do: "#{number} — #{name}"
+
+  def source_label(%{version_number: number}), do: to_string(number)
+
+  @doc """
+  The site the version form writes for: a master's chosen site, a site user's own.
+  """
+  @spec form_site_id(map()) :: String.t() | nil
+  def form_site_id(%{master_user?: true} = state) do
+    Map.get(state.field_values || %{}, :site_id) || Map.get(state.defaults || %{}, :site_id)
+  end
+
+  def form_site_id(%{current_user: user}), do: user && Map.get(user, :site_id)
+
+  @doc """
+  The document the version form is for: the one it was opened with, or the edited record's.
+  `nil` when it names none, so its pickers offer no version.
+  """
+  @spec form_workspace_id(map()) :: String.t() | nil
+  def form_workspace_id(state) do
+    Map.get(state.defaults || %{}, :workspace_id) ||
+      Map.get(state.field_values || %{}, :workspace_id)
   end
 end

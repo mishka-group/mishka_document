@@ -70,11 +70,11 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   end
 
   @impl true
-  def handle_info({:form_saved, :create, _result}, socket) do
+  def handle_info({:form_saved, :create, result}, socket) do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Workspace version created successfully"))}
+     |> put_flash(:info, created_message(result))}
   end
 
   @impl true
@@ -149,13 +149,13 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   def handle_event(
         "clone_version",
         %{"clone" => params},
-        %{assigns: %{cloning?: false, clone_form: %{} = form, clone_source: source}} = socket
+        %{assigns: %{cloning?: false, clone_form: %{} = form}} = socket
       ) do
     {:noreply,
      socket
      |> assign(cloning?: true, clone_notice: [])
      |> MishkaGervaz.Messages.start_async(:clone_version, fn ->
-       {source.version_number, AshPhoenix.Form.submit(form.source, params: params)}
+       AshPhoenix.Form.submit(form.source, params: params)
      end)}
   end
 
@@ -165,24 +165,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   @impl true
-  def handle_async(:clone_version, {:ok, {source_number, {:ok, version}}}, socket) do
-    cloned = Map.get(version.__metadata__, :cloned, %{})
+  def handle_async(:clone_version, {:ok, {:ok, version}}, socket),
+    do: {:noreply, socket |> assign_clone(nil, nil) |> put_flash(:info, created_message(version))}
 
-    message =
-      gettext("Version %{version} created from %{source} — %{pages}, %{notes} copied",
-        version: version.version_number,
-        source: source_number,
-        pages: ngettext("1 page", "%{count} pages", Map.get(cloned, :pages, 0)),
-        notes: ngettext("1 note", "%{count} notes", Map.get(cloned, :notes, 0))
-      )
-
-    {:noreply,
-     socket
-     |> assign_clone(nil, nil)
-     |> put_flash(:info, message)}
-  end
-
-  def handle_async(:clone_version, {:ok, {_source_number, {:error, form}}}, socket),
+  def handle_async(:clone_version, {:ok, {:error, form}}, socket),
     do: {:noreply, refuse_clone(socket, form)}
 
   def handle_async(:clone_version, {:exit, _reason}, socket),
@@ -207,6 +193,18 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
         clone_form: to_form(form),
         clone_notice: form |> clone_errors() |> Enum.drop(field_errors(form))
       )
+
+  # What a created version says: what it copied, when it was copied from another.
+  defp created_message(%WorkspaceVersion{__metadata__: %{cloned: cloned}} = version) do
+    gettext("Version %{version} created from %{source} — %{pages}, %{notes} copied",
+      version: version.version_number,
+      source: cloned.from,
+      pages: ngettext("1 page", "%{count} pages", cloned.pages),
+      notes: ngettext("1 note", "%{count} notes", cloned.notes)
+    )
+  end
+
+  defp created_message(_version), do: gettext("Workspace version created successfully")
 
   defp assign_clone(socket, source, form),
     do: assign(socket, clone_source: source, clone_form: form, clone_notice: [], cloning?: false)

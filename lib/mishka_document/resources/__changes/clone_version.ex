@@ -4,9 +4,18 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
   with its notes and tags, in the source's tree, in one transaction with the new version itself.
 
   The version to copy is the action's `source_version_id` argument, read with the action's actor:
-  under the action's tenant, or on any site for a master's action (`:master_get`). The new version
-  is of the source's workspace and site, a draft, not the latest, and names the source as
-  `source_version_id`; a `MishkaDocument.WorkspaceVersionLineage` row records the copy.
+  under the action's tenant, or on any site for a master's action with none (`:master_get`). The
+  new version names the source as `source_version_id`, and a
+  `MishkaDocument.WorkspaceVersionLineage` row records the copy. Nothing is copied when the
+  argument is empty.
+
+  ## Options
+
+    * `:as` — `:clone` (the default) writes the new version into the source's workspace and site,
+      a draft, not the latest and not published, and refuses a source it cannot read. `:create`
+      keeps what the action was given and refuses a source of another workspace, leaving a source
+      of another site, or of none, to the action's own reference checks; an action given
+      `copy_pages: false` copies nothing.
 
   ## What is copied
 
@@ -29,8 +38,6 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
   action's actor, so it needs the section area as well as the workspace area. Any refusal or
   failure rolls the whole copy back.
 
-  The returned version carries `cloned: %{pages: n, notes: n, tags: n}` in its metadata.
-
   ## The event
 
   Once the transaction is committed, `"document:version:cloned"` is fired through
@@ -48,12 +55,21 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
 
   and `meta: %{actor: actor, site_id: site_id}`. What a plugin answers is not used.
 
+  The returned version carries `cloned: %{pages: n, notes: n, tags: n, from: "0.0.9"}` in its
+  metadata, `from` being the source's version number.
+
   ## Usage
 
       create :clone do
         accept [:version_number, :version_name, :description]
         argument :source_version_id, :uuid, allow_nil?: false
         change MishkaDocument.Resources.Changes.CloneVersion
+      end
+
+      create :create do
+        argument :source_version_id, :uuid
+        argument :copy_pages, :boolean, default: true
+        change {MishkaDocument.Resources.Changes.CloneVersion, as: :create}
       end
   """
   use Ash.Resource.Change
@@ -112,12 +128,32 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
   def event, do: @event
 
   @impl true
-  def change(changeset, _opts, context) do
-    case Ash.Changeset.get_argument(changeset, :source_version_id) do
-      nil -> changeset
-      source_id -> from_source(changeset, read_source(source_id, changeset, context), context)
+  def init(opts) do
+    case Keyword.get(opts, :as, :clone) do
+      as when as in [:clone, :create] -> {:ok, [as: as]}
+      _other -> {:error, "CloneVersion takes :as as :clone or :create"}
     end
   end
+
+  @impl true
+  def change(changeset, opts, context) do
+    case {Ash.Changeset.get_argument(changeset, :source_version_id), copies?(changeset, opts)} do
+      {nil, _copies?} ->
+        changeset
+
+      {_source_id, false} ->
+        changeset
+
+      {source_id, true} ->
+        source = read_source(source_id, changeset, context)
+        from_source(changeset, of_document(source, changeset, opts[:as]), opts[:as], context)
+    end
+  end
+
+  defp copies?(changeset, as: :create),
+    do: Ash.Changeset.get_argument(changeset, :copy_pages) != false
+
+  defp copies?(_changeset, _opts), do: true
 
   # The version to copy, read as the caller: under its tenant, or on any site for a master's action.
   defp read_source(id, %{tenant: nil}, context),
@@ -130,11 +166,20 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
       )
 
   defp version({:ok, %WorkspaceVersion{} = source}), do: {:ok, source}
-  defp version(_missing_or_refused), do: :error
+  defp version(_missing_or_refused), do: :missing
+
+  # A version created as a copy is of the document its source is.
+  defp of_document({:ok, source}, changeset, :create) do
+    if Ash.Changeset.get_attribute(changeset, :workspace_id) == source.workspace_id,
+      do: {:ok, source},
+      else: :elsewhere
+  end
+
+  defp of_document(source, _changeset, _as), do: source
 
   defp as_caller(context), do: [actor: context.actor, authorize?: context.authorize? != false]
 
-  defp from_source(changeset, {:ok, source}, context) do
+  defp from_source(changeset, {:ok, source}, :clone, context) do
     changeset
     |> Ash.Changeset.force_change_attributes(%{
       workspace_id: source.workspace_id,
@@ -149,19 +194,37 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
       site_id: source.site_id,
       title: Ash.Changeset.get_attribute(changeset, :version_number)
     })
+    |> copy_after_write(source, context)
+  end
+
+  defp from_source(changeset, {:ok, source}, :create, context),
+    do: copy_after_write(changeset, source, context)
+
+  # A create's own reference checks refuse a source of another site, or none: the refusal is theirs.
+  defp from_source(changeset, :missing, :create, _context), do: changeset
+
+  defp from_source(changeset, :missing, :clone, _context) do
+    Ash.Changeset.add_error(changeset,
+      field: :source_version_id,
+      message: dgettext_noop("errors", "The version to copy is not here.")
+    )
+  end
+
+  defp from_source(changeset, :elsewhere, _as, _context) do
+    Ash.Changeset.add_error(changeset,
+      field: :source_version_id,
+      message: dgettext_noop("errors", "The version to copy is not one of this document's.")
+    )
+  end
+
+  defp copy_after_write(changeset, source, context) do
+    changeset
     |> Ash.Changeset.after_action(fn _changeset, version ->
       copy(version, source, context)
     end)
     |> Ash.Changeset.after_transaction(fn _changeset, result ->
       announce(result, source, context.actor)
     end)
-  end
-
-  defp from_source(changeset, :error, _context) do
-    Ash.Changeset.add_error(changeset,
-      field: :source_version_id,
-      message: dgettext_noop("errors", "The version to copy is not here.")
-    )
   end
 
   defp copy(version, source, context) do
@@ -175,7 +238,12 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
          {:ok, tags} <- copy_tags(plan, opts),
          {:ok, _lineage} <- lineage(version, source, opts) do
       {:ok,
-       Ash.Resource.put_metadata(version, :cloned, %{pages: pages, notes: notes, tags: tags})}
+       Ash.Resource.put_metadata(version, :cloned, %{
+         pages: pages,
+         notes: notes,
+         tags: tags,
+         from: source.version_number
+       })}
     end
   end
 
