@@ -738,7 +738,6 @@ defmodule MishkaDocument.MasterIdentityTest do
         {a.note_draft, %{source_note_id: b.note.id}, :source_note_id},
         {a.note_draft, %{section_id: nil, section_draft_id: b.draft.id}, :section_draft_id},
         {a.version, %{workspace_id: b.workspace.id}, :workspace_id},
-        {a.version, %{source_version_id: b.version.id}, :source_version_id},
         {a.tag, %{language_group_id: b.tag.id}, :language_group_id}
       ]
     end

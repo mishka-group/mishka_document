@@ -1571,6 +1571,94 @@ defmodule MishkaDocument.Section do
       description "Creates section for master users - requires explicit site_id, auto-assigns language_group_id and section_lineage_id"
     end
 
+    # A PAGE COPIED INTO A NEW VERSION by `MishkaDocument.WorkspaceVersion`'s `:clone` and
+    # `:master_clone`, which write every page of the version they copy through this, in bulk. Its id
+    # and lineage are given, so the copies of the pages under it can name it before it is written.
+    # It starts a language group of its own; `:copy_language_group` moves a translation into the
+    # group of its original's copy once every page is written. Writes no event and broadcasts
+    # nothing per page: the clone of the version is the one event.
+    create :copy do
+      accept [
+        :workspace_version_id,
+        :parent_section_id,
+        :front_page,
+        :group_heading,
+        :group_page,
+        :title,
+        :slug,
+        :content,
+        :order_position,
+        :change_version,
+        :content_review_status,
+        :technical_review_status,
+        :schema,
+        :seo_tags,
+        :permissions,
+        :language,
+        :source_section_id
+      ]
+
+      argument :copy_id, :uuid, allow_nil?: false
+      argument :section_lineage_id, :uuid, allow_nil?: false
+
+      validate present([:workspace_version_id, :source_section_id, :title, :slug, :language])
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
+
+      change fn changeset, _context ->
+        Ash.Changeset.force_change_attribute(
+          changeset,
+          :id,
+          Ash.Changeset.get_argument(changeset, :copy_id)
+        )
+      end
+
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
+
+      change before_action(fn changeset, _context ->
+               Ash.Changeset.force_change_attribute(
+                 changeset,
+                 :section_lineage_id,
+                 Ash.Changeset.get_argument(changeset, :section_lineage_id)
+               )
+             end)
+
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
+
+      description "Copies a page into another version of its document, with the id and lineage given"
+    end
+
+    # A COPIED PAGE JOINS THE LANGUAGE GROUP OF ITS ORIGINAL'S COPY, once both are written — see
+    # `:copy`. The group is held to the page's site like any other.
+    update :copy_language_group do
+      accept []
+      require_atomic? false
+
+      argument :language_group_id, :uuid, allow_nil?: false
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change set_attribute(:language_group_id, arg(:language_group_id))
+
+      description "Moves a copied page into the language group of its original's copy"
+    end
+
+    # A PAGE OF A VERSION MADE INDEPENDENT no longer names the page it was copied from, so deleting
+    # that page deletes nothing of this one — `MishkaDocument.WorkspaceVersion`'s `:detach`.
+    update :detach_source do
+      accept []
+      require_atomic? false
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change set_attribute(:source_section_id, nil)
+
+      description "Unties a copied page from the page it was copied from"
+    end
+
     update :update do
       primary? true
       require_atomic? false

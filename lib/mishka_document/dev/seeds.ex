@@ -1020,6 +1020,8 @@ defmodule MishkaDocument.Dev.Seeds do
         status: spec.status,
         is_latest_for_version: spec.is_latest,
         source_version_id: source_version_id(prev_entry),
+        # Each version's pages are written below, from the previous version's, as it changed them.
+        copy_pages: false,
         published_at: published_at(spec),
         site_id: ctx.site_id
       ],

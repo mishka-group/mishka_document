@@ -200,6 +200,10 @@ defmodule MishkaDocument.SiteReferencesTest do
   defp placement(kind, field, target, _site_id) when {kind, field} in @same_version,
     do: %{workspace_version_id: target.workspace_version_id}
 
+  # A version's source is one of its own document's versions.
+  defp placement(:workspace_version, :source_version_id, source, _site_id),
+    do: %{workspace_id: source.workspace_id}
+
   defp placement(:section, :source_section_id, source, site_id),
     do: %{workspace_version_id: another_version(source, site_id).id}
 

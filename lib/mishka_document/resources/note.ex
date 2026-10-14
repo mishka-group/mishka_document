@@ -411,6 +411,34 @@ defmodule MishkaDocument.Note do
       description "Creates note for master users - requires explicit site_id"
     end
 
+    # A NOTE COPIED WITH ITS PAGE into a new version by `MishkaDocument.WorkspaceVersion`'s `:clone`
+    # and `:master_clone`, in bulk. Writes no event and broadcasts nothing per note: the clone of the
+    # version is the one event.
+    create :copy do
+      accept [
+        :section_id,
+        :title,
+        :content,
+        :order_position,
+        :change_version,
+        :content_review_status,
+        :technical_review_status,
+        :schema,
+        :seo_tags
+      ]
+
+      validate present([:section_id, :title, :content])
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
+
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change MishkaDocument.Resources.Changes.ContentFacts
+
+      description "Copies a note with its page into another version of its document"
+    end
+
     update :update do
       primary? true
       require_atomic? false

@@ -55,6 +55,8 @@ defmodule MishkaDocument.WorkspaceVersion do
     references do
       reference :site, on_delete: :delete
       reference :workspace, on_delete: :delete
+      # A version goes with the version it was cloned from — see `DestroyClones`.
+      reference :source_version, on_delete: :delete
     end
 
     custom_indexes do
@@ -113,6 +115,10 @@ defmodule MishkaDocument.WorkspaceVersion do
     only_actions [
       :create,
       :master_create,
+      :clone,
+      :master_clone,
+      :detach,
+      :master_detach,
       :update,
       :master_update,
       :publish,
@@ -138,6 +144,7 @@ defmodule MishkaDocument.WorkspaceVersion do
         end
 
         preload do
+          always [:clone_numbers]
           master [:master_source_version]
           tenant [:source_version]
         end
@@ -314,12 +321,45 @@ defmodule MishkaDocument.WorkspaceVersion do
           end
         end
 
+        # Sends `{:row_action, "clone", %{"id" => id}}` to the versions screen, which opens its
+        # clone form — `MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index`.
+        action :clone do
+          type :event
+          event "clone"
+
+          visible fn _record, state ->
+            state.archive_status == :active and
+              MishkaDocument.WorkspaceVersion.clone_allowed?(state.current_user)
+          end
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Clone") end
+            icon "hero-document-duplicate"
+          end
+        end
+
+        # Sends the `:detach` update, which unties this version from the one it was cloned from.
+        action :detach do
+          type :update
+          action {:master_detach, :detach}
+
+          visible fn record, state ->
+            state.archive_status == :active and not is_nil(record.source_version_id) and
+              MishkaDocument.WorkspaceVersion.clone_allowed?(state.current_user)
+          end
+
+          confirm &MishkaDocument.WorkspaceVersion.detach_confirm/1
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Make independent") end
+            icon "hero-link-slash"
+          end
+        end
+
         action :delete do
           type :destroy
 
-          confirm fn _record ->
-            dgettext("mishka_gervaz", "Permanently delete this version? This cannot be undone.")
-          end
+          confirm &MishkaDocument.WorkspaceVersion.delete_confirm/1
 
           visible :active
         end
@@ -380,6 +420,57 @@ defmodule MishkaDocument.WorkspaceVersion do
           end
         end
 
+        # The site a master writes for, given by the screen as the document's own.
+        field :site_id, :relation do
+          restricted true
+          show_on :create
+          readonly fn state -> Map.has_key?(state.defaults || %{}, :site_id) end
+          display_field :name
+          search_field :name
+          mode :search
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Site") end
+          end
+        end
+
+        # The version a new one is copied from, among its own document's versions — the form's
+        # `workspace_id` default, or the record's. Shown on an edit as the version it came from,
+        # which no update changes.
+        field :source_version_id, :relation do
+          mode :search
+          search_field :version_number
+          display_field &MishkaDocument.WorkspaceVersion.source_label/1
+          include_nil fn -> dgettext("mishka_gervaz", "None — an empty version") end
+          readonly fn state -> state.mode == :update end
+
+          visible fn state ->
+            state.mode == :update or
+              MishkaDocument.WorkspaceVersion.clone_allowed?(state.current_user)
+          end
+
+          depends_on :site_id
+
+          load fn query, state ->
+            Ash.Query.filter_input(query, %{
+              site_id: MishkaDocument.WorkspaceVersion.form_site_id(state),
+              workspace_id: MishkaDocument.WorkspaceVersion.form_workspace_id(state)
+            })
+          end
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Clone from") end
+            placeholder fn -> dgettext("mishka_gervaz", "Search a version of this document") end
+
+            description fn ->
+              dgettext(
+                "mishka_gervaz",
+                "Every page, note and tag of that version is copied into the new one."
+              )
+            end
+          end
+        end
+
         field :status, :select do
           required true
 
@@ -421,7 +512,7 @@ defmodule MishkaDocument.WorkspaceVersion do
 
       groups do
         group :version_info do
-          fields [:version_number, :version_name, :status]
+          fields [:site_id, :version_number, :version_name, :status, :source_version_id]
 
           ui do
             label fn -> dgettext("mishka_gervaz", "Version Information") end
@@ -529,7 +620,13 @@ defmodule MishkaDocument.WorkspaceVersion do
       end
 
       argument :source_version_id, :uuid do
-        description "Optional source version to clone from"
+        description "Optional version to start from: its pages, notes and tags are copied into the new one"
+      end
+
+      argument :copy_pages, :boolean do
+        default true
+
+        description "Whether a version given a source starts as a copy of its pages, notes and tags"
       end
 
       change fn changeset, context ->
@@ -544,6 +641,8 @@ defmodule MishkaDocument.WorkspaceVersion do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
                 field: :source_version_id, resource: MishkaDocument.WorkspaceVersion}
+
+      change {MishkaDocument.Resources.Changes.CloneVersion, as: :create}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -587,7 +686,13 @@ defmodule MishkaDocument.WorkspaceVersion do
       end
 
       argument :source_version_id, :uuid do
-        description "Optional source version to clone from"
+        description "Optional version to start from: its pages, notes and tags are copied into the new one"
+      end
+
+      argument :copy_pages, :boolean do
+        default true
+
+        description "Whether a version given a source starts as a copy of its pages, notes and tags"
       end
 
       change fn changeset, context ->
@@ -600,6 +705,8 @@ defmodule MishkaDocument.WorkspaceVersion do
         end
       end
 
+      change {MishkaDocument.Resources.Changes.CloneVersion, as: :create}
+
       # Add metadata for event tracking
       change fn changeset, _context ->
         Ash.Changeset.put_context(changeset, :ash_events_metadata, %{
@@ -611,21 +718,60 @@ defmodule MishkaDocument.WorkspaceVersion do
       description "Creates workspace version for master users - requires explicit site_id"
     end
 
+    # A NEW VERSION COPIED FROM ANOTHER of the same document, with every page, note and tag of it —
+    # `MishkaDocument.Resources.Changes.CloneVersion`. It is a draft and not the latest; its
+    # workspace and site are the source's.
+    create :clone do
+      transaction? true
+      accept [:version_number, :version_name, :description]
+
+      argument :source_version_id, :uuid do
+        allow_nil? false
+        description "The version to copy"
+      end
+
+      validate present(:version_number)
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change MishkaDocument.Resources.Changes.CloneVersion
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
+                field: :source_version_id, resource: MishkaDocument.WorkspaceVersion}
+
+      description "Copies a version of the tenant's document, with its pages, notes and tags, into a new draft version"
+    end
+
+    create :master_clone do
+      transaction? true
+      accept [:version_number, :version_name, :description]
+
+      argument :source_version_id, :uuid do
+        allow_nil? false
+        description "The version to copy"
+      end
+
+      validate present(:version_number)
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
+
+      change MishkaDocument.Resources.Changes.CloneVersion
+
+      description "Copies a version of any site's document, with its pages, notes and tags, into a new draft version of that site (master users only)"
+    end
+
     update :update do
       primary? true
       require_atomic? false
       transaction? true
-      accept @admin_fields |> List.delete(:site_id)
+      # A version's source is the one it was created from; it does not change after.
+      accept @admin_fields -- [:site_id, :source_version_id]
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
                 field: :workspace_id, resource: MishkaDocument.Workspace},
                where: [changing(:workspace_id)]
-
-      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantIsolation,
-                field: :source_version_id, resource: MishkaDocument.WorkspaceVersion},
-               where: [changing(:source_version_id)]
 
       change MishkaDocument.Resources.Changes.EnsureSingleLatestVersion
 
@@ -659,7 +805,7 @@ defmodule MishkaDocument.WorkspaceVersion do
       description "Updates workspace version for master users - bypasses multi-tenancy, prevents site_id changes"
       require_atomic? false
       transaction? true
-      accept @admin_fields |> List.delete(:site_id) |> List.delete(:workspace_id)
+      accept @admin_fields -- [:site_id, :workspace_id, :source_version_id]
       multitenancy :bypass
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
@@ -820,6 +966,33 @@ defmodule MishkaDocument.WorkspaceVersion do
       end
     end
 
+    # A CLONED VERSION MADE INDEPENDENT of the version it was cloned from, so deleting that one
+    # leaves it — `MishkaDocument.Resources.Changes.DetachVersion`.
+    update :detach do
+      accept []
+      require_atomic? false
+      transaction? true
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      change MishkaDocument.Resources.Changes.DetachVersion
+
+      description "Unties a cloned version, and its pages, from the version it was cloned from"
+    end
+
+    update :master_detach do
+      accept []
+      require_atomic? false
+      transaction? true
+      multitenancy :bypass
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
+
+      change MishkaDocument.Resources.Changes.DetachVersion
+
+      description "Unties a cloned version of any site, and its pages, from the version it was cloned from (master users only)"
+    end
+
     destroy :destroy do
       description "Permanently removes workspace version from database (tenant users)"
       primary? true
@@ -840,6 +1013,8 @@ defmodule MishkaDocument.WorkspaceVersion do
           :ok
         end
       end
+
+      change MishkaDocument.Resources.Changes.DestroyClones
     end
 
     destroy :master_destroy do
@@ -862,6 +1037,8 @@ defmodule MishkaDocument.WorkspaceVersion do
           :ok
         end
       end
+
+      change MishkaDocument.Resources.Changes.DestroyClones
     end
   end
 
@@ -912,6 +1089,18 @@ defmodule MishkaDocument.WorkspaceVersion do
                       "admin:api:document:workspace"
                     ]}
     end
+
+    # A clone writes the source's pages and notes as well, and making one independent its pages,
+    # which are the section area's.
+    policy action([:clone, :master_clone, :detach, :master_detach]) do
+      access_type :strict
+
+      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+                    permissions: [
+                      "admin:dashboard:document:section",
+                      "admin:api:document:section"
+                    ]}
+    end
   end
 
   # PubSub configuration for real-time updates
@@ -923,6 +1112,10 @@ defmodule MishkaDocument.WorkspaceVersion do
 
     publish :create, [[nil, :site_id], "created"]
     publish :master_create, [[nil, :site_id], "created"]
+    publish :clone, [[nil, :site_id], "created"]
+    publish :master_clone, [[nil, :site_id], "created"]
+    publish :detach, [[nil, :site_id], "updated"]
+    publish :master_detach, [[nil, :site_id], "updated"]
     publish :update, [[nil, :site_id], "updated"]
     publish :publish, [[nil, :site_id], "updated"]
     publish :mark_as_latest, [[nil, :site_id], "updated"]
@@ -1106,6 +1299,13 @@ defmodule MishkaDocument.WorkspaceVersion do
   calculations do
     # Who may open the version: its document's permissions.
     calculate :effective_permissions, {:array, :string}, expr(workspace.permissions)
+
+    # What deleting the version deletes with it: the versions cloned from it, however deep.
+    calculate :clone_numbers,
+              {:array, :string},
+              MishkaDocument.Resources.Calculations.CloneNumbers do
+      description "The version numbers of every version cloned from this one, nearest first"
+    end
   end
 
   identities do
@@ -1115,5 +1315,87 @@ defmodule MishkaDocument.WorkspaceVersion do
       all_tenants? true
       nils_distinct? false
     end
+  end
+
+  @doc """
+  Whether `actor` may clone a version on the dashboard: it holds the workspace area, which writes
+  versions, and the section area, which writes their pages and notes — what `:clone` and
+  `:master_clone` ask.
+  """
+  @spec clone_allowed?(map() | nil) :: boolean()
+  def clone_allowed?(actor) do
+    Enum.all?(
+      ["admin:dashboard:document:workspace", "admin:dashboard:document:section"],
+      &MishkaCmsCore.Accounts.Checks.AccessPermissions.match?(actor, %{}, permissions: [&1])
+    )
+  end
+
+  @doc """
+  How a version is named in a list of versions to pick: its number, and its name when it has one.
+  """
+  @spec source_label(map()) :: String.t()
+  def source_label(%{version_number: number, version_name: name})
+      when is_binary(name) and name != "",
+      do: "#{number} — #{name}"
+
+  def source_label(%{version_number: number}), do: to_string(number)
+
+  @doc """
+  The site the version form writes for: a master's chosen site, a site user's own.
+  """
+  @spec form_site_id(map()) :: String.t() | nil
+  def form_site_id(%{master_user?: true} = state) do
+    Map.get(state.field_values || %{}, :site_id) || Map.get(state.defaults || %{}, :site_id)
+  end
+
+  def form_site_id(%{current_user: user}), do: user && Map.get(user, :site_id)
+
+  @doc """
+  The document the version form is for: the one it was opened with, or the edited record's.
+  `nil` when it names none, so its pickers offer no version.
+  """
+  @spec form_workspace_id(map()) :: String.t() | nil
+  def form_workspace_id(state) do
+    Map.get(state.defaults || %{}, :workspace_id) ||
+      Map.get(state.field_values || %{}, :workspace_id)
+  end
+
+  @doc """
+  What the delete button asks before a version is deleted: a warning naming every version cloned
+  from it (`:clone_numbers`), which goes with it, or the plain question when there is none.
+  """
+  @spec delete_confirm(map()) :: String.t()
+  def delete_confirm(%{clone_numbers: [_ | _] = clones, version_number: number}) do
+    ngettext(
+      "Warning: deleting %{version} also deletes 1 version cloned from it — %{clones} — with all its pages and notes. This cannot be undone.",
+      "Warning: deleting %{version} also deletes %{count} versions cloned from it — %{clones} — with all their pages and notes. This cannot be undone.",
+      length(clones),
+      version: number,
+      clones: Enum.join(clones, ", ")
+    )
+  end
+
+  def delete_confirm(_version),
+    do: dgettext("mishka_gervaz", "Permanently delete this version? This cannot be undone.")
+
+  @doc """
+  What "Make independent" asks before it unties a version from the one it was cloned from.
+  """
+  @spec detach_confirm(map()) :: String.t()
+  def detach_confirm(version) do
+    gettext(
+      "%{version} will no longer be tied to %{source}; deleting %{source} will not delete it.",
+      version: version.version_number,
+      source: source_number(version)
+    )
+  end
+
+  defp source_number(version) do
+    [Map.get(version, :master_source_version), Map.get(version, :source_version)]
+    |> Enum.find_value(fn
+      %__MODULE__{version_number: number} -> number
+      _not_loaded -> nil
+    end)
+    |> Kernel.||(gettext("its source"))
   end
 end
