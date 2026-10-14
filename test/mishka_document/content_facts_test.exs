@@ -14,6 +14,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
   alias MishkaDocument.{Note, Section}
   alias MishkaDocument.Plugins.ContentComponents
   alias MishkaDocument.Resources.Changes.ContentFacts
+  alias MishkaDocument.Test.IconLibrary
 
   @moduletag :integration
 
@@ -46,23 +47,6 @@ defmodule MishkaDocument.Test.ContentFactsTest do
   end
 
   defp stored(%resource{id: id}), do: Ash.get!(resource, id, action: :read_any, authorize?: false)
-
-  # THIS BUILD HAS NO `deps/heroicons`, so the stock Heroicons set ships nothing here. With no set
-  # configured, the `hero-` glyphs the installed Chelekom kit bundles register themselves
-  # (`MishkaCmsCore.Runtime.PageBuilder.Icons.Bundled`) — what a host without heroicons draws from.
-  defp bundled_icons(_context) do
-    original = Application.get_env(:mishka_cms_core, :icon_libraries)
-    Application.put_env(:mishka_cms_core, :icon_libraries, [])
-
-    on_exit(fn ->
-      case original do
-        nil -> Application.delete_env(:mishka_cms_core, :icon_libraries)
-        libraries -> Application.put_env(:mishka_cms_core, :icon_libraries, libraries)
-      end
-    end)
-
-    :ok
-  end
 
   describe "content_components" do
     test "are the names a page's markers name, each once", ctx do
@@ -136,7 +120,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
   end
 
   describe "content_icons" do
-    setup :bundled_icons
+    setup {IconLibrary, :registered}
 
     test "are the icons a page's markers and HTML name, each once", ctx do
       page =
@@ -318,7 +302,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
   # AN ICON A PAGE NAMES IS IN NO TEMPLATE EITHER: a marker's `icon="hero-cloud"` reaches its
   # component as an expression, and a `<span class="hero-inbox">` in the text is never scanned.
   describe "the icons a site's stylesheet hears" do
-    setup :bundled_icons
+    setup {IconLibrary, :registered}
 
     test "are those its approved pages and notes name, each once", ctx do
       page =
@@ -430,7 +414,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
   # component name live does. `TailwindCompiler.schedule/1` enqueues nothing under the `:env_test?`
   # flag, so it is switched off once the pages a test starts from exist.
   describe "a write that changes the icons an approved page names" do
-    setup [:bundled_icons, :open_site]
+    setup [{IconLibrary, :registered}, :open_site]
 
     test "rebuilds the site's stylesheet when it names one no approved page did", ctx do
       write!(ctx.page, %{content: ~s(<span class="hero-cloud hero-inbox"></span>)}, ctx)

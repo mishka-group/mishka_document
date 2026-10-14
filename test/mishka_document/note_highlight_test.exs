@@ -9,6 +9,7 @@ defmodule MishkaDocument.Test.NoteHighlightTest do
   use MishkaDocument.DataCase, async: false
 
   alias MishkaDocument.{Note, NoteDraft}
+  alias MishkaDocument.Test.IconLibrary
 
   @moduletag :integration
 
@@ -141,25 +142,8 @@ defmodule MishkaDocument.Test.NoteHighlightTest do
     end
   end
 
-  # THIS BUILD HAS NO `deps/heroicons`: with no icon set configured, the `hero-` glyphs the
-  # installed Chelekom kit bundles register themselves, as `MishkaDocument.Test.ContentFactsTest`
-  # sets up.
-  defp bundled_icons(_context) do
-    original = Application.get_env(:mishka_cms_core, :icon_libraries)
-    Application.put_env(:mishka_cms_core, :icon_libraries, [])
-
-    on_exit(fn ->
-      case original do
-        nil -> Application.delete_env(:mishka_cms_core, :icon_libraries)
-        libraries -> Application.put_env(:mishka_cms_core, :icon_libraries, libraries)
-      end
-    end)
-
-    :ok
-  end
-
   describe "what a note names" do
-    setup :bundled_icons
+    setup {IconLibrary, :registered}
 
     test "its components and icons, from its markers and its classes, are recorded", ctx do
       note =
