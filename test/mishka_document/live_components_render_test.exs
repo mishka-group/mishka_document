@@ -3348,8 +3348,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       # The titles are in the opposite order to their places on purpose: a component that ordered
       # these by name would draw them in the same order as one that read `order_position`.
-      second = note!(site, page, title: "Apple note", order_position: 1)
-      first = note!(site, page, title: "Zebra note", order_position: 0)
+      note!(site, page, title: "Apple note", order_position: 1)
+      note!(site, page, title: "Zebra note", order_position: 0)
 
       _draft =
         note!(site, page, title: "In review", order_position: 2, content_review_status: :pending)
@@ -3362,8 +3362,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(view, ~s([data-role="doc-note-title"])) == ["Zebra note", "Apple note"]
 
-      assert ids_of(view, ~s([data-role="doc-section-note"])) ==
-               ["note-#{first.id}", "note-#{second.id}"]
+      assert ids_of(view, ~s([data-role="doc-section-note"])) == ["zebra-note", "apple-note"]
     end
 
     # WHAT THE CONTENT EDITOR STORES: a placed component's marker in a paragraph of its own. The page
@@ -4416,6 +4415,50 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         assert LazyHTML.query(document, "##{anchor}") |> Enum.to_list() != [],
                "the table of contents points at ##{anchor} and nothing on the page answers to it"
       end
+    end
+
+    # A NOTE IS LINKED BY ITS TITLE: `#color-palette`. A later note of a slug already taken gets the
+    # first free `-2`, `-3`, a title with no letter or digit is the note's place, a Persian title stays
+    # Persian, and a heading with a note's title is named clear of it — the same in both blocks,
+    # whatever either one shows.
+    test "links each note by the slug of its title, as doc-section draws it", %{site: site} do
+      %{version: version} = manual!(site)
+
+      page =
+        page!(site, version,
+          title: "Palette",
+          slug: "palette",
+          order_position: 4,
+          content: "<h2>Why</h2><p>Because.</p><h2>Color palette</h2><p>Body.</p>"
+        )
+
+      note!(site, page, title: "Color palette", order_position: 0)
+      note!(site, page, title: "Color palette 2", order_position: 1)
+      note!(site, page, title: "Color  Palette!", order_position: 2)
+      note!(site, page, title: "— ? —", order_position: 3)
+      note!(site, page, title: "پالت رنگ", order_position: 4)
+
+      attrs = %{workspace: "mishka-cms", params: %{"section" => "palette"}}
+
+      {:ok, view, _html} =
+        mount_blocks(site, [
+          %{"name" => "doc-section", "id" => "one", "attrs" => attrs},
+          %{"name" => "doc-toc", "id" => "two", "attrs" => attrs},
+          %{"name" => "doc-toc", "id" => "three", "attrs" => Map.put(attrs, :show_notes, false)}
+        ])
+
+      notes = ["color-palette", "color-palette-2", "color-palette-3", "note-4", "پالت-رنگ"]
+      headings = ["why", "color-palette-4"]
+
+      assert ids_of(view, ~s([data-role="doc-section-note"])) == notes
+
+      assert ids_of(view, ~s([data-role="doc-section-body"] h2)) == headings
+
+      assert hrefs(view, ~s(#two [data-role="doc-toc-link"])) ==
+               Enum.map(headings ++ notes, &("#" <> &1))
+
+      assert hrefs(view, ~s(#three [data-role="doc-toc-link"])) ==
+               Enum.map(headings, &("#" <> &1))
     end
 
     test "draws nothing when there is not enough to list", %{site: site} do

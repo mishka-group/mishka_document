@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.21.0",
+  "version": "2.22.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -919,17 +919,32 @@
         {
           "name": "anchor_slug",
           "args": "text",
-          "code": "# A HEADING'S OWN WORDS, IN ANY ALPHABET. `[^a-z0-9]` would empty a Persian or Arabic heading and\n# give every one of them the same anchor, so letters and numbers are matched by their Unicode\n# category instead.\nslug =\n  text\n  |> to_string()\n  |> String.downcase()\n  |> String.replace(~r/[^\\p{L}\\p{N}]+/u, \"-\")\n  |> String.trim(\"-\")\n\ncase slug do\n  \"\" -> \"heading\"\n  some -> String.slice(some, 0, 80)\nend\n"
+          "code": "# A TITLE'S OWN WORDS, IN ANY ALPHABET: lower case, every run of what is not a letter or a digit\n# one `-`, none at either end, and `\"\"` when nothing is left. `[^a-z0-9]` would empty a Persian or\n# Arabic title, so letters and digits are matched by their Unicode category. `doc-section` and\n# `doc-toc` carry this, `anchors_of/3`, `free_anchor/3` and `note_anchors/1` word for word, so a\n# heading and a note are named by one rule in both.\ntext\n|> to_string()\n|> String.downcase()\n|> String.replace(~r/[^\\p{L}\\p{N}]+/u, \"-\")\n|> String.trim(\"-\")\n"
+        },
+        {
+          "name": "anchors_of",
+          "args": "texts, fallback, taken",
+          "code": "# ONE ANCHOR PER TITLE, IN THE ORDER GIVEN: its slug (`anchor_slug/1`), or `<fallback>-<place>`\n# counted from 1 when it has none, and never one in `taken` or minted before it — the second of a\n# slug is `-2`, the third `-3` (`free_anchor/3`).\ntexts\n|> Enum.with_index(1)\n|> Enum.map_reduce(MapSet.new(taken), fn {text, place}, used ->\n  base =\n    case anchor_slug(text) do\n      \"\" -> fallback <> \"-\" <> Integer.to_string(place)\n      slug -> slug\n    end\n\n  anchor = free_anchor(base, used, 1)\n  {anchor, MapSet.put(used, anchor)}\nend)\n|> elem(0)\n"
+        },
+        {
+          "name": "free_anchor",
+          "args": "base, used, tried",
+          "code": "# `base` when no anchor in `used` is, else the first of `base-2`, `base-3`, … that is free.\ncandidate =\n  case tried do\n    1 -> base\n    _later -> base <> \"-\" <> Integer.to_string(tried)\n  end\n\ncase MapSet.member?(used, candidate) do\n  true -> free_anchor(base, used, tried + 1)\n  false -> candidate\nend\n"
+        },
+        {
+          "name": "note_anchors",
+          "args": "notes",
+          "code": "# THE ANCHOR OF EACH NOTE OF THE PAGE, BY ITS ID: the slug of its title, `#color-palette`, or\n# `note-<place>` for a title with no letter or digit. `notes` are in the order the page draws\n# them, which is the order the second note of one title is told apart in.\nnotes\n|> Enum.map(& &1.id)\n|> Enum.zip(anchors_of(Enum.map(notes, & &1.title), \"note\", []))\n|> Map.new()\n"
         },
         {
           "name": "heading_entries",
-          "args": "html",
-          "code": "# THE HEADINGS OF A PAGE, AND THE ID EACH ONE ANSWERS TO. `doc-toc` runs exactly this over exactly\n# the same scrubbed markup, so the two agree on every anchor without sharing any code — which they\n# cannot, a stored component having nothing to share it through. Two headings with the same words\n# are told apart by the order they appear in, which is the same order in both.\n~r/<(h[23])(?:\\s[^>]*)?>(.*?)<\\/\\1>/su\n|> Regex.scan(html)\n|> Enum.map_reduce(%{}, fn [_whole, tag, inner], seen ->\n  base = anchor_slug(strip_tags(inner))\n  taken = Map.get(seen, base, 0)\n\n  id =\n    case taken do\n      0 -> \"h-\" <> base\n      more -> \"h-\" <> base <> \"-\" <> to_string(more)\n    end\n\n  {%{id: id, text: strip_tags(inner), level: tag}, Map.put(seen, base, taken + 1)}\nend)\n|> elem(0)\n"
+          "args": "html, taken",
+          "code": "# THE HEADINGS OF A PAGE, AND THE ID EACH ONE ANSWERS TO, minted by `anchors_of/3` clear of `taken`,\n# the anchors the page's notes answer to. `doc-toc` runs exactly this over exactly the same scrubbed\n# markup and the same notes, so the two agree on every anchor.\nentries =\n  ~r/<(h[23])(?:\\s[^>]*)?>(.*?)<\\/\\1>/su\n  |> Regex.scan(html)\n  |> Enum.map(fn [_whole, tag, inner] -> %{text: strip_tags(inner), level: tag} end)\n\nentries\n|> Enum.map(& &1.text)\n|> anchors_of(\"heading\", taken)\n|> Enum.zip_with(entries, fn id, entry -> Map.put(entry, :id, id) end)\n"
         },
         {
           "name": "with_heading_ids",
-          "args": "html",
-          "code": "# THE SAME IDS, WRITTEN ONTO THE MARKUP. They are minted here, after the scrub, and an id an author\n# wrote onto a heading is dropped for the one minted, so every heading answers the anchor `doc-toc`\n# lists and no page carries the same id twice.\nids = Enum.map(heading_entries(html), & &1.id)\n\n~r/<(h[23])(?:\\s[^>]*)?>.*?<\\/\\1>/su\n|> Regex.split(html, include_captures: true)\n|> Enum.map_reduce(0, fn part, index ->\n  case Regex.run(~r/^<(h[23])((?:\\s[^>]*)?)>(.*)<\\/h[23]>$/su, part) do\n    [_whole, tag, attrs, inner] ->\n      id = Enum.at(ids, index, \"h-\" <> to_string(index))\n      kept = String.replace(attrs, ~r/\\sid=(\"[^\"]*\"|'[^']*')/, \"\")\n\n      {\"<#{tag}#{kept} id=\\\"#{id}\\\">#{inner}</#{tag}>\", index + 1}\n\n    _not_a_heading ->\n      {part, index}\n  end\nend)\n|> elem(0)\n|> Enum.join()\n"
+          "args": "html, taken",
+          "code": "# THE SAME IDS, WRITTEN ONTO THE MARKUP. They are minted here, after the scrub, and an id an author\n# wrote onto a heading is dropped for the one minted, so every heading answers the anchor `doc-toc`\n# lists and no page carries the same id twice.\nids = Enum.map(heading_entries(html, taken), & &1.id)\n\n~r/<(h[23])(?:\\s[^>]*)?>.*?<\\/\\1>/su\n|> Regex.split(html, include_captures: true)\n|> Enum.map_reduce(0, fn part, index ->\n  case Regex.run(~r/^<(h[23])((?:\\s[^>]*)?)>(.*)<\\/h[23]>$/su, part) do\n    [_whole, tag, attrs, inner] ->\n      id = Enum.at(ids, index, \"heading-\" <> to_string(index + 1))\n      kept = String.replace(attrs, ~r/\\sid=(\"[^\"]*\"|'[^']*')/, \"\")\n\n      {\"<#{tag}#{kept} id=\\\"#{id}\\\">#{inner}</#{tag}>\", index + 1}\n\n    _not_a_heading ->\n      {part, index}\n  end\nend)\n|> elem(0)\n|> Enum.join()\n"
         },
         {
           "name": "climb",
@@ -1008,8 +1023,8 @@
         },
         {
           "name": "note_blocks",
-          "args": "notes, labels, id, placement",
-          "code": "Enum.map(notes, fn note ->\n  anchor = \"note-\" <> to_string(note.id)\n\n  %{\n    id: note.id,\n    anchor: anchor,\n    title: note.title,\n    html: code_windows(placed_cards(clean(note.content), placement), labels, \"#{id}-#{anchor}\")\n  }\nend)\n"
+          "args": "notes, anchors, labels, id, placement",
+          "code": "# EACH NOTE WITH THE ANCHOR IT IS DRAWN AT, from `anchors` (`note_anchors/1`): `#color-palette`,\n# which `doc-toc` links to.\nEnum.map(notes, fn note ->\n  anchor = Map.fetch!(anchors, note.id)\n\n  %{\n    id: note.id,\n    anchor: anchor,\n    title: note.title,\n    html: code_windows(placed_cards(clean(note.content), placement), labels, \"#{id}-#{anchor}\")\n  }\nend)\n"
         },
         {
           "name": "placement",
@@ -1064,7 +1079,7 @@
         {
           "name": "read_page",
           "args": "socket",
-          "code": "assigns = socket.assigns\nlanguage = asked_language(assigns)\nslug = asked_workspace(assigns)\npath = asked_path(assigns)\nworkspace = workspace_row(slug, path, language, trimmed(assigns[:workspace]) != \"\")\n# THE URL NAMED A DOCUMENT AND NOTHING ANSWERS IS A MISSING PAGE, not a page with a notice on it —\n# the same answer `MishkaCmsCore.ErrorsExceptions.NotFoundError` gives everywhere else in this CMS,\n# which LiveView converts exactly as a controller does.\n#\n# ONLY WHEN THE URL NAMED IT: a block PINNED to a document by its author — see `asked_workspace/1` —\n# is their content to fix, and taking the page down for it would be the worse answer.\nif workspace == nil and page_subject?(assigns) do\n  missing!(socket)\nend\n\nversions = versions_of(workspace)\nversion = pick_version(versions, from_url(assigns, :version_param))\nlatest = latest_of(versions)\nsections = sections_of(version, assigns[:current_user])\nwanted = from_url(assigns, :section_param)\n# NOTHING ASKED IS THE DOCUMENT'S OWN ADDRESS, which draws the version's front page when it has one\n# and the landing when it has not.\nfound = section_at_path(sections, wanted)\nsection = (found && section_body(found.id, assigns[:current_user])) || nil\n# AND A SECTION IT NAMED, on the page the document itself is the subject of. An author who PINNED a\n# document has put this block on a page of their own — a stray `?section=` in the URL is a bad link\n# into their page, not a missing page, and taking the whole thing down for it would be the worse\n# answer. The same line the blog draws between the URL's subject and an author's choice.\nif section == nil and wanted != \"\" and page_subject?(assigns) do\n  missing!(socket)\nend\n\nnotes = (section && assigns[:show_notes] && notes_of(section, assigns[:current_user])) || []\n{previous, next} = neighbours(reading_order(sections), section)\n# WHAT THE BUTTON ON EACH CODE BLOCK SAYS, from this block's own attributes (`code_window/2`).\nlabels = %{\n  copy: assigns[:copy_text],\n  copied: assigns[:copied_text],\n  label: assigns[:copy_label],\n  lines: collapse_lines(assigns),\n  expand: assigns[:expand_text],\n  collapse: assigns[:collapse_text]\n}\n\nplacement = placement(section, assigns)\n\nPhoenix.Component.assign(socket,\n  document: workspace,\n  version: version,\n  latest: latest,\n  sections: sections,\n  section: section,\n  body:\n    (section &&\n       code_windows(\n         placed_cards(with_heading_ids(clean(section.rendered_content)), placement),\n         labels,\n         \"#{assigns[:id]}-body\"\n       )) || \"\",\n  notes: note_blocks(notes, labels, assigns[:id], placement),\n  crumbs: (assigns[:show_breadcrumb] && crumbs_to(sections, section)) || [],\n  previous: previous,\n  next: next,\n  language: (workspace && workspace.language) || language,\n  asked_document: (path != \"\" && path) || slug,\n  wanted_slug: wanted,\n  extras: page_extras(assigns, workspace, version, latest, sections, section)\n)\n"
+          "code": "assigns = socket.assigns\nlanguage = asked_language(assigns)\nslug = asked_workspace(assigns)\npath = asked_path(assigns)\nworkspace = workspace_row(slug, path, language, trimmed(assigns[:workspace]) != \"\")\n# THE URL NAMED A DOCUMENT AND NOTHING ANSWERS IS A MISSING PAGE, not a page with a notice on it —\n# the same answer `MishkaCmsCore.ErrorsExceptions.NotFoundError` gives everywhere else in this CMS,\n# which LiveView converts exactly as a controller does.\n#\n# ONLY WHEN THE URL NAMED IT: a block PINNED to a document by its author — see `asked_workspace/1` —\n# is their content to fix, and taking the page down for it would be the worse answer.\nif workspace == nil and page_subject?(assigns) do\n  missing!(socket)\nend\n\nversions = versions_of(workspace)\nversion = pick_version(versions, from_url(assigns, :version_param))\nlatest = latest_of(versions)\nsections = sections_of(version, assigns[:current_user])\nwanted = from_url(assigns, :section_param)\n# NOTHING ASKED IS THE DOCUMENT'S OWN ADDRESS, which draws the version's front page when it has one\n# and the landing when it has not.\nfound = section_at_path(sections, wanted)\nsection = (found && section_body(found.id, assigns[:current_user])) || nil\n# AND A SECTION IT NAMED, on the page the document itself is the subject of. An author who PINNED a\n# document has put this block on a page of their own — a stray `?section=` in the URL is a bad link\n# into their page, not a missing page, and taking the whole thing down for it would be the worse\n# answer. The same line the blog draws between the URL's subject and an author's choice.\nif section == nil and wanted != \"\" and page_subject?(assigns) do\n  missing!(socket)\nend\n\n# EVERY NOTE IS READ, drawn or not: the page's headings are named clear of the notes' anchors,\n# and `doc-toc` names them the same way whatever either block shows.\nnotes = (section && notes_of(section, assigns[:current_user])) || []\nanchors = note_anchors(notes)\n{previous, next} = neighbours(reading_order(sections), section)\n# WHAT THE BUTTON ON EACH CODE BLOCK SAYS, from this block's own attributes (`code_window/2`).\nlabels = %{\n  copy: assigns[:copy_text],\n  copied: assigns[:copied_text],\n  label: assigns[:copy_label],\n  lines: collapse_lines(assigns),\n  expand: assigns[:expand_text],\n  collapse: assigns[:collapse_text]\n}\n\nplacement = placement(section, assigns)\n\nPhoenix.Component.assign(socket,\n  document: workspace,\n  version: version,\n  latest: latest,\n  sections: sections,\n  section: section,\n  body:\n    (section &&\n       code_windows(\n         placed_cards(\n           with_heading_ids(clean(section.rendered_content), Map.values(anchors)),\n           placement\n         ),\n         labels,\n         \"#{assigns[:id]}-body\"\n       )) || \"\",\n  notes:\n    (assigns[:show_notes] && note_blocks(notes, anchors, labels, assigns[:id], placement)) ||\n      [],\n  crumbs: (assigns[:show_breadcrumb] && crumbs_to(sections, section)) || [],\n  previous: previous,\n  next: next,\n  language: (workspace && workspace.language) || language,\n  asked_document: (path != \"\" && path) || slug,\n  wanted_slug: wanted,\n  extras: page_extras(assigns, workspace, version, latest, sections, section)\n)\n"
         },
         {
           "name": "asked_page",
@@ -1976,17 +1991,32 @@
         {
           "name": "anchor_slug",
           "args": "text",
-          "code": "# A HEADING'S OWN WORDS, IN ANY ALPHABET. `[^a-z0-9]` would empty a Persian or Arabic heading and\n# give every one of them the same anchor, so letters and numbers are matched by their Unicode\n# category instead.\nslug =\n  text\n  |> to_string()\n  |> String.downcase()\n  |> String.replace(~r/[^\\p{L}\\p{N}]+/u, \"-\")\n  |> String.trim(\"-\")\n\ncase slug do\n  \"\" -> \"heading\"\n  some -> String.slice(some, 0, 80)\nend\n"
+          "code": "# A TITLE'S OWN WORDS, IN ANY ALPHABET: lower case, every run of what is not a letter or a digit\n# one `-`, none at either end, and `\"\"` when nothing is left. `[^a-z0-9]` would empty a Persian or\n# Arabic title, so letters and digits are matched by their Unicode category. `doc-section` and\n# `doc-toc` carry this, `anchors_of/3`, `free_anchor/3` and `note_anchors/1` word for word, so a\n# heading and a note are named by one rule in both.\ntext\n|> to_string()\n|> String.downcase()\n|> String.replace(~r/[^\\p{L}\\p{N}]+/u, \"-\")\n|> String.trim(\"-\")\n"
+        },
+        {
+          "name": "anchors_of",
+          "args": "texts, fallback, taken",
+          "code": "# ONE ANCHOR PER TITLE, IN THE ORDER GIVEN: its slug (`anchor_slug/1`), or `<fallback>-<place>`\n# counted from 1 when it has none, and never one in `taken` or minted before it — the second of a\n# slug is `-2`, the third `-3` (`free_anchor/3`).\ntexts\n|> Enum.with_index(1)\n|> Enum.map_reduce(MapSet.new(taken), fn {text, place}, used ->\n  base =\n    case anchor_slug(text) do\n      \"\" -> fallback <> \"-\" <> Integer.to_string(place)\n      slug -> slug\n    end\n\n  anchor = free_anchor(base, used, 1)\n  {anchor, MapSet.put(used, anchor)}\nend)\n|> elem(0)\n"
+        },
+        {
+          "name": "free_anchor",
+          "args": "base, used, tried",
+          "code": "# `base` when no anchor in `used` is, else the first of `base-2`, `base-3`, … that is free.\ncandidate =\n  case tried do\n    1 -> base\n    _later -> base <> \"-\" <> Integer.to_string(tried)\n  end\n\ncase MapSet.member?(used, candidate) do\n  true -> free_anchor(base, used, tried + 1)\n  false -> candidate\nend\n"
+        },
+        {
+          "name": "note_anchors",
+          "args": "notes",
+          "code": "# THE ANCHOR OF EACH NOTE OF THE PAGE, BY ITS ID: the slug of its title, `#color-palette`, or\n# `note-<place>` for a title with no letter or digit. `notes` are in the order the page draws\n# them, which is the order the second note of one title is told apart in.\nnotes\n|> Enum.map(& &1.id)\n|> Enum.zip(anchors_of(Enum.map(notes, & &1.title), \"note\", []))\n|> Map.new()\n"
         },
         {
           "name": "heading_entries",
-          "args": "html",
-          "code": "# THE HEADINGS OF A PAGE, AND THE ID EACH ONE ANSWERS TO. `doc-section` runs exactly this over\n# exactly the same scrubbed markup before writing those ids onto it, so the two agree on every\n# anchor without sharing any code — which they cannot, a stored component having nothing to share it\n# through. Two headings with the same words are told apart by the order they appear in, which is the\n# same order in both.\n~r/<(h[23])(?:\\s[^>]*)?>(.*?)<\\/\\1>/su\n|> Regex.scan(html)\n|> Enum.map_reduce(%{}, fn [_whole, tag, inner], seen ->\n  base = anchor_slug(strip_tags(inner))\n  taken = Map.get(seen, base, 0)\n\n  id =\n    case taken do\n      0 -> \"h-\" <> base\n      more -> \"h-\" <> base <> \"-\" <> to_string(more)\n    end\n\n  {%{id: id, text: strip_tags(inner), level: tag}, Map.put(seen, base, taken + 1)}\nend)\n|> elem(0)\n"
+          "args": "html, taken",
+          "code": "# THE HEADINGS OF A PAGE, AND THE ID EACH ONE ANSWERS TO, minted by `anchors_of/3` clear of `taken`,\n# the anchors the page's notes answer to. `doc-section` runs exactly this over exactly the same\n# scrubbed markup and the same notes before writing those ids onto it, so the two agree on every\n# anchor.\nentries =\n  ~r/<(h[23])(?:\\s[^>]*)?>(.*?)<\\/\\1>/su\n  |> Regex.scan(html)\n  |> Enum.map(fn [_whole, tag, inner] -> %{text: strip_tags(inner), level: tag} end)\n\nentries\n|> Enum.map(& &1.text)\n|> anchors_of(\"heading\", taken)\n|> Enum.zip_with(entries, fn id, entry -> Map.put(entry, :id, id) end)\n"
         },
         {
           "name": "entries_of",
           "args": "section, notes, show_headings, show_notes",
-          "code": "headings =\n  case show_headings == true and section != nil do\n    true ->\n      section.rendered_content\n      |> clean()\n      |> heading_entries()\n      |> Enum.map(&%{anchor: &1.id, title: &1.text, kind: &1.level})\n\n    false ->\n      []\n  end\n\nlisted =\n  case show_notes == true do\n    true -> Enum.map(notes, &%{anchor: \"note-\" <> to_string(&1.id), title: &1.title, kind: \"note\"})\n    false -> []\n  end\n\nheadings ++ listed\n"
+          "code": "anchors = note_anchors(notes)\n\nheadings =\n  case show_headings == true and section != nil do\n    true ->\n      section.rendered_content\n      |> clean()\n      |> heading_entries(Map.values(anchors))\n      |> Enum.map(&%{anchor: &1.id, title: &1.text, kind: &1.level})\n\n    false ->\n      []\n  end\n\nlisted =\n  case show_notes == true do\n    true -> Enum.map(notes, &%{anchor: Map.fetch!(anchors, &1.id), title: &1.title, kind: \"note\"})\n    false -> []\n  end\n\nheadings ++ listed\n"
         },
         {
           "name": "handle_event",
@@ -2016,7 +2046,7 @@
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.path, asked.language, asked.pinned),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     {:ok, section} <- section_at(version, asked.section, asked.visitor),\n     {:ok, notes} <- (asked.show_notes && notes_of(section, asked.visitor)) || {:ok, []} do\n  {:ok,\n   %{\n     entries: entries_of(section, notes, asked.show_headings, asked.show_notes),\n     language: (workspace && workspace.language) || asked.language\n   }}\nend\n"
+          "code": "# A READ THAT FAILS ENDS HERE AS `{:error, _}`, which `arrived/2` draws as the block's error.\nwith {:ok, workspace} <- workspace_row(asked.workspace, asked.path, asked.language, asked.pinned),\n     {:ok, versions} <- versions_of(workspace),\n     version = pick_version(versions, asked.version),\n     {:ok, section} <- section_at(version, asked.section, asked.visitor),\n     # THE NOTES ARE READ FOR THE HEADINGS TOO: a heading is named clear of the notes' anchors,\n     # as `doc-section` names it.\n     {:ok, notes} <-\n       ((asked.show_notes or asked.show_headings) && notes_of(section, asked.visitor)) ||\n         {:ok, []} do\n  {:ok,\n   %{\n     entries: entries_of(section, notes, asked.show_headings, asked.show_notes),\n     language: (workspace && workspace.language) || asked.language\n   }}\nend\n"
         },
         {
           "name": "arrived",

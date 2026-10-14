@@ -128,6 +128,32 @@ defmodule MishkaDocument.KitTest do
       end
     end
 
+    # ONE RULE FOR EVERY ANCHOR ON A PAGE. `doc-section` writes the ids and `doc-toc` links to them,
+    # and neither can call the other, so each carries the helpers that name them; they have to be the
+    # same helpers, word for word.
+    test "and doc-section and doc-toc name headings and notes with the same helpers" do
+      helpers = fn name ->
+        components()
+        |> Enum.find(&(&1["name"] == name))
+        |> Map.fetch!("helpers")
+        |> Map.new(&{&1["name"], {&1["args"], &1["code"]}})
+      end
+
+      section = helpers.("doc-section")
+      toc = helpers.("doc-toc")
+
+      for name <- ~w(strip_tags anchor_slug anchors_of free_anchor note_anchors) do
+        assert Map.fetch!(section, name) == Map.fetch!(toc, name),
+               "doc-section's #{name} is not doc-toc's"
+      end
+
+      uncommented = fn {args, code} ->
+        {args, code |> String.split("\n") |> Enum.drop_while(&String.starts_with?(&1, "#"))}
+      end
+
+      assert uncommented.(section["heading_entries"]) == uncommented.(toc["heading_entries"])
+    end
+
     test "and neither does any template" do
       for component <- components() do
         offenders =
