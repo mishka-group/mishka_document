@@ -276,6 +276,50 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
       assert tag_id == tag.id
     end
 
+    # A PAGE STORES `{{doc.version}}` AS IT WAS WRITTEN, and the kit fills it with the version read,
+    # so the copy draws its own number with nothing rewritten.
+    test "copies a page's and a note's {{doc.version}} as it was written", %{
+      source: source,
+      admin: admin,
+      site: site
+    } do
+      content =
+        ~S(<p>Install {{doc.version}}, {{ doc.version }} and \{{doc.version}}.</p>) <>
+          ~S(<pre><code>{:lib, "~&gt; {{doc.version}}"}</code></pre>)
+
+      page =
+        create_section!(
+          site_id: site.id,
+          workspace_version_id: source.id,
+          title: "Install",
+          slug: "install",
+          order_position: 5,
+          content: content
+        )
+
+      note =
+        create_note!(
+          site_id: site.id,
+          section_id: page.id,
+          title: "Release",
+          content: "<p>Notes of {{doc.version}}.</p>"
+        )
+
+      {:ok, version} = clone(source, admin)
+      copy = version |> pages_of(site) |> copy_of(page)
+
+      assert copy.content == page.content
+      assert copy.content =~ "{{doc.version}}"
+
+      assert [copied_note] =
+               Note
+               |> Ash.Query.filter(section_id == ^copy.id)
+               |> Ash.read!(tenant: site.id, authorize?: false)
+
+      assert copied_note.content == note.content
+      assert copied_note.content =~ "{{doc.version}}"
+    end
+
     test "writes the lineage row, source to new", %{source: source, admin: admin, site: site} do
       before = DateTime.utc_now() |> DateTime.add(-1)
       {:ok, version} = clone(source, admin)

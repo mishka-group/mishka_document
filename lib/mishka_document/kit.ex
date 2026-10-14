@@ -47,6 +47,25 @@ defmodule MishkaDocument.Kit do
   `doc-cards-badge` (`data-tone`), `doc-cards-description`, `doc-cards-empty`, `doc-cards-loading`
   and `doc-cards-error`.
 
+  ### The version in a page's text
+
+  `{{doc.version}}` — or `{{ doc.version }}` — anywhere in a page's text or in one of its notes is
+  drawn as the number of the version the reader is reading: `0.0.2` on the page of 0.0.2, `0.0.1`
+  on the same page of 0.0.1. It is filled on the way out, after the scrub and HTML-escaped, in the
+  text, in its code blocks and in the attributes of a marker, so an install line, a link to a
+  release and a component's `href` each follow the version picked:
+
+      <pre><code class="language-elixir">{:my_lib, "~> {{doc.version}}"}</code></pre>
+      <a href="https://example.com/my_lib/blob/v{{doc.version}}/README.md">README</a>
+
+  A page stores the placeholder as it was written, so a version cloned from another
+  (`MishkaDocument.Resources.Changes.CloneVersion`) draws its own number with nothing changed.
+  `\\{{doc.version}}` is drawn as `{{doc.version}}`, for a page that shows the placeholder itself.
+  `doc-toc` lists a heading with its version filled the same way, a `doc-section-cards` card's
+  summary is the start of its page's text with it filled, and so is the text of an example's
+  preview (`MishkaDocumentWeb.Live.ExamplePreview`). In a highlighted code block it is filled
+  where the highlighter left it in one token — inside a string or a comment.
+
   ### The example
 
   `[[component doc-example title="…"]]` around the markers of the components an example is made

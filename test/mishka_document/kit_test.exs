@@ -154,6 +154,28 @@ defmodule MishkaDocument.KitTest do
       assert uncommented.(section["heading_entries"]) == uncommented.(toc["heading_entries"])
     end
 
+    # ONE RULE FOR `{{doc.version}}`. `doc-section` draws a page's text with it, `doc-toc` lists its
+    # headings with it and `doc-section-cards` sums it up with it, so each carries the same helper,
+    # word for word, and its pattern is the one the example's preview page fills it by.
+    test "and doc-section, doc-toc and doc-section-cards fill {{doc.version}} with one helper" do
+      [section, toc, cards] =
+        for name <- ~w(doc-section doc-toc doc-section-cards) do
+          components()
+          |> Enum.find(&(&1["name"] == name))
+          |> Map.fetch!("helpers")
+          |> Enum.find(&(&1["name"] == "with_version"))
+        end
+
+      assert section["args"] == "html, number"
+      assert section == toc
+      assert section == cards
+
+      pattern = ~S"(\\?)\{\{\s*doc\.version\s*\}\}"
+      assert section["code"] =~ pattern
+
+      assert File.read!("lib/mishka_document_web/live/example_preview.ex") =~ pattern
+    end
+
     test "and neither does any template" do
       for component <- components() do
         offenders =

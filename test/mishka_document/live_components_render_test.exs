@@ -1948,6 +1948,126 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # `{{doc.version}}` IN A PAGE'S TEXT IS THE VERSION BEING READ. The page stores the placeholder, so
+  # the same text drawn from two versions draws two numbers.
+  describe "{{doc.version}} in a page's text" do
+    defp versioned_manual!(site) do
+      %{document: document, version: latest} = manual!(site)
+
+      older =
+        version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+      editor =
+        create_user_with_permissions!(["admin:dashboard:document:section"], site_id: site.id)
+
+      content =
+        "<h2>Install {{doc.version}}</h2>" <>
+          "<p>This is {{ doc.version }}.</p>" <>
+          ~s(<p><a href="https://example.com/lib/blob/v{{doc.version}}/README.md">Source</a></p>) <>
+          ~S(<p>Write \{{doc.version}} for the version.</p>) <>
+          ~S(<pre><code class="language-elixir">{:lib, "~> {{doc.version}}", only: :dev}</code></pre>)
+
+      pages =
+        for version <- [latest, older] do
+          page =
+            MishkaDocument.Section
+            |> Ash.Changeset.for_create(
+              :create,
+              %{
+                workspace_version_id: version.id,
+                title: "Install",
+                slug: "install",
+                order_position: 9,
+                language: "en",
+                content: content,
+                content_review_status: :approved,
+                technical_review_status: :approved
+              },
+              actor: editor,
+              tenant: site.id
+            )
+            |> Ash.create!()
+
+          note!(site, page, title: "Aside", content: "<p>Notes of {{doc.version}}.</p>")
+          page
+        end
+
+      %{pages: pages}
+    end
+
+    test "draws the number of the version read, in its text, code, links and notes",
+         %{site: site} do
+      %{pages: pages} = versioned_manual!(site)
+
+      for {params, number} <- [
+            {%{"section" => "install"}, "1.0.0"},
+            {%{"section" => "install", "v" => "0.9.0"}, "0.9.0"}
+          ] do
+        {:ok, view, _html} =
+          mount_page(site, "doc-section", %{workspace: "mishka-cms", params: params})
+
+        assert [body] = text_of(view, ~s([data-role="doc-section-body"]))
+        assert body =~ "Install #{number}"
+        assert body =~ "This is #{number}."
+        assert body =~ "Write {{doc.version}} for the version."
+        refute body =~ "\\{{"
+
+        assert hrefs(view, ~s([data-role="doc-section-body"] a[href^="https://example.com"])) ==
+                 ["https://example.com/lib/blob/v#{number}/README.md"]
+
+        assert [code] = text_of(view, ~s([data-role="doc-section-body"] pre.highlight code))
+        assert code =~ ~s({:lib, "~> #{number}", only: :dev})
+
+        assert text_of(view, ~s([data-role="doc-note-body"])) == ["Notes of #{number}."]
+      end
+
+      for page <- pages do
+        stored =
+          MishkaDocument.Section
+          |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
+          |> Ash.Query.filter(id == ^page.id)
+          |> Ash.read_one!(tenant: site.id)
+
+        assert stored.content =~ "{{doc.version}}"
+        assert stored.content =~ "{{ doc.version }}"
+      end
+    end
+
+    test "and doc-toc lists its headings with the same number, at the ids doc-section wrote",
+         %{site: site} do
+      versioned_manual!(site)
+      attrs = %{workspace: "mishka-cms", params: %{"section" => "install", "v" => "0.9.0"}}
+
+      {:ok, view, _html} =
+        mount_blocks(site, [
+          %{"name" => "doc-section", "id" => "one", "attrs" => attrs},
+          %{"name" => "doc-toc", "id" => "two", "attrs" => attrs}
+        ])
+
+      assert text_of(view, ~s([data-role="doc-toc-link"])) == ["Install 0.9.0", "Aside"]
+      assert ["#" <> id, _note] = hrefs(view, ~s([data-role="doc-toc-link"]))
+      assert ids_of(view, ~s([data-role="doc-section-body"] h2)) == [id]
+    end
+
+    test "and a card's summary is the start of its page's text with the number filled",
+         %{site: site} do
+      %{version: version, group: group} = paged_group!(site)
+
+      page!(site, version,
+        title: "Versioned",
+        slug: "versioned",
+        order_position: 4,
+        parent_section_id: group.id,
+        content: "<p>For {{doc.version}} only.</p>"
+      )
+
+      descriptions = text_of(navigation_page(site), ~s([data-role="doc-cards-description"]))
+
+      assert "For 1.0.0 only." in descriptions
+      refute Enum.any?(descriptions, &(&1 =~ "{{"))
+    end
+  end
+
   # THE TRAIL CAN END WITH THE PAGE ITSELF, as a word marked as the current page — and then a page
   # at the top of its document has a trail too. Left off, the trail is the pages above it alone.
   describe "doc-section's crumb_current" do

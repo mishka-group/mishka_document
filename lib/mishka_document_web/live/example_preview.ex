@@ -22,7 +22,8 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
 
   ## What is drawn
 
-  The text is scrubbed as `doc-section` scrubs it, and the example's own content — what its marker
+  The text is scrubbed as `doc-section` scrubs it, its `{{doc.version}}` is the number of the
+  page's version (`with_version/2`), and the example's own content — what its marker
   holds — is drawn with `rich_content/1`, for the site the address is asked on and the visitor, as
   the page draws it: its components, their hooks and their events are those of the page. The
   document around it is the CMS's root layout for a database page: the site's compiled stylesheet
@@ -53,6 +54,8 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
   @whole_marker ~r/\A\[\[component(?:\s|&nbsp;|&#160;|\x{00A0})+doc-example\z/u
   @code ~r/<(pre|code)(?:\s[^>]*)?>.*?<\/\1>/s
   @code_open ~r/\A<(?:pre|code)[\s>]/
+
+  @version_placeholder ~r/(\\?)\{\{\s*doc\.version\s*\}\}/u
 
   @impl true
   def mount(_params, %{"source" => source, "current_site" => %{id: site_id} = site}, socket) do
@@ -166,6 +169,35 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
     {Enum.join(pieces), next}
   end
 
+  @doc """
+  `html` with every `{{doc.version}}` in it — `{{ doc.version }}` too, in code blocks and in a
+  marker's attributes as well — replaced by `number`, HTML-escaped; `\\{{doc.version}}` is written
+  as `{{doc.version}}`. The kit's `doc-section`, `doc-toc` and `doc-section-cards` draw a page's
+  text by the same rule (their `with_version/2`). With no number, `html` is handed back as it is.
+
+      with_version(~s(<code>{:lib, "~&gt; {{doc.version}}"}</code>), "1.2.0")
+      #=> ~s(<code>{:lib, "~&gt; 1.2.0"}</code>)
+  """
+  @spec with_version(String.t(), String.t() | nil) :: String.t()
+  def with_version(html, number) when is_binary(html) and is_binary(number) do
+    case String.contains?(html, "{{") do
+      false ->
+        html
+
+      true ->
+        filled = number |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+        Regex.replace(@version_placeholder, html, fn whole, escape ->
+          case escape do
+            "" -> filled
+            _escaped -> String.slice(whole, 1..-1//1)
+          end
+        end)
+    end
+  end
+
+  def with_version(html, _no_number) when is_binary(html), do: html
+
   # The marker with that source among the markers of `html`, at any depth.
   defp found(html, wanted) do
     html
@@ -177,21 +209,23 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
     end)
   end
 
-  # The scrubbed text the example is written in, and its page's language, when the visitor may read it.
+  # The scrubbed text the example is written in, with its version's number, and its page's
+  # language, when the visitor may read it.
   defp read("section", id, visitor, site_id) do
-    with %Section{} = section <- section(id, visitor, site_id) do
-      {:ok, clean(section.rendered_content), section.language}
+    with {%Section{} = section, number} <- section(id, visitor, site_id) do
+      {:ok, with_version(clean(section.rendered_content), number), section.language}
     end
   end
 
   defp read("note", id, visitor, site_id) do
     with %Note{section_id: section_id, content: content} <- note(id, visitor, site_id),
-         %Section{language: language} <- section(section_id, visitor, site_id) do
-      {:ok, clean(content), language}
+         {%Section{language: language}, number} <- section(section_id, visitor, site_id) do
+      {:ok, with_version(clean(content), number), language}
     end
   end
 
-  # A page of a published version of an active document, read as `doc-section` reads its text.
+  # A page of a published version of an active document, read as `doc-section` reads its text,
+  # with the number of its version.
   defp section(id, visitor, site_id) do
     with %Section{workspace_version_id: version_id} = section <-
            Section
@@ -199,11 +233,11 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
            |> Ash.Query.filter(id == ^id)
            |> Ash.Query.load([:rendered_content])
            |> first(site_id),
-         %WorkspaceVersion{workspace_id: workspace_id} <-
+         %WorkspaceVersion{workspace_id: workspace_id, version_number: number} <-
            WorkspaceVersion
            |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
            |> Ash.Query.filter(id == ^version_id)
-           |> Ash.Query.select([:id, :workspace_id])
+           |> Ash.Query.select([:id, :workspace_id, :version_number])
            |> first(site_id),
          %Workspace{} <-
            Workspace
@@ -211,7 +245,7 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
            |> Ash.Query.filter(id == ^workspace_id)
            |> Ash.Query.select([:id])
            |> first(site_id) do
-      section
+      {section, number}
     end
   end
 
