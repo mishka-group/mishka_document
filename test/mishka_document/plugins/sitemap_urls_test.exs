@@ -207,6 +207,20 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
       assert paths(listed(site, pages)) == []
     end
+
+    # ITS FRONT PAGE IS ONE CORE LISTS, as a page of the site at a fixed path: a document whose
+    # robots meta keeps it out of an index takes that address out of what core lists.
+    test "takes its front page out of core's addresses while it may not be listed", %{site: site} do
+      for {slug, tags} <- [{"product", [robots_meta("noindex, follow")]}, {"tool", []}] do
+        document = document!(site, slug: slug, path: "/#{slug}/docs", seo_tags: tags)
+        version = version!(site, document, is_latest_for_version: true)
+        page!(site, version, "#{slug}-start", front_page: true)
+      end
+
+      core = for path <- ~w(/about /product/docs /tool/docs), do: %{path: path, lastmod: nil}
+
+      assert paths(listed(site, nil, core)) == ["/about", "/tool/docs"]
+    end
   end
 
   describe "a published document" do

@@ -82,9 +82,15 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok,
        Phoenix.Component.assign(socket,
          blocks: session["blocks"] || [],
-         site: session["site"]
+         site: session["site"],
+         missing: false
        )}
     end
+
+    # WHAT `MishkaCmsWeb.RuntimeLive` IS TOLD when a block finds nothing at the address it was
+    # handed, once the socket is connected; it answers with the site's 404.
+    def handle_info(:mishka_runtime_not_found, socket),
+      do: {:noreply, Phoenix.Component.assign(socket, :missing, true)}
 
     # THE PAGE AROUND A BLOCK CHANGING UNDER IT, which is what a patch to another URL is. A live
     # component is redrawn when the assigns its parent hands it change, and nothing else redraws it:
@@ -114,6 +120,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     def render(assigns) do
       ~H"""
       <div id="host">
+        <p :if={@missing} id="runtime-not-found"></p>
         <div :for={block <- @blocks}>
           {LiveViewHelpers.component(
             Map.merge(block["attrs"], %{
@@ -2148,6 +2155,75 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # WHEN A PAGE LAST CHANGED, under its title, with the version being read: the date its head gives
+  # as `dateModified` — the page's own, and its document's at the document's own address.
+  describe "doc-section's updated line" do
+    defp updated(view) do
+      line = drawn(view, ~s([data-role="doc-section-updated"]))
+      time = LazyHTML.query(line, "time")
+
+      %{
+        lines: Enum.count(line),
+        datetime: LazyHTML.attribute(time, "datetime"),
+        date: Enum.map(time, &String.trim(LazyHTML.text(&1))),
+        version:
+          line
+          |> LazyHTML.query(~s([data-role="doc-section-updated-version"]))
+          |> Enum.map(&String.trim(LazyHTML.text(&1)))
+      }
+    end
+
+    test "says when the page last changed and the version being read", %{site: site} do
+      %{pages: pages} = manual!(site)
+      page = Enum.find(pages, &(&1.slug == "installation"))
+      Ash.Seed.update!(page, %{updated_at: ~U[2026-03-04 05:06:07.891234Z]})
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert %{datetime: ["2026-03-04T05:06:07Z"], date: [date], version: ["v1.0.0"]} =
+               updated(view)
+
+      assert date == "Updated " <> MishkaCmsCore.Localized.date(~U[2026-03-04 05:06:07Z])
+    end
+
+    test "is the document's change on its front page", %{site: site} do
+      %{document: document, front: front} = fronted!(site, path: "/mishka/docs")
+      Ash.Seed.update!(document, %{updated_at: ~U[2026-02-01 00:00:00Z]})
+      Ash.Seed.update!(front, %{updated_at: ~U[2026-05-01 00:00:00Z]})
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert %{datetime: ["2026-02-01T00:00:00Z"], version: ["v1.0.0"]} = updated(view)
+    end
+
+    test "says the version ?v= names, in its own words, and is left out when asked", %{
+      site: site
+    } do
+      addressed!(site)
+
+      attrs = %{
+        path: "/mishka/docs",
+        lang_param: "",
+        updated_text: "Changed %{date}",
+        params: %{"section" => "installation", "v" => "0.9.0"}
+      }
+
+      {:ok, older, _html} = mount_page(site, "doc-section", attrs)
+
+      assert %{version: ["v0.9.0"], date: ["Changed " <> _date]} = updated(older)
+
+      {:ok, hidden, _html} = mount_page(site, "doc-section", Map.put(attrs, :show_updated, false))
+
+      assert %{lines: 0} = updated(hidden)
+      assert text_of(hidden, ~s([data-role="doc-section-title"])) == ["Installation"]
+    end
+  end
+
   describe "doc-switcher's version_text" do
     test "names the version switch, and left empty leaves the number alone", %{site: site} do
       addressed!(site)
@@ -2658,6 +2734,47 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(view, ~s([data-role="doc-list-title"])) == ["C", "D"]
       assert hrefs(view, ~s([data-role="doc-list-prev"])) == ["/docs?page=1"]
+    end
+
+    # A PAGE THE ADDRESS NAMES PAST THE LAST ONE IS MISSING, so `?page=999` is not one more address
+    # of the last page: the HTTP render raises, and a connected one asks the page for its 404.
+    test "is missing at a page the URL names past the last one", %{site: site} do
+      for {name, order} <- Enum.with_index(~w(A B C)) do
+        document!(site, name: name, slug: String.downcase(name), display_order: order)
+      end
+
+      for page <- ["3", "999"] do
+        assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+          mount_page(site, "doc-workspace-list", %{per_page: 2, params: %{"page" => page}})
+        end
+      end
+
+      for {page, titles} <- [{"1", ["A", "B"]}, {"2", ["C"]}] do
+        {:ok, view, _html} =
+          mount_page(site, "doc-workspace-list", %{per_page: 2, params: %{"page" => page}})
+
+        assert text_of(view, ~s([data-role="doc-list-title"])) == titles
+        refute has_element?(view, "#runtime-not-found")
+      end
+
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{per_page: 2})
+      send(view.pid, {:params, %{"page" => "9"}})
+      render_async(view, @async)
+
+      assert has_element?(view, "#runtime-not-found")
+    end
+
+    test "but a page the pager asks for past the last one is the last one", %{site: site} do
+      for {name, order} <- Enum.with_index(~w(A B C)) do
+        document!(site, name: name, slug: String.downcase(name), display_order: order)
+      end
+
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{per_page: 2})
+
+      view |> with_target("#one") |> render_click("page", %{"to" => "9"})
+
+      assert text_of(view, ~s([data-role="doc-list-title"])) == ["C"]
+      refute has_element?(view, "#runtime-not-found")
     end
 
     test "links each document where the page said documents live", %{site: site} do

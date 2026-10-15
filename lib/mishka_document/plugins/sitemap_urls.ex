@@ -30,7 +30,9 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
 
   And only while its record may be listed (`MishkaCmsCore.Runtime.PageEditions.listed?/2`): a
   document whose robots meta says `noindex` or `none` lists neither its front page nor a page of it
-  that holds no robots meta of its own; a page whose own robots meta says so is left out alone.
+  that holds no robots meta of its own; a page whose own robots meta says so is left out alone. The
+  front page of such a document with an address of its own, which core lists as a page of the site,
+  is taken out of `urls`.
 
   THE SAME ROWS THE PAGES DRAW. `doc-section` finds a document among the active ones, shows the
   version an editor marked latest among the published ones — the newest published one when none
@@ -96,7 +98,12 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     # A `urls` that is not an `Enumerable` is handed on as it came, for core to leave out.
     case Enumerable.impl_for(urls) && languages do
       [_ | _] ->
-        {:reply, %{data | urls: Stream.concat(urls, document_urls(site_id, languages, served))}}
+        urls =
+          urls
+          |> without(fn -> unlisted_fronts(site_id, Map.keys(own)) end)
+          |> Stream.concat(document_urls(site_id, languages, served))
+
+        {:reply, %{data | urls: urls}}
 
       _nothing_to_add ->
         {:reply, data}
@@ -104,6 +111,32 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   end
 
   def call(data), do: {:reply, data}
+
+  # `urls` without the addresses `hidden` returns, called when the build reads the stream.
+  defp without(urls, hidden) do
+    Stream.transform(
+      urls,
+      hidden,
+      fn url, hidden ->
+        if MapSet.member?(hidden, Map.get(url, :path)), do: {[], hidden}, else: {[url], hidden}
+      end,
+      fn _hidden -> :ok end
+    )
+  end
+
+  # The front pages of the documents at these addresses that may not be listed, each at the address
+  # the site's URL mode gives its language.
+  defp unlisted_fronts(_site_id, []), do: MapSet.new()
+
+  defp unlisted_fronts(site_id, addresses) do
+    Workspace
+    |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
+    |> Ash.Query.filter(path in ^addresses)
+    |> Ash.Query.select([:path, :language, :permissions, :seo_tags])
+    |> Ash.read!(actor: nil, tenant: site_id, page: false)
+    |> Enum.reject(&PageEditions.listed?/1)
+    |> MapSet.new(&Languages.url(&1.path, %{Languages.capture() => &1.language}, site_id))
+  end
 
   defp document_urls(site_id, languages, served) do
     site_id

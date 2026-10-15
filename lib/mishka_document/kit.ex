@@ -144,6 +144,13 @@ defmodule MishkaDocument.Kit do
   place in a trail link there; Previous and Next stop on it. The pages under it keep the address
   that leaves its slug out.
 
+  Under a page's title `doc-section` says when it last changed and the version being read,
+  `Updated Oct 14, 2026 · v1.2.0` (`doc-section-updated`, the date in a `<time datetime>`, the
+  version in `doc-section-updated-version`): the page's own change, and its document's at the
+  document's own address, the date its head gives as its `dateModified`
+  (`MishkaDocument.Plugins.PageSeo`). `updated_text` is what it says before the version, and
+  `show_updated=false` draws none.
+
   A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
   text is stored through, and drawn with `rich_content/1`, so a component the author placed in them
   with the content editor is drawn there as that component (`MishkaCmsCore.Runtime.ContentComponents`),
@@ -318,6 +325,10 @@ defmodule MishkaDocument.Kit do
   to stream from — `@myself` is nil in a cold render, and a stream container is one the client never
   removes a child from, so the builder's canvas would keep the cards of the previous setting beside
   the new ones every time the Inspector changed one.
+
+  A page of `doc-workspace-list` past the last one is the site's 404 when the address names it
+  (`?page=999`, under `page_param`), as a document the address names and nobody has is; one the
+  pager's buttons ask for is the last one there is.
 
   `doc-section` is the exception, and on purpose: it is what the page IS. A skeleton where the
   document's text should be is a worse page than one that takes as long as the text does, and a
