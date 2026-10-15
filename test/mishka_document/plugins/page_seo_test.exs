@@ -782,6 +782,132 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       assert [%{content: "index, follow"}] = answer(given).tags
       assert robots(head(given)) == ["index, follow"]
     end
+
+    # A PAGE THAT IS NOT READY YET stores `noindex, follow`: its head says so, it has no article to
+    # describe, and its trail stays.
+    test "that says noindex leaves the article out, its own or its document's", %{site: site} do
+      open = document!(site, slug: "open")
+      version = version!(site, open, is_latest_for_version: true)
+      page!(site, version, "soon", seo_tags: [robots_meta("noindex, follow")])
+
+      for {workspace, section} <- [{"open", "soon"}, {"hidden", "inherits"}] do
+        params = %{"lang" => "en", "workspace" => workspace, "section" => section}
+        answered = answer(given(site, :section, params))
+
+        assert [%{"@type" => "BreadcrumbList"}] = answered.schema, section
+      end
+
+      html =
+        site
+        |> given(:section, %{"lang" => "en", "workspace" => "open", "section" => "soon"})
+        |> head()
+        |> rendered_head()
+
+      assert meta_content(html, ~s(meta[name="robots"])) == ["noindex, follow"]
+      assert json_ld(html, "TechArticle") == nil
+      assert %{"@type" => "BreadcrumbList"} = json_ld(html, "BreadcrumbList")
+
+      front = answer(given(site, :workspace, %{"lang" => "en", "workspace" => "hidden"}))
+      assert [%{"@type" => "BreadcrumbList"}] = front.schema
+
+      params = %{"lang" => "en", "workspace" => "hidden", "section" => "own"}
+      assert schema_of(answer(given(site, :section, params)), "TechArticle")
+    end
+  end
+
+  describe "the TechArticle" do
+    setup %{site: site} do
+      on_exit(fn -> SettingsState.delete(site.id, "site.logo") end)
+
+      document =
+        document!(site,
+          name: "Guide",
+          slug: "guide",
+          description: "How to use it.",
+          seo_tags: [
+            %{tag: "meta", attrs: %{"name" => "description"}, content: "The guide, in short."},
+            %{tag: "meta", attrs: %{"name" => "author"}, content: "Docs team"}
+          ]
+        )
+
+      version = version!(site, document, is_latest_for_version: true)
+
+      page!(site, version, "words",
+        content: "<p>Its text.</p>",
+        seo_tags: [
+          %{tag: "meta", attrs: %{"name" => "description"}, content: "Its own words."},
+          %{tag: "meta", attrs: %{"name" => "author"}, content: "Ada"}
+        ]
+      )
+
+      page!(site, version, "plain", content: "<p>Only its text.</p>")
+      page!(site, version, "empty", content: nil)
+
+      :ok
+    end
+
+    defp article(site, kind, params),
+      do: schema_of(answer(given(site, kind, params)), "TechArticle")
+
+    defp page_params(section), do: %{"lang" => "en", "workspace" => "guide", "section" => section}
+
+    test "says the description the record stores, else the start of its text", %{site: site} do
+      front = article(site, :workspace, %{"lang" => "en", "workspace" => "guide"})
+
+      assert front["description"] == "The guide, in short."
+      assert article(site, :section, page_params("words"))["description"] == "Its own words."
+      assert article(site, :section, page_params("plain"))["description"] == "Only its text."
+      refute Map.has_key?(article(site, :section, page_params("empty")), "description")
+    end
+
+    test "names the page's author, else its document's", %{site: site} do
+      assert %{"author" => %{"@type" => "Person", "name" => "Ada"}} =
+               article(site, :section, page_params("words"))
+
+      assert %{"author" => %{"@type" => "Person", "name" => "Docs team"}} =
+               article(site, :section, page_params("plain"))
+
+      bare = document!(site, slug: "bare")
+      page!(site, version!(site, bare, is_latest_for_version: true), "page", [])
+
+      params = %{"lang" => "en", "workspace" => "bare", "section" => "page"}
+      refute Map.has_key?(article(site, :section, params), "author")
+    end
+
+    test "is published by the site's organization, with its logo", %{site: site} do
+      refute Map.has_key?(article(site, :section, page_params("plain"))["publisher"], "logo")
+
+      {:ok, _} = Settings.put("site.logo", "/uploads/logo.png", site_id: site.id)
+
+      assert %{
+               "@type" => "Organization",
+               "@id" => id,
+               "name" => "The Studio",
+               "url" => url,
+               "logo" => logo
+             } = article(site, :section, page_params("plain"))["publisher"]
+
+      assert {id, url, logo} ==
+               {base() <> "/#organization", base(), base() <> "/uploads/logo.png"}
+    end
+
+    test "shows the head's image, and none when the head has none", %{site: site} do
+      given = given(site, :section, page_params("plain"))
+      image = [%{tag: "meta", attrs: %{"property" => "og:image"}, content: "/a.png"}]
+
+      pictured =
+        given |> answer() |> Seo.accept(given) |> Seo.head(base: base(), layers: [[], image])
+
+      assert %{"image" => picture} =
+               pictured.schema
+               |> Enum.map(&Jason.decode!/1)
+               |> Enum.find(&(&1["@type"] == "TechArticle"))
+
+      assert picture == base() <> "/a.png"
+
+      bare = head(given).schema |> Enum.map(&Jason.decode!/1)
+      refute Map.has_key?(Enum.find(bare, &(&1["@type"] == "TechArticle")), "image")
+    end
   end
 
   describe "a document it may not show" do

@@ -39,7 +39,14 @@ defmodule MishkaDocument.Plugins.PageSeo do
     * `tags` — the document's or the page's own `seo_tags`; a page that holds no robots meta of its
       own takes its document's, as a CMS page takes its layout's;
     * `schema` — its own `schema` when it holds one, else a `TechArticle`; then a
-      `BreadcrumbList`, Documentation → the document → the page;
+      `BreadcrumbList`, Documentation → the document → the page. The `TechArticle`'s
+      `description` is the description meta the record stores, else the one above; its `image`
+      is `{{page.image}}`; its `author` is the `Person` the page's `author` meta names, else its
+      document's, and left out when neither names one; its `publisher` is the site, the
+      `Organization` at `<site>/#organization`, with the `site.logo` setting as its `logo`. A
+      record whose robots meta (`tags`) says `noindex` or `none` has no `TechArticle`: a stored
+      robots meta of `noindex, follow` keeps a page that is not ready yet out of an index, and out
+      of the sitemap (`MishkaDocument.Plugins.SitemapUrls`);
     * `url` — the canonical address: the document's own address where it has one, with the page's
       under it, so the head names the one address a reader and a crawler are sent to; else the
       address asked;
@@ -122,7 +129,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   require Ash.Query
 
-  alias MishkaCmsCore.Runtime.{Languages, Seo}
+  alias MishkaCmsCore.Runtime.{Languages, PageEditions, Seo}
   alias MishkaCmsCore.Settings
   alias MishkaInstaller.Event.Hook
   alias MishkaDocument.{Address, Provision, Section, Workspace, WorkspaceVersion}
@@ -360,18 +367,21 @@ defmodule MishkaDocument.Plugins.PageSeo do
     modified = iso8601(record.modified)
 
     article =
-      compact(%{
-        "@context" => "https://schema.org",
-        "@type" => "TechArticle",
-        "headline" => record.title,
-        "description" => record.description,
-        "datePublished" => published,
-        "dateModified" => modified,
-        "version" => record.version,
-        "inLanguage" => workspace.language,
-        "mainEntityOfPage" => seo.url,
-        "publisher" => publisher(seo.site_id, base)
-      })
+      PageEditions.listed?(%{seo_tags: record.seo_tags}) &&
+        compact(%{
+          "@context" => "https://schema.org",
+          "@type" => "TechArticle",
+          "headline" => record.title,
+          "description" => stored_description(record.seo_tags) || record.description,
+          "image" => "{{page.image}}",
+          "datePublished" => published,
+          "dateModified" => modified,
+          "version" => record.version,
+          "inLanguage" => workspace.language,
+          "mainEntityOfPage" => seo.url,
+          "author" => author(record.seo_tags) || author(workspace.seo_tags),
+          "publisher" => publisher(seo.site_id, base)
+        })
 
     trail = [
       {gettext("Documentation"), docs_url},
@@ -550,9 +560,19 @@ defmodule MishkaDocument.Plugins.PageSeo do
     end
   end
 
-  # The record's own JSON-LD, else the one built for it.
+  # The record's own JSON-LD, else the one built for it, which a record kept out of an index has
+  # none of.
   defp own_schema([_ | _] = own, _built), do: own
+  defp own_schema(_none, false), do: []
   defp own_schema(_none, built), do: [built]
+
+  # The `Person` a stored `author` meta names; `nil` for none.
+  defp author(tags) do
+    case tags |> Seo.stored_tags() |> Seo.tag_value("author") do
+      name when is_binary(name) -> %{"@type" => "Person", "name" => String.trim(name)}
+      nil -> nil
+    end
+  end
 
   # A page's own tags, with its document's robots meta when it holds none of its own.
   defp page_tags(own, document) do
@@ -591,10 +611,17 @@ defmodule MishkaDocument.Plugins.PageSeo do
   defp edition_url(path, workspace, %{site_id: site_id}, base),
     do: path |> Languages.url(%{"lang" => workspace.language}, site_id) |> Seo.absolute(base)
 
+  # The site, as the `Organization` at `<base>/#organization`, with its `site.logo`.
   defp publisher(site_id, base) do
     case Settings.get("site.title", nil, site_id) do
       name when is_binary(name) and name != "" ->
-        compact(%{"@type" => "Organization", "name" => name, "url" => base})
+        compact(%{
+          "@type" => "Organization",
+          "@id" => base && base <> "/#organization",
+          "name" => name,
+          "url" => base,
+          "logo" => "site.logo" |> Settings.get(nil, site_id) |> Seo.absolute(base)
+        })
 
       _no_title ->
         nil
