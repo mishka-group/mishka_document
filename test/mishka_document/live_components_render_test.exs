@@ -833,8 +833,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
        |> LazyHTML.query(~s([data-role="doc-section-article"]))}
     end
 
-    # The preview's frame, as drawn: empty until the hook gives it its page.
-    defp frame(example), do: LazyHTML.query(example, ~s([data-role="doc-example-frame"]))
+    # The element the hook builds the preview in, as drawn: empty, carrying the preview's words.
+    defp holder(example),
+      do: LazyHTML.query(example, ~s([data-role="doc-example-preview-holder"]))
 
     defp pressed(example) do
       example
@@ -851,7 +852,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       node |> LazyHTML.query(selector) |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
     end
 
-    test "draws the example on the page, and an empty frame its preview fills when it opens",
+    test "draws the example on the page, and an empty holder its preview is built in when it opens",
          %{site: site} do
       {page, body} =
         example_page_of!(
@@ -889,47 +890,35 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
              |> LazyHTML.query(~s|[data-role="doc-section-body"] > p:not([data-role])|)
              |> LazyHTML.text() == "Before."
 
-      # The preview: a dialog the open button names, in an element LiveView leaves to the browser.
+      # The preview: a dialog the open button names, which the hook builds the first time it opens
+      # in an element LiveView leaves to the browser.
       [open] = example |> LazyHTML.query(~s([data-role="doc-example-open"])) |> Enum.to_list()
       assert LazyHTML.attribute(open, "aria-controls") == ["#{id}-preview"]
       assert LazyHTML.attribute(open, "aria-haspopup") == ["dialog"]
       assert texts(open, ~s([data-role="doc-example-open-text"])) == ["Preview"]
 
-      holder = LazyHTML.query(example, ~s([data-role="doc-example-preview-holder"]))
+      holder = holder(example)
       assert LazyHTML.attribute(holder, "phx-update") == ["ignore"]
       assert [holder_id] = LazyHTML.attribute(holder, "id")
       assert holder_id =~ ~r/\A#{id}-preview-[0-9a-z]+\z/
+      assert holder |> LazyHTML.child_nodes() |> Enum.count() == 0
 
-      dialog = LazyHTML.query(holder, ~s(dialog[data-role="doc-example-preview"]))
-      assert LazyHTML.attribute(dialog, "id") == ["#{id}-preview"]
-      assert LazyHTML.attribute(dialog, "aria-label") == ["A tip"]
-      assert LazyHTML.attribute(dialog, "open") == []
-
-      assert dialog |> LazyHTML.query(~s([data-role="doc-example-preview-note"])) |> Enum.count() ==
-               0
-
-      assert texts(dialog, ~s([data-role="doc-example-close-text"])) == ["Close"]
-
-      # Its frame is empty and loads nothing: it names the page that draws the example alone, which
-      # the hook hands it as its `src` only when the preview opens.
-      assert [frame] = Enum.to_list(LazyHTML.query(dialog, ~s([data-role="doc-example-frame"])))
-
-      assert LazyHTML.attribute(frame, "sandbox") == [
-               "allow-scripts allow-same-origin allow-forms"
-             ]
-
-      assert LazyHTML.attribute(frame, "src") == []
-
-      assert LazyHTML.attribute(frame, "data-src") == [
+      # It names the page that draws the example alone, which the frame the hook builds is handed
+      # as its `src` only when the preview opens, and the words the preview says.
+      assert LazyHTML.attribute(holder, "data-src") == [
                "/_preview/doc-example/section/#{page.id}/0"
              ]
 
-      assert LazyHTML.attribute(frame, "data-stylesheet") == []
-      assert LazyHTML.attribute(frame, "srcdoc") == []
-      assert LazyHTML.attribute(frame, "data-document") == []
-      assert LazyHTML.attribute(frame, "title") == ["A tip"]
-      assert frame |> LazyHTML.child_nodes() |> Enum.count() == 0
-      assert dialog |> LazyHTML.query(~s([data-role="doc-callout"])) |> Enum.count() == 0
+      assert LazyHTML.attribute(holder, "data-label") == ["A tip"]
+      assert LazyHTML.attribute(holder, "data-toolbar-label") == ["Preview"]
+      assert LazyHTML.attribute(holder, "data-frame-label") == ["A tip"]
+      assert LazyHTML.attribute(holder, "data-close-text") == ["Close"]
+
+      for drawn <- ~w(dialog iframe) ++ [~s([data-role="doc-example-preview"])] do
+        assert body |> LazyHTML.query(drawn) |> Enum.count() == 0
+      end
+
+      refute LazyHTML.to_html(body) =~ ~s( src="/_preview/)
     end
 
     # THE PREVIEW IS THE BROWSER'S ONCE DRAWN, under an id named after the words it is drawn with and
@@ -1012,8 +1001,10 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
 
     # ON THE PAGE THE TOOLBAR TURNS THE EXAMPLE'S DIRECTION AND OPENS ITS PREVIEW; the preview's own
-    # toolbar switches its colours, its width and its direction.
-    test "draws its toolbars with the choices it was set with pressed", %{site: site} do
+    # toolbar, which the hook builds, switches its colours, its width and its direction, and says
+    # what the holder carries.
+    test "draws its toolbar with the choice it was set with pressed, and the preview's words",
+         %{site: site} do
       body =
         example_page!(
           site,
@@ -1022,41 +1013,72 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       example = LazyHTML.query(body, ~s([data-role="doc-example"]))
 
-      assert pressed(example) == [
-               {"dir", "ltr", "true"},
-               {"dir", "rtl", "false"},
-               {"theme", "light", "false"},
-               {"theme", "dark", "true"},
-               {"device", "desktop", "true"},
-               {"device", "tablet", "false"},
-               {"device", "mobile", "false"},
-               {"dir", "ltr", "true"},
-               {"dir", "rtl", "false"}
-             ]
+      assert pressed(example) == [{"dir", "ltr", "true"}, {"dir", "rtl", "false"}]
 
       toolbar = LazyHTML.query(example, ~s([data-role="doc-example-toolbar"][role="toolbar"]))
       assert LazyHTML.attribute(toolbar, "aria-label") == ["Example options"]
       assert texts(toolbar, ~s([data-role="doc-example-option-text"])) == ~w(LTR RTL)
       assert toolbar |> LazyHTML.query(~s(button[type="button"])) |> Enum.count() == 3
 
-      preview =
-        LazyHTML.query(example, ~s([data-role="doc-example-preview-toolbar"][role="toolbar"]))
-
-      assert LazyHTML.attribute(preview, "aria-label") == ["Preview"]
-
-      assert texts(preview, ~s([data-role="doc-example-option-text"])) ==
-               ~w(Light Dark Desktop Tablet Mobile LTR RTL)
-
-      assert preview
-             |> LazyHTML.query(~s(button[type="button"][data-role="doc-example-option"]))
-             |> Enum.count() == 7
-
       assert example |> LazyHTML.query(~s([data-role="doc-example-title"])) |> Enum.count() == 0
-      assert texts(example, ~s([data-role="doc-example-preview-title"])) == ["Preview"]
 
-      assert example
-             |> LazyHTML.query(~s([data-role="doc-example-frame"]))
-             |> LazyHTML.attribute("title") == ["Example"]
+      holder = holder(example)
+
+      assert for(
+               name <-
+                 ~w(label toolbar-label frame-label light-text dark-text desktop-text tablet-text
+                    mobile-text ltr-text rtl-text close-text),
+               do: holder |> LazyHTML.attribute("data-#{name}") |> List.first()
+             ) == ~w(Preview Preview Example Light Dark Desktop Tablet Mobile LTR RTL Close)
+    end
+
+    # AN EXAMPLE'S FRAME IS ITS MARKUP AND THE FEW ELEMENTS AROUND IT, whatever the page holds of
+    # them: no preview is drawn with it, nothing but its body carries a class — the kit's stylesheet
+    # draws the rest by `data-role` — and no button carries a command of its own, since the hook
+    # answers them all.
+    test "costs a page little more than its own markup", %{site: site} do
+      count = 20
+
+      body =
+        example_page!(
+          site,
+          Enum.map_join(1..count, fn n ->
+            ~s([[component doc-example title="Example #{n}"]]) <>
+              "[[component doc-callout]]Example #{n}.[[/component]][[/component]]"
+          end)
+        )
+
+      examples = body |> LazyHTML.query(~s([data-role="doc-example"])) |> Enum.to_list()
+      assert length(examples) == count
+
+      frame =
+        examples
+        |> Enum.map(fn example ->
+          inner = LazyHTML.query(example, ~s([data-role="doc-example-body"]))
+          byte_size(LazyHTML.to_html(example)) - byte_size(LazyHTML.to_html(inner))
+        end)
+        |> Enum.sum()
+
+      assert div(frame, count) < 3_000,
+             "an example's frame costs #{div(frame, count)} bytes of the page, past its bound of 3000"
+
+      for example <- examples do
+        classed = example |> LazyHTML.query("[class]") |> Enum.count()
+
+        in_body =
+          example |> LazyHTML.query(~s([data-role="doc-example-body"] [class])) |> Enum.count()
+
+        assert LazyHTML.attribute(example, "class") == []
+        assert classed - in_body == 1, "an element of the example's frame carries a class"
+      end
+
+      buttons = body |> LazyHTML.query(~s(button[data-role^="doc-example-"])) |> Enum.to_list()
+      assert length(buttons) == count * 4
+
+      for button <- buttons do
+        names = button |> LazyHTML.attributes() |> List.first() |> Enum.map(&elem(&1, 0))
+        assert Enum.filter(names, &String.starts_with?(&1, "phx-")) == []
+      end
     end
 
     test "takes the colours, width and direction the marker sets, and only the declared ones",
@@ -1081,8 +1103,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
              |> LazyHTML.attribute("dir") ==
                ["rtl"]
 
-      assert for({action, value, "true"} <- pressed(set), do: {action, value}) ==
-               [{"dir", "rtl"}, {"theme", "light"}, {"device", "mobile"}, {"dir", "rtl"}]
+      assert for({action, value, "true"} <- pressed(set), do: {action, value}) == [{"dir", "rtl"}]
 
       assert LazyHTML.attribute(refused, "data-frame-theme") == ["dark"]
       assert LazyHTML.attribute(refused, "data-frame-device") == ["desktop"]
@@ -1110,15 +1131,13 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
              |> LazyHTML.query("p")
              |> Enum.count(&(LazyHTML.text(&1) =~ "Jerry")) == 1
 
-      assert example |> frame() |> LazyHTML.attribute("data-document") == []
-
       assert body |> LazyHTML.query("b") |> Enum.count() == 0
     end
 
-    # THE FRAME NAMES THE PAGE THAT DRAWS ITS EXAMPLE ALONE, by the example's place among the
+    # THE HOLDER NAMES THE PAGE THAT DRAWS ITS EXAMPLE ALONE, by the example's place among the
     # examples of the page's text or of a note's — none counted inside code — and that page draws
-    # exactly that example. Nothing is loaded for it until the preview opens: no frame has a `src`.
-    test "names for each frame the page that draws its own example alone", %{
+    # exactly that example. Nothing is loaded for it until the preview opens: no frame is drawn.
+    test "names for each preview the page that draws its own example alone", %{
       conn: conn,
       site: site
     } do
@@ -1142,15 +1161,15 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         |> Ash.Query.filter(section_id == ^page.id)
         |> Ash.read!(tenant: site.id, authorize?: false)
 
-      frames = LazyHTML.query(body, ~s([data-role="doc-example-frame"]))
+      holders = LazyHTML.query(body, ~s([data-role="doc-example-preview-holder"]))
 
-      assert LazyHTML.attribute(frames, "data-src") == [
+      assert LazyHTML.attribute(holders, "data-src") == [
                "/_preview/doc-example/section/#{page.id}/0",
                "/_preview/doc-example/section/#{page.id}/1",
                "/_preview/doc-example/note/#{note.id}/0"
              ]
 
-      assert LazyHTML.attribute(frames, "src") == []
+      assert body |> LazyHTML.query("iframe") |> Enum.count() == 0
       refute LazyHTML.to_html(body) =~ ~s( src="/_preview/)
 
       conn =
@@ -1159,7 +1178,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         |> Map.update!(:req_headers, &[{"host", site.host} | List.keydelete(&1, "host", 0)])
 
       drawn =
-        for [src] <- Enum.map(frames, &LazyHTML.attribute(&1, "data-src")) do
+        for [src] <- Enum.map(holders, &LazyHTML.attribute(&1, "data-src")) do
           conn
           |> get(src)
           |> html_response(200)
@@ -1172,9 +1191,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
 
     # A COMPONENT THAT KEEPS STATE IS DRAWN BY LIVEVIEW, ON THE PAGE: the example draws it on the
-    # page like any other, and its preview is a frame like any other's, which the hook fills with a
-    # copy of what the page draws.
-    test "draws an example that keeps state on the page, and a frame for its preview",
+    # page like any other, and its preview is built like any other's, of the page that draws the
+    # example alone.
+    test "draws an example that keeps state on the page, and a holder for its preview",
          %{site: site} do
       body =
         example_page!(
@@ -1186,7 +1205,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
 
       assert texts(example, ~s([data-role="doc-example-title"])) == ["Contents"]
-      assert example |> frame() |> Enum.count() == 1
+      assert example |> holder() |> Enum.count() == 1
 
       assert example
              |> LazyHTML.query(~s([data-role="doc-example-unavailable"]))
@@ -1263,7 +1282,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       # Content drawn anywhere but a page of a document says nowhere the example is written, so it
       # has no preview: the toolbar turns its direction and offers nothing more.
-      assert example |> frame() |> Enum.count() == 0
+      assert example |> holder() |> Enum.count() == 0
 
       assert example |> LazyHTML.query(~s([data-role="doc-example-open"])) |> Enum.count() ==
                0

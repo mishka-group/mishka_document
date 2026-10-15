@@ -718,13 +718,41 @@ defmodule MishkaDocument.KitTest do
       end
     end
 
+    # AN EXAMPLE'S FRAME AND ITS PREVIEW ARE DRAWN BY THE KIT'S STYLESHEET, keyed on `data-role`: the
+    # template gives a class to the example's body alone, and the hook builds the preview with none.
+    # Every part of either has its rule, in the components layer, where a rule a site writes outside
+    # a layer wins over it; and the sheet compiles, since a stored stylesheet that does not fails
+    # every compile of the site's CSS.
+    test "draws an example's frame and its preview by their data-role" do
+      [sheet] = bundle()["stylesheets"]
+      template = Enum.find(components(), &(&1["name"] == "doc-example"))["template"]
+
+      assert ~r/\sclass=/ |> Regex.scan(template) |> length() == 1
+      assert template =~ ~s(data-role="doc-example-body"\n      class=)
+
+      [layer] = Regex.run(~r/@layer components \{\n.*?\n\}\n/s, sheet["content"])
+
+      for role <-
+            ~w(doc-example doc-example-head doc-example-title doc-example-toolbar doc-example-group
+               doc-example-option doc-example-open doc-example-icon doc-example-stage
+               doc-example-expand doc-example-preview doc-example-preview-head
+               doc-example-preview-title doc-example-preview-toolbar doc-example-close
+               doc-example-close-text doc-example-option-text doc-example-preview-stage
+               doc-example-viewport doc-example-frame) do
+        assert layer =~ ~s([data-role="#{role}"]), "the stylesheet draws no #{role}"
+      end
+
+      assert :ok =
+               MishkaCmsCore.Runtime.Compilers.TailwindCompiler.verify_css(sheet["content"], nil)
+    end
+
     # AN EXAMPLE'S TOOLBAR IS ANSWERED IN THE BROWSER, by the hook `doc-example` mounts on its own
     # root under the name `example_hook/0` asks the same rule for. It moves the choice onto the root,
     # the buttons and the example's stage through the hook's JS commands, which a LiveView patch
-    # keeps, opens the preview as a modal dialog, hands the frame the page that draws the example
-    # only then and takes it away when the preview closes, dresses the frame's page, and sizes the
-    # frame through its `width` and `height` attributes and scales it through CSSOM properties —
-    # never a style attribute, which a site's CSP may refuse.
+    # keeps, builds the preview the first time it opens, opens it as a modal dialog, hands the frame
+    # the page that draws the example only then and takes it away when the preview closes, dresses
+    # the frame's page, and sizes the frame through its `width` and `height` attributes and scales it
+    # through CSSOM properties — never a style attribute, which a site's CSP may refuse.
     test "ships the hook doc-example mounts for the toolbar over its example" do
       hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-example"))
       content = hook["content"]
@@ -737,6 +765,14 @@ defmodule MishkaDocument.KitTest do
       assert content =~ "js.setAttribute(this.el, `data-frame-${action}`, value)"
       assert content =~ ~s|js.setAttribute(option, "aria-pressed"|
       assert content =~ ~s|js.setAttribute(stage, "dir", value)|
+      assert content =~ "if (!this.preview) this.build();"
+      assert content =~ ~s|const HOLDER = '[data-role="doc-example-preview-holder"]';|
+      assert content =~ "holder.append("
+
+      assert content =~
+               ~s|frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");|
+
+      assert content =~ ~s|if (said("src") !== "") frame.setAttribute("data-src", said("src"));|
       assert content =~ "this.preview.showModal()"
       assert content =~ ~s|const src = frame && frame.getAttribute("data-src");|
       assert content =~ ~s|frame.setAttribute("src", src);|
@@ -766,6 +802,8 @@ defmodule MishkaDocument.KitTest do
       refute content =~
                ~r/setAttribute\(\s*[^,]+,\s*["']style["']|\.style\s*=|cssText|innerHTML|insertAdjacentHTML|srcdoc\s*=/
 
+      refute content =~ ~r/className|classList|["']class["']|allow-top-navigation|allow-popups/
+
       example = Enum.find(components(), &(&1["name"] == "doc-example"))
       example_hook = Enum.find(example["helpers"], &(&1["name"] == "example_hook"))
 
@@ -779,20 +817,22 @@ defmodule MishkaDocument.KitTest do
     end
 
     # THE EXAMPLE IS DRAWN ON THE PAGE, where its components' scripts run; its preview is a frame of
-    # the page that draws the same example alone, live, which the frame names and is handed only when
-    # the preview opens. The sandbox grants that page its scripts, its forms and the same origin the
-    # hook dresses it through, and nothing else: no popups, no top navigation. The dialog it opens
-    # in is the browser's once drawn, so a LiveView patch never closes it.
+    # the page that draws the same example alone, live, which the holder names and the frame is
+    # handed only when the preview opens. The sandbox the hook gives the frame grants that page its
+    # scripts, its forms and the same origin the hook dresses it through, and nothing else: no
+    # popups, no top navigation. The holder the hook builds the dialog in is the browser's, so a
+    # LiveView patch never closes it, and nothing of the dialog is drawn with the example.
     test "draws its example on the page, and a preview in a frame of the page that draws it alone" do
       example = Enum.find(components(), &(&1["name"] == "doc-example"))
       template = example["template"]
 
       assert template =~ ~s(data-role="doc-example-body")
       assert template =~ "{render_slot(@inner_block)}"
-      assert template =~ ~s(phx-update="ignore")
-      assert template =~ ~s(<dialog)
-      assert template =~ ~s(sandbox="allow-scripts allow-same-origin allow-forms")
+      assert template =~ ~s(data-role="doc-example-preview-holder"\n    phx-update="ignore")
       assert template =~ "data-src={preview_src(@source)}"
+      refute template =~ ~s(<dialog)
+      refute template =~ ~s(<iframe)
+      refute template =~ "sandbox"
       refute template =~ ~r/\ssrc=/
       refute template =~ "data-stylesheet"
       refute template =~ "data-document"
