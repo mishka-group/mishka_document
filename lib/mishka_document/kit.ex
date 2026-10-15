@@ -74,29 +74,31 @@ defmodule MishkaDocument.Kit do
   breakpoints work there as anywhere on the page, in the page's own colours.
 
   Its toolbar — `doc-example-toolbar`, named by `toolbar_label` — turns the example left to right or
-  right to left, and its `doc-example-open` button, saying `preview_text`, opens a still preview:
-  a `<dialog>` (`doc-example-preview`, opened as a modal) inside a `phx-update="ignore"` element
-  whose id carries a digest of the words it is drawn with, so a LiveView patch never closes it and
-  other words draw a preview of their own. The preview says `preview_note` over a frame whose page
-  the hook writes when the preview first opens: it links the site's own stylesheet, which the frame
-  names in `data-stylesheet` (`MishkaCmsCore.Runtime.Compilers.Shared.site_css_href/1`, for the
-  site the page is rendered for), carries the theme as `<html data-theme>` and the direction as
-  `<html dir>`, holds no script, and its body is a copy of the example as the page draws it, taken
-  each time the preview opens. Nothing of that page is drawn with the example, so an example costs
-  a page, and a LiveView patch, its own markup and no more. The frame is
-  `sandbox="allow-same-origin"` — the hook reads its page from outside — and named by `title` or
-  `frame_label`. The preview's own toolbar (`doc-example-preview-toolbar`) switches its colours,
-  its width — a desktop's 1280 pixels, a tablet's 768 or a phone's 375, scaled down to fit a
-  narrower preview — and the direction, and its `doc-example-close` button, saying `close_text`,
-  Escape and a press on the backdrop close it.
+  right to left, and, for an example with a `source` (every one `doc-section` draws), its
+  `doc-example-open` button, saying `preview_text`, opens its preview: a `<dialog>`
+  (`doc-example-preview`, opened as a modal) the hook builds the first time it opens, inside a
+  `doc-example-preview-holder` drawn with `phx-update="ignore"` and an id carrying a digest of the
+  words it is drawn with, so a LiveView patch never closes it and other words build a preview of
+  their own. The holder is drawn empty: it carries the preview's words and, in `data-src`, the page
+  its frame shows, and nothing else of the preview is drawn with the example, so an example costs a
+  page, and a LiveView patch, its own markup and the few elements around it. The frame
+  (`doc-example-frame`, named by `title` or `frame_label`) shows `/_preview/doc-example/<source>`,
+  the page that draws that example alone and live with the site's stylesheet and scripts
+  (`MishkaDocumentWeb.Live.ExamplePreview`), only while the preview is open; it is
+  `sandbox="allow-scripts allow-same-origin allow-forms"`. The preview's own toolbar
+  (`doc-example-preview-toolbar`) switches its colours, its width — a desktop's 1280 pixels, a
+  tablet's 768 or a phone's 375, scaled down to fit a narrower preview — and the direction, and its
+  `doc-example-close` button, saying `close_text`, Escape and a press on the backdrop close it.
 
   `theme` (light, dark; dark by default) and `device` (desktop, tablet, mobile; desktop) are what
   the preview is first drawn with, and `dir` (ltr, rtl; ltr) is what the example is first drawn
   with on the page and in the preview, carried on its root as `data-frame-theme`,
   `data-frame-device` and `data-frame-dir`, and `dir` on the stage. Each choice is a
   `doc-example-option` button with a `data-action` of theme, device or dir, a `data-value` and
-  `aria-pressed`. Every element says what it is in its `data-role` for a site's stylesheet to
-  restyle. Drawn without an id the example has no toolbar and no preview.
+  `aria-pressed`. Every element, the preview's included, says what it is in its `data-role`, and
+  that is what the kit's stylesheet draws it by: no element of the example but its
+  `doc-example-body` carries a class, and a site's stylesheet restyles any of them by its
+  `data-role`. Drawn without an id the example has no toolbar and no preview.
 
   An example taller than `collapse_height` pixels (320; 240, 400, 480 or 640, and 0 cuts none) is
   cut at that height under a fade until the `doc-example-expand` button in the `doc-example-foot`
@@ -106,7 +108,7 @@ defmodule MishkaDocument.Kit do
   `data-expanded`. The cut clips only the example's height, so a popup still reaches past its sides.
 
   An example holding a component that keeps state is drawn on the page like any other, and its
-  preview copies what the page draws of it.
+  preview draws it live like any other.
 
   They draw themselves in plain HTML and Tailwind and call no other kit. A site that installed this
   extension and skipped Chelekom renders them; the components a documentation page is made of cannot
@@ -260,17 +262,23 @@ defmodule MishkaDocument.Kit do
 
   The `doc-example` hook answers an example's toolbar. The component of that name mounts it on its
   own root, under the name `MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name/2`
-  gives it. A press writes the choice onto the root's `data-frame-*`, the buttons' `aria-pressed`
-  and, for a direction, the stage's `dir`, through the hook's JS commands, which a LiveView patch
-  keeps, and onto the frame's `<html>`. Opening the preview writes the frame's page the first time,
-  copies the example on the page into its body every time, and calls `showModal/0`. The frame is
-  drawn at its device's width and its page's height through its `width` and `height` attributes —
-  measured when the page loads, its fonts and pictures arrive, the preview's width changes and
-  after every choice — and scaled down to the preview's width through CSSOM properties set from
-  script, never a style attribute, so a site's CSP has nothing to refuse. A link pressed in the
-  frame closes the preview and leads the page itself there. No class is written, and no markup but
-  the frame's own page. The example's height is read by a `ResizeObserver` once the browser has laid
-  the page out, so mounting the hook reads no layout.
+  gives it, and one listener there answers every button of the example and of its preview by its
+  `data-action` and `data-value`: no button carries a command of its own. A press writes the
+  choice onto the root's `data-frame-*`, the buttons' `aria-pressed` and, for a direction, the
+  stage's `dir`, through the hook's JS commands, which a LiveView patch keeps, and onto the frame's
+  `<html>`. Opening the preview the first time builds it into its holder — the words the holder
+  carries, the buttons pressed as the root's `data-frame-*` say — and every time hands the frame its
+  `src` and calls `showModal/0`; closing it takes the `src` away and sends the frame to
+  `about:blank`. Once the frame's page has loaded, the hook gives its `<html>` the theme as
+  `data-theme` and the direction as `dir`, and again after every choice. The frame is drawn at its
+  device's width and as tall as the example in it or the preview, whichever is taller, through its
+  `width` and `height` attributes — measured when its page loads, its fonts arrive, the preview's
+  size changes and after every choice — and scaled down to the preview's width through CSSOM
+  properties set from script, never a style attribute, so a site's CSP has nothing to refuse. A
+  link pressed in the frame that leads to another page closes the preview and leads the page itself
+  there. The hook writes no class and no style attribute, and no markup but the preview. The
+  example's height is read by a `ResizeObserver` once the browser has laid the page out, so mounting
+  the hook reads no layout.
 
   The `doc-sidebar-scroll` hook keeps a document's contents where the reader left them. `doc-sidebar`
   mounts it on its own root, under the name `browser_name/2` gives it, with the document's id in
@@ -287,8 +295,11 @@ defmodule MishkaDocument.Kit do
   already highlighted — `MishkaDocument.Resources.Changes.HighlightCode` does it when the page is
   written — as `<pre class="highlight"><code class="language-x">` with a `<span>` per token, and the
   sheet colours the token classes Makeup emits, in its Monokai style, and draws the window around
-  each block, the button's copied state included. It cuts a long block and a tall example at each
-  height their attributes offer, and draws the fade, the blur and the button over the cut, keyed on
+  each block, the button's copied state included. It draws the frame `doc-example` puts an example
+  in — its head, its toolbars and their buttons, its foot — and the preview the hook builds, each
+  part by its `data-role`, with Tailwind's `@apply` in the `components` layer, so a rule a site
+  writes outside a layer wins over it. It cuts a long block and a tall example at each height their
+  attributes offer, and draws the fade, the blur and the button over the cut, keyed on
   `data-collapsible` and `data-expanded`. Installed with the components, per site, as a `:base`
   stylesheet, so a site's own `:custom` rows still win over it.
 
