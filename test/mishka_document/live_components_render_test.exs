@@ -4076,6 +4076,78 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert view |> drawn(~s([data-role="doc-tabs"])) |> Enum.count() == 0
     end
 
+    test "draws a link fact with the rel it was given, and the default for one without", %{
+      site: site
+    } do
+      grouped!(site)
+
+      PageExtras.answer!(fn state ->
+        %{
+          state
+          | header: [
+              %{kind: :link, href: "https://github.com/a", text: "Plain"},
+              %{
+                kind: :link,
+                href: "https://github.com/b",
+                text: "Given",
+                rel: "nofollow noopener noreferrer"
+              },
+              %{
+                kind: :link,
+                href: "https://github.com/c",
+                text: "Cased",
+                rel: "  NoFollow  sponsored nofollow "
+              },
+              %{
+                kind: :link,
+                href: "https://github.com/d",
+                text: "Strange",
+                rel: "bad_word <b> x:y"
+              },
+              %{kind: :link, href: "https://github.com/e", text: "Listed", rel: ["nofollow"]},
+              %{kind: :link, href: "https://github.com/f", text: "Blank", rel: "   "},
+              %{kind: :link, href: "/mishka/docs", text: "Inside"},
+              %{kind: :link, href: "/mishka/docs/breadcrumb", text: "Marked", rel: "nofollow"}
+            ],
+            tabs: [
+              %{
+                id: "links",
+                label: "Links",
+                kind: :list,
+                items: [
+                  %{kind: :link, href: "https://github.com/g", text: "Tabbed", rel: "sponsored"}
+                ]
+              }
+            ]
+        }
+      end)
+
+      {:ok, view, _html} = mount_breadcrumb(site)
+
+      links =
+        view
+        |> drawn(~s([data-role="doc-section-article"] > [data-role="doc-extras"] a))
+        |> Enum.map(fn link ->
+          {LazyHTML.text(link), LazyHTML.attribute(link, "target"),
+           LazyHTML.attribute(link, "rel")}
+        end)
+
+      assert links == [
+               {"Plain", ["_blank"], ["noopener noreferrer"]},
+               {"Given", ["_blank"], ["nofollow noopener noreferrer"]},
+               {"Cased", ["_blank"], ["nofollow sponsored"]},
+               {"Strange", ["_blank"], ["noopener noreferrer"]},
+               {"Listed", ["_blank"], ["noopener noreferrer"]},
+               {"Blank", ["_blank"], ["noopener noreferrer"]},
+               {"Inside", [], []},
+               {"Marked", [], ["nofollow"]}
+             ]
+
+      assert view
+             |> drawn(~s([data-role="doc-tab-panel"] [data-role="doc-extra-link"] a))
+             |> Enum.map(&LazyHTML.attribute(&1, "rel")) == [["sponsored"]]
+    end
+
     test "adds its tabs after the text's own, which is shown", %{site: site} do
       grouped!(site)
       PageExtras.answer!(&with_tabs/1)

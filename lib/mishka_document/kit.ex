@@ -208,8 +208,12 @@ defmodule MishkaDocument.Kit do
       any other word a site's stylesheet keys on as `data-tone`.
     * `%{kind: :command, label: "Install", value: "mix …"}` — drawn left to right, with the button a
       code window has.
-    * `%{kind: :link, label: "Source", href: "https://…", text: "View source"}` — `http`, `https`
-      or a path on the site; an `http` or `https` address opens in a new tab.
+    * `%{kind: :link, label: "Source", href: "https://…", text: "View source", rel: "nofollow"}` —
+      `http`, `https` or a path on the site; an `http` or `https` address opens in a new tab.
+      `rel` is optional: the link types of the `<a>`, space-separated words of lower-case letters
+      and `-`, each drawn once and in place of the default; a word of any other shape is left out.
+      With none, an `http` or `https` address is drawn `rel="noopener noreferrer"` and a path on
+      the site with no `rel`.
     * `%{kind: :text, label: "Package", value: "…"}`.
     * `%{kind: :pending, text: "…"}` — a skeleton for the facts still being fetched, `text` for a
       screen reader.
