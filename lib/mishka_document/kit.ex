@@ -144,6 +144,13 @@ defmodule MishkaDocument.Kit do
   place in a trail link there; Previous and Next stop on it. The pages under it keep the address
   that leaves its slug out.
 
+  Under a page's title `doc-section` says when it last changed and the version being read,
+  `Updated Oct 14, 2026 · v1.2.0` (`doc-section-updated`, the date in a `<time datetime>`, the
+  version in `doc-section-updated-version`): the page's own change, and its document's at the
+  document's own address, the date its head gives as its `dateModified`
+  (`MishkaDocument.Plugins.PageSeo`). `updated_text` is what it says before the version, and
+  `show_updated=false` draws none.
+
   A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
   text is stored through, and drawn with `rich_content/1`, so a component the author placed in them
   with the content editor is drawn there as that component (`MishkaCmsCore.Runtime.ContentComponents`),

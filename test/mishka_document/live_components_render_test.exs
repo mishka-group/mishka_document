@@ -2148,6 +2148,75 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # WHEN A PAGE LAST CHANGED, under its title, with the version being read: the date its head gives
+  # as `dateModified` — the page's own, and its document's at the document's own address.
+  describe "doc-section's updated line" do
+    defp updated(view) do
+      line = drawn(view, ~s([data-role="doc-section-updated"]))
+      time = LazyHTML.query(line, "time")
+
+      %{
+        lines: Enum.count(line),
+        datetime: LazyHTML.attribute(time, "datetime"),
+        date: Enum.map(time, &String.trim(LazyHTML.text(&1))),
+        version:
+          line
+          |> LazyHTML.query(~s([data-role="doc-section-updated-version"]))
+          |> Enum.map(&String.trim(LazyHTML.text(&1)))
+      }
+    end
+
+    test "says when the page last changed and the version being read", %{site: site} do
+      %{pages: pages} = manual!(site)
+      page = Enum.find(pages, &(&1.slug == "installation"))
+      Ash.Seed.update!(page, %{updated_at: ~U[2026-03-04 05:06:07.891234Z]})
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert %{datetime: ["2026-03-04T05:06:07Z"], date: [date], version: ["v1.0.0"]} =
+               updated(view)
+
+      assert date == "Updated " <> MishkaCmsCore.Localized.date(~U[2026-03-04 05:06:07Z])
+    end
+
+    test "is the document's change on its front page", %{site: site} do
+      %{document: document, front: front} = fronted!(site, path: "/mishka/docs")
+      Ash.Seed.update!(document, %{updated_at: ~U[2026-02-01 00:00:00Z]})
+      Ash.Seed.update!(front, %{updated_at: ~U[2026-05-01 00:00:00Z]})
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{path: "/mishka/docs", lang_param: "", params: %{}})
+
+      assert %{datetime: ["2026-02-01T00:00:00Z"], version: ["v1.0.0"]} = updated(view)
+    end
+
+    test "says the version ?v= names, in its own words, and is left out when asked", %{
+      site: site
+    } do
+      addressed!(site)
+
+      attrs = %{
+        path: "/mishka/docs",
+        lang_param: "",
+        updated_text: "Changed %{date}",
+        params: %{"section" => "installation", "v" => "0.9.0"}
+      }
+
+      {:ok, older, _html} = mount_page(site, "doc-section", attrs)
+
+      assert %{version: ["v0.9.0"], date: ["Changed " <> _date]} = updated(older)
+
+      {:ok, hidden, _html} = mount_page(site, "doc-section", Map.put(attrs, :show_updated, false))
+
+      assert %{lines: 0} = updated(hidden)
+      assert text_of(hidden, ~s([data-role="doc-section-title"])) == ["Installation"]
+    end
+  end
+
   describe "doc-switcher's version_text" do
     test "names the version switch, and left empty leaves the number alone", %{site: site} do
       addressed!(site)
