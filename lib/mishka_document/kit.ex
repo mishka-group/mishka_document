@@ -326,6 +326,10 @@ defmodule MishkaDocument.Kit do
   removes a child from, so the builder's canvas would keep the cards of the previous setting beside
   the new ones every time the Inspector changed one.
 
+  A page of `doc-workspace-list` past the last one is the site's 404 when the address names it
+  (`?page=999`, under `page_param`), as a document the address names and nobody has is; one the
+  pager's buttons ask for is the last one there is.
+
   `doc-section` is the exception, and on purpose: it is what the page IS. A skeleton where the
   document's text should be is a worse page than one that takes as long as the text does, and a
   crawler served the skeleton is served nothing. That is also the trade the other five accept: a

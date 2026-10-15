@@ -82,9 +82,15 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok,
        Phoenix.Component.assign(socket,
          blocks: session["blocks"] || [],
-         site: session["site"]
+         site: session["site"],
+         missing: false
        )}
     end
+
+    # WHAT `MishkaCmsWeb.RuntimeLive` IS TOLD when a block finds nothing at the address it was
+    # handed, once the socket is connected; it answers with the site's 404.
+    def handle_info(:mishka_runtime_not_found, socket),
+      do: {:noreply, Phoenix.Component.assign(socket, :missing, true)}
 
     # THE PAGE AROUND A BLOCK CHANGING UNDER IT, which is what a patch to another URL is. A live
     # component is redrawn when the assigns its parent hands it change, and nothing else redraws it:
@@ -114,6 +120,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     def render(assigns) do
       ~H"""
       <div id="host">
+        <p :if={@missing} id="runtime-not-found"></p>
         <div :for={block <- @blocks}>
           {LiveViewHelpers.component(
             Map.merge(block["attrs"], %{
@@ -2727,6 +2734,47 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(view, ~s([data-role="doc-list-title"])) == ["C", "D"]
       assert hrefs(view, ~s([data-role="doc-list-prev"])) == ["/docs?page=1"]
+    end
+
+    # A PAGE THE ADDRESS NAMES PAST THE LAST ONE IS MISSING, so `?page=999` is not one more address
+    # of the last page: the HTTP render raises, and a connected one asks the page for its 404.
+    test "is missing at a page the URL names past the last one", %{site: site} do
+      for {name, order} <- Enum.with_index(~w(A B C)) do
+        document!(site, name: name, slug: String.downcase(name), display_order: order)
+      end
+
+      for page <- ["3", "999"] do
+        assert_raise MishkaCmsCore.ErrorsExceptions.NotFoundError, fn ->
+          mount_page(site, "doc-workspace-list", %{per_page: 2, params: %{"page" => page}})
+        end
+      end
+
+      for {page, titles} <- [{"1", ["A", "B"]}, {"2", ["C"]}] do
+        {:ok, view, _html} =
+          mount_page(site, "doc-workspace-list", %{per_page: 2, params: %{"page" => page}})
+
+        assert text_of(view, ~s([data-role="doc-list-title"])) == titles
+        refute has_element?(view, "#runtime-not-found")
+      end
+
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{per_page: 2})
+      send(view.pid, {:params, %{"page" => "9"}})
+      render_async(view, @async)
+
+      assert has_element?(view, "#runtime-not-found")
+    end
+
+    test "but a page the pager asks for past the last one is the last one", %{site: site} do
+      for {name, order} <- Enum.with_index(~w(A B C)) do
+        document!(site, name: name, slug: String.downcase(name), display_order: order)
+      end
+
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{per_page: 2})
+
+      view |> with_target("#one") |> render_click("page", %{"to" => "9"})
+
+      assert text_of(view, ~s([data-role="doc-list-title"])) == ["C"]
+      refute has_element?(view, "#runtime-not-found")
     end
 
     test "links each document where the page said documents live", %{site: site} do

@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.25.0",
+  "version": "2.26.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -123,7 +123,7 @@
           "type": "any",
           "opts": {
             "default": "page",
-            "doc": "The query key this list's page number is written under. Two lists on one page need two keys."
+            "doc": "The query key this list's page number is written under. Two lists on one page need two keys. A page past the last one, named in the address, answers the site's 404."
           }
         },
         {
@@ -329,6 +329,11 @@
           "code": "key = to_string(assigns[:page_param] || \"page\")\n\ncase assigns[:params] do\n  %{^key => asked} -> to_page(asked)\n  _no_params_or_key -> positive(assigns[:page], 1)\nend\n"
         },
         {
+          "name": "page_in_url?",
+          "args": "assigns",
+          "code": "# WHETHER THE ADDRESS NAMED THE PAGE — `page_param` in `params` — rather than the pager's buttons.\nkey = to_string(assigns[:page_param] || \"page\")\n\nmatch?(%{^key => _asked}, assigns[:params])\n"
+        },
+        {
           "name": "from_url",
           "args": "assigns, key",
           "code": "# A CAPTURED SEGMENT AND A QUERY KEY ARRIVE THE SAME WAY. The runtime merges a page's captures into\n# the same map as its query string, so /:lang/docs and /docs?lang= are read by one line — and\n# `:lang` may sit in ANY segment of the path, because nothing here looks at position. A key an\n# author emptied names nothing, and so reads nothing.\nname = trimmed(assigns[key])\n\ncase assigns[:params] do\n  %{^name => found} when name != \"\" and is_binary(found) -> trimmed(found)\n  _no_params_or_key -> \"\"\nend\n"
@@ -362,6 +367,11 @@
           "name": "rows",
           "args": "result",
           "code": "case result do\n  {:ok, %{results: found}} -> found\n  {:ok, found} when is_list(found) -> found\n  _unreadable -> []\nend\n"
+        },
+        {
+          "name": "missing!",
+          "args": "socket",
+          "code": "# NOTHING ANSWERS AT AN ADDRESS THAT NAMED SOMETHING. On the very first render there is no socket\n# to send anything over, so this raises and Phoenix draws the 404 page with a 404 status, exactly as\n# it does for a controller.\n#\n# ONCE CONNECTED IT ASKS THE PAGE TO ASK AGAIN. Raising into a live render crashes the view, and on\n# a `patch` the client remounts straight back into the same missing subject and crashes again. A\n# LiveComponent has no `handle_params/3` of its own, so it tells the LiveView the way the guides say\n# to — `send/2` — and `MishkaCmsWeb.Live.RuntimeLive` answers with a full load of the same address,\n# which arrives here as the first-render case above.\nif Phoenix.LiveView.connected?(socket) do\n  # THE PAGE KNOWS ITS OWN ADDRESS AND THIS DOES NOT: a LiveComponent's assigns are its own, not\n  # the LiveView's, so the message carries nothing and the answer is given where the path lives.\n  send(self(), :mishka_runtime_not_found)\n  socket\nelse\n  raise MishkaCmsCore.ErrorsExceptions.NotFoundError,\n    message: \"Sorry, the page you are looking for does not exist or has been moved.\"\nend\n"
         },
         {
           "name": "paged",
@@ -411,12 +421,12 @@
         {
           "name": "asked",
           "args": "assigns",
-          "code": "# EVERYTHING THE READ DEPENDS ON, AS ONE TERM — AND EVERYTHING A ROW IS DRAWN FROM, which is the\n# same term for a reason. It is the argument the task is handed — a plain map rather than the\n# socket, so nothing of LiveView's is copied into another process — and it is also what says\n# whether anything has to be read at all: `update_many/1` runs on every render of the page holding\n# this block, and a block that re-read on each of them would restart its own load whenever\n# something else on the page moved.\n#\n# A STREAMED ROW IS RENDERED ONCE AND NEVER AGAIN. LiveView prunes `stream.inserts` after each\n# render, so `@streams.documents` is empty on every render that is not a fresh load and the rows\n# already on the page are never rebuilt. An attribute the ROWS read — the card they are drawn with,\n# the words inside them, the base their links are built from — therefore cannot reach them by\n# re-rendering, so it goes in here instead: a change to one re-reads and re-streams. Words OUTSIDE\n# the rows (`heading`, `empty_text`, the pager's labels) are free, because those are drawn afresh\n# every render.\n%{\n  visitor: assigns[:current_user],\n  language: asked_language(assigns),\n  sort: trimmed(assigns[:sort]),\n  featured_only: assigns[:featured_only] == true,\n  show_languages: assigns[:show_languages] == true,\n  per_page: positive(assigns[:per_page], 6),\n  page: asked_page(assigns),\n  card: trimmed(assigns[:card]),\n  doc_base: trimmed(assigns[:doc_base]),\n  lang_param: trimmed(assigns[:lang_param]),\n  show_description: assigns[:show_description] == true,\n  read_text: trimmed(assigns[:read_text]),\n  featured_text: trimmed(assigns[:featured_text]),\n  show_details: assigns[:show_details] == true,\n  version_text: trimmed(assigns[:version_text]),\n  pages_text: trimmed(assigns[:pages_text]),\n  one_page_text: trimmed(assigns[:one_page_text]),\n  updated_text: trimmed(assigns[:updated_text])\n}\n"
+          "code": "# EVERYTHING THE READ DEPENDS ON, AS ONE TERM — AND EVERYTHING A ROW IS DRAWN FROM, which is the\n# same term for a reason. It is the argument the task is handed — a plain map rather than the\n# socket, so nothing of LiveView's is copied into another process — and it is also what says\n# whether anything has to be read at all: `update_many/1` runs on every render of the page holding\n# this block, and a block that re-read on each of them would restart its own load whenever\n# something else on the page moved.\n#\n# A STREAMED ROW IS RENDERED ONCE AND NEVER AGAIN. LiveView prunes `stream.inserts` after each\n# render, so `@streams.documents` is empty on every render that is not a fresh load and the rows\n# already on the page are never rebuilt. An attribute the ROWS read — the card they are drawn with,\n# the words inside them, the base their links are built from — therefore cannot reach them by\n# re-rendering, so it goes in here instead: a change to one re-reads and re-streams. Words OUTSIDE\n# the rows (`heading`, `empty_text`, the pager's labels) are free, because those are drawn afresh\n# every render.\n%{\n  visitor: assigns[:current_user],\n  language: asked_language(assigns),\n  sort: trimmed(assigns[:sort]),\n  featured_only: assigns[:featured_only] == true,\n  show_languages: assigns[:show_languages] == true,\n  per_page: positive(assigns[:per_page], 6),\n  page: asked_page(assigns),\n  page_in_url: page_in_url?(assigns),\n  card: trimmed(assigns[:card]),\n  doc_base: trimmed(assigns[:doc_base]),\n  lang_param: trimmed(assigns[:lang_param]),\n  show_description: assigns[:show_description] == true,\n  read_text: trimmed(assigns[:read_text]),\n  featured_text: trimmed(assigns[:featured_text]),\n  show_details: assigns[:show_details] == true,\n  version_text: trimmed(assigns[:version_text]),\n  pages_text: trimmed(assigns[:pages_text]),\n  one_page_text: trimmed(assigns[:one_page_text]),\n  updated_text: trimmed(assigns[:updated_text])\n}\n"
         },
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# RUN IN THE TASK, so nothing here may touch the socket. A page nobody has is clamped to the last\n# one there is, and the answer carries the term it was read for — `arrived/2` stores that rather\n# than what was asked, so a clamp settles instead of asking again on the next render.\nwith {:ok, %{rows: documents, total: total}} <-\n       documents_page(asked, asked.page, asked.per_page) do\n  pages = max(ceil(total / asked.per_page), 1)\n\n  {page, documents} =\n    case asked.page > pages do\n      false ->\n        {asked.page, documents}\n\n      true ->\n        case documents_page(asked, pages, asked.per_page) do\n          {:ok, %{rows: clamped}} -> {pages, clamped}\n          {:error, _unreadable} -> {pages, []}\n        end\n    end\n\n  editions =\n    ((asked.show_languages or asked.show_details) && editions_of(documents, asked.visitor)) ||\n      %{}\n\n  {:ok,\n   %{\n     asked: %{asked | page: page},\n     page: page,\n     documents: documents,\n     editions: editions,\n     details: (asked.show_details && details_of(documents, editions, asked.visitor)) || %{},\n     language: asked.language,\n     total: total,\n     pages: pages\n   }}\nend\n"
+          "code": "# RUN IN THE TASK, so nothing here may touch the socket. A page nobody has is a missing page when\n# the address named it, and is clamped to the last one there is when the pager's buttons asked for\n# it. The answer carries the term it was read for — `arrived/2` stores that rather than what was\n# asked, so a clamp settles instead of asking again on the next render.\nwith {:ok, %{rows: documents, total: total}} <-\n       documents_page(asked, asked.page, asked.per_page) do\n  pages = max(ceil(total / asked.per_page), 1)\n\n  case asked.page > pages and asked.page_in_url do\n    true ->\n      {:missing, asked}\n\n    false ->\n      {page, documents} =\n        case asked.page > pages do\n          false ->\n            {asked.page, documents}\n\n          true ->\n            case documents_page(asked, pages, asked.per_page) do\n              {:ok, %{rows: clamped}} -> {pages, clamped}\n              {:error, _unreadable} -> {pages, []}\n            end\n        end\n\n      editions =\n        ((asked.show_languages or asked.show_details) && editions_of(documents, asked.visitor)) ||\n          %{}\n\n      {:ok,\n       %{\n         asked: %{asked | page: page},\n         page: page,\n         documents: documents,\n         editions: editions,\n         details: (asked.show_details && details_of(documents, editions, asked.visitor)) || %{},\n         language: asked.language,\n         total: total,\n         pages: pages\n       }}\n  end\nend\n"
         },
         {
           "name": "arrived",
@@ -427,6 +437,11 @@
           "name": "arrived",
           "args": "socket, {:error, _reason}",
           "code": "socket\n|> Phoenix.Component.assign(loading: false, failed: true, editions: %{}, total: 0, pages: 1)\n|> Phoenix.LiveView.stream(:documents, [], reset: true)\n"
+        },
+        {
+          "name": "arrived",
+          "args": "socket, {:missing, asked}",
+          "code": "socket\n|> Phoenix.Component.assign(asked: asked, loading: false, failed: false)\n|> missing!()\n"
         },
         {
           "name": "rowed",
