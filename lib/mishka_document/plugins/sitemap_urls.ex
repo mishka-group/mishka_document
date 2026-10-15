@@ -135,9 +135,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     |> Ash.Query.select([:path, :language, :permissions, :seo_tags])
     |> Ash.read!(actor: nil, tenant: site_id, page: false)
     |> Enum.reject(&PageEditions.listed?/1)
-    |> Enum.map(&Languages.url(&1.path, %{Languages.capture() => &1.language}, site_id))
-    |> Enum.filter(&is_binary/1)
-    |> MapSet.new()
+    |> MapSet.new(&Languages.url(&1.path, %{Languages.capture() => &1.language}, site_id))
   end
 
   defp document_urls(site_id, languages, served) do
