@@ -407,8 +407,10 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       assert head.title == "Install · Guide"
       assert head.description == "Guide docs."
 
-      assert [%{"@type" => "Article", "headline" => "Install"}] =
-               Enum.map(head.schema, &Jason.decode!/1)
+      schema = Enum.map(head.schema, &Jason.decode!/1)
+
+      assert %{"headline" => "Install"} = Enum.find(schema, &(&1["@type"] == "Article"))
+      refute Enum.any?(schema, &(&1["@type"] == "TechArticle"))
     end
 
     test "answers the same when it is handed its own answer", %{site: site} do
