@@ -81,6 +81,20 @@ defmodule MishkaDocument.NoteDraft do
     :site_id
   ]
 
+  # The note's fields a draft of it holds, and applying it writes when it changes them — see
+  # `MishkaDocument.Resources.Changes.StartFromSource`.
+  @note_fields [:title, :content, :order_position, :change_version, :schema, :seo_tags]
+
+  @start_from_source [
+    source: :source_note_id,
+    resource: MishkaDocument.Note,
+    fields: @note_fields
+  ]
+
+  @doc "The note's fields a draft of it holds."
+  @spec note_fields() :: [atom()]
+  def note_fields, do: @note_fields
+
   # Database configuration for note drafts storage with indexing
   postgres do
     table "mishka_document_note_drafts"
@@ -695,8 +709,8 @@ defmodule MishkaDocument.NoteDraft do
 
         field :workspace_version_id, :relation do
           required true
-          display_field :version_name
-          search_field :version_name
+          display_field &MishkaDocument.WorkspaceVersion.source_label/1
+          search_field :version_number
           mode :search
           depends_on :workspace
 
@@ -1072,6 +1086,7 @@ defmodule MishkaDocument.NoteDraft do
 
       # Highlights the code blocks of the sanitized content, before the row is written.
       change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :note_draft, for_action: :create}
@@ -1164,6 +1179,7 @@ defmodule MishkaDocument.NoteDraft do
 
       # Highlights the code blocks of the sanitized content, before the row is written.
       change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
 
       change {MishkaDocument.Resources.Changes.SetEventMetadata,
               resource_type: :note_draft, for_action: :create}
@@ -1197,6 +1213,7 @@ defmodule MishkaDocument.NoteDraft do
                where: [changing(:source_note_id)]
 
       change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
 
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplyNoteDraft
@@ -1236,6 +1253,7 @@ defmodule MishkaDocument.NoteDraft do
       end
 
       change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
 
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplyNoteDraft
@@ -1568,6 +1586,16 @@ defmodule MishkaDocument.NoteDraft do
       public? true
 
       description "Timestamp when this draft was applied to the actual note (null if not yet applied)"
+    end
+
+    attribute :changed_fields, {:array, :atom} do
+      allow_nil? false
+      default []
+      public? true
+      writable? false
+      constraints items: [one_of: @note_fields]
+
+      description "The note's fields this draft changes; applying it writes these and no other"
     end
 
     attribute :schema, {:array, :map} do

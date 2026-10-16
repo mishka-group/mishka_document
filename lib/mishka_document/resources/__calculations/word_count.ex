@@ -9,27 +9,12 @@ defmodule MishkaDocument.Resources.Calculations.WordCount do
   This module provides a simple word counting calculation that can be used
   across multiple resources (Section, Note, SectionDraft, NoteDraft).
 
-  The calculation:
-  - Returns 0 for nil or non-string content
-  - Trims whitespace
-  - Splits on any whitespace characters
-  - Removes empty strings
-  - Returns the count of remaining words
+  The words are those of the content's text, without its markup (`MishkaDocument.ContentText`):
+  `<p dir="auto">Hello world</p>` is two. No content is none.
   """
   use Ash.Resource.Calculation
 
   @impl true
-  def calculate(records, _opts, _context) do
-    Enum.map(records, fn record ->
-      if is_binary(record.content) do
-        record.content
-        |> String.trim()
-        |> String.split(~r/\s+/)
-        |> Enum.reject(&(&1 == ""))
-        |> length()
-      else
-        0
-      end
-    end)
-  end
+  def calculate(records, _opts, _context),
+    do: Enum.map(records, &MishkaDocument.ContentText.word_count(&1.content))
 end

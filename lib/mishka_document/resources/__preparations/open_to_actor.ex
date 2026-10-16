@@ -24,6 +24,12 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   A read made with `authorize?: false` is the system's — the lock a page's head hands its gate, the
   document a page sits in — and is not filtered.
 
+  WHAT IS NOT PUBLISHED opens for no reader, whatever its lock: a version (`:version`) of a document
+  that is not active, a clone record (`:lineage`) either of whose versions is of one, and a page
+  (`:section`) of a version that is not published — alpha, beta, rc or stable — or of a document
+  that is not active. A list leaves them out and one asked for alone is not found, as a document's
+  own public reads leave out one that is not active.
+
   WHAT A LIST IS KEPT TO is worked out as it runs, from the site's locked records alone, each lock
   matched once, and the list's query is filtered by the ids that come out:
 
@@ -62,11 +68,14 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
       else: {:error, "kind is one of :workspace, :version, :lineage or :section"}
   end
 
+  # The statuses a version is read in by a reader, as its own public reads keep them.
+  @published [:alpha, :beta, :rc, :stable]
+
   @impl true
   def prepare(query, opts, context) do
     case reader(context) do
       :system -> query
-      {:reader, actor} -> keep(query, opts[:kind], actor)
+      {:reader, actor} -> query |> published(opts[:kind]) |> keep(opts[:kind], actor)
     end
   end
 
@@ -78,6 +87,24 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   def opens?(required, _actor) when required in [nil, []], do: true
   def opens?(_required, nil), do: false
   def opens?(required, actor), do: AccessPermissions.match?(actor, %{}, permissions: required)
+
+  defp published(query, :workspace), do: query
+
+  defp published(query, :version), do: Ash.Query.filter(query, workspace.status == :active)
+
+  defp published(query, :lineage),
+    do:
+      Ash.Query.filter(
+        query,
+        new_version.workspace.status == :active and source_version.workspace.status == :active
+      )
+
+  defp published(query, :section),
+    do:
+      Ash.Query.filter(
+        query,
+        workspace_version.status in ^@published and workspace_version.workspace.status == :active
+      )
 
   defp reader(%{authorize?: false}), do: :system
   defp reader(%{actor: actor}), do: {:reader, actor}

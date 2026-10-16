@@ -9,6 +9,9 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
   This change is triggered on SectionDraft update actions. When both
   content_review_status and technical_review_status are set to :approved,
   it automatically applies the section.
+
+  A draft of an existing page writes only the fields it changes (its `changed_fields`, kept by
+  `MishkaDocument.Resources.Changes.StartFromSource`); a draft of a new page writes all of itself.
   """
   use Ash.Resource.Change
 
@@ -40,42 +43,32 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
     end
   end
 
+  # What the draft changes, and nothing else: a page field it leaves as the page has it is never
+  # written over (`MishkaDocument.Resources.Changes.StartFromSource`).
   defp update_existing_section(draft, tenant, _context) do
     case Ash.get(MishkaDocument.Section, draft.source_section_id,
            tenant: tenant,
            authorize?: false
          ) do
       {:ok, section} ->
-        # Update the section with draft data
-        section
-        |> Ash.Changeset.for_update(
-          :update,
-          %{
-            title: draft.title,
-            slug: draft.slug,
-            content: draft.content,
-            order_position: draft.order_position,
-            change_version: draft.change_version,
-            parent_section_id: draft.parent_section_id,
-            schema: draft.schema,
-            seo_tags: draft.seo_tags,
-            permissions: draft.permissions,
-            language: draft.language,
-            language_group_id: draft.language_group_id
-          },
-          tenant: tenant,
-          authorize?: false
-        )
-        |> Ash.update!()
+        write(section, Map.take(draft, changes(draft)), tenant)
 
-        # Mark draft as applied and return the updated draft
-        updated_draft = mark_draft_applied(draft, tenant)
-
-        {:ok, updated_draft}
+        {:ok, mark_draft_applied(draft, tenant)}
 
       {:error, _} = error ->
         error
     end
+  end
+
+  defp changes(draft),
+    do: Enum.filter(MishkaDocument.SectionDraft.page_fields(), &(&1 in draft.changed_fields))
+
+  defp write(_record, changes, _tenant) when map_size(changes) == 0, do: :unchanged
+
+  defp write(record, changes, tenant) do
+    record
+    |> Ash.Changeset.for_update(:update, changes, tenant: tenant, authorize?: false)
+    |> Ash.update!()
   end
 
   defp create_new_section(draft, tenant, _context) do

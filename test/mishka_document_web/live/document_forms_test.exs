@@ -661,6 +661,78 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
     end
   end
 
+  describe "a version picker" do
+    setup ctx do
+      unnamed =
+        create_workspace_version!(
+          workspace_id: ctx.workspace.id,
+          site_id: ctx.site.id,
+          version_number: "2.0.0",
+          version_name: nil
+        )
+
+      %{unnamed: unnamed}
+    end
+
+    test "names the version Add Section is fixed to by its number, and its name when it has one",
+         ctx do
+      form = FormInfo.component_id(Section)
+
+      for {version, label} <- [
+            {ctx.unnamed, "2.0.0"},
+            {ctx.version, "#{ctx.version.version_number} — #{ctx.version.version_name}"}
+          ] do
+        view = open(ctx.master_conn, "#{@dashboard}/sections/#{version.id}")
+
+        assert has_element?(
+                 view,
+                 ~s(#{picker(form, :workspace_version_id)} input[name=_search_workspace_version_id][disabled][value="#{label}"])
+               )
+      end
+    end
+
+    test "labels every version a section, a section draft or a note draft can be written for",
+         ctx do
+      for {resource, path} <- [
+            {SectionDraft, "#{@dashboard}/section-drafts"},
+            {NoteDraft, "#{@dashboard}/note-drafts"}
+          ] do
+        form = FormInfo.component_id(resource)
+        view = ctx.site_admin_conn |> open(path) |> pick(form, :workspace, ctx.workspace.id)
+
+        assert labels(view, form, :workspace_version_id) == %{
+                 ctx.unnamed.id => "2.0.0",
+                 ctx.version.id => "#{ctx.version.version_number} — #{ctx.version.version_name}"
+               }
+      end
+
+      form = FormInfo.component_id(Section)
+      view = open(ctx.site_admin_conn, "#{@dashboard}/sections/#{ctx.version.id}")
+      edit(view, ctx.section)
+
+      assert labels(view, form, :workspace_version_id)[ctx.unnamed.id] == "2.0.0"
+    end
+
+    test "finds a version by its number", ctx do
+      form = FormInfo.component_id(SectionDraft)
+
+      view =
+        ctx.site_admin_conn
+        |> open("#{@dashboard}/section-drafts")
+        |> pick(form, :workspace, ctx.workspace.id)
+
+      view
+      |> element(
+        "#{picker(form, :workspace_version_id)} input[name=_search_workspace_version_id]"
+      )
+      |> render_keyup(%{"value" => "2.0", "_search_workspace_version_id" => "2.0"})
+
+      render_async(view, @await)
+
+      assert Map.keys(labels(view, form, :workspace_version_id, false)) == [ctx.unnamed.id]
+    end
+  end
+
   describe "who wrote a draft" do
     test "is picked on create and shown but not changeable on edit", ctx do
       for {resource, path, draft} <- [
@@ -1089,6 +1161,23 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
     |> LazyHTML.attribute("phx-value-id")
     |> Enum.reject(&(&1 == "__nil__"))
     |> Enum.sort()
+  end
+
+  # The options a picker lists once opened, by id, each with the text it reads as.
+  defp labels(view, form, field, open? \\ true) do
+    if open? do
+      view |> element("#{picker(form, field)} input[name=_search_#{field}]") |> render_focus()
+    end
+
+    view
+    |> render_async(@await)
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s(#{picker(form, field)} button[phx-click="relation_select"]))
+    |> Enum.map(
+      &{&1 |> LazyHTML.attribute("phx-value-id") |> hd(), &1 |> LazyHTML.text() |> String.trim()}
+    )
+    |> Enum.reject(&match?({"__nil__", _}, &1))
+    |> Map.new()
   end
 
   defp hidden(form, field, value),

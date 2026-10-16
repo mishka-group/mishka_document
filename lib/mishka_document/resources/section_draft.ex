@@ -61,6 +61,32 @@ defmodule MishkaDocument.SectionDraft do
     :site_id
   ]
 
+  # The page's fields a draft of it holds, and applying it writes when it changes them — see
+  # `MishkaDocument.Resources.Changes.StartFromSource`.
+  @page_fields [
+    :title,
+    :slug,
+    :content,
+    :order_position,
+    :change_version,
+    :parent_section_id,
+    :schema,
+    :seo_tags,
+    :permissions,
+    :language,
+    :language_group_id
+  ]
+
+  @start_from_source [
+    source: :source_section_id,
+    resource: MishkaDocument.Section,
+    fields: @page_fields
+  ]
+
+  @doc "The page's fields a draft of it holds."
+  @spec page_fields() :: [atom()]
+  def page_fields, do: @page_fields
+
   # The review-chip palette the section card already uses, so a status reads the same colour whichever
   # view you are in. `:archived` is carried for parity with the section card even though a draft's
   # review status never reaches it.
@@ -707,8 +733,8 @@ defmodule MishkaDocument.SectionDraft do
 
         field :workspace_version_id, :relation do
           required true
-          display_field :version_name
-          search_field :version_name
+          display_field &MishkaDocument.WorkspaceVersion.source_label/1
+          search_field :version_number
           mode :search
           depends_on :workspace
 
@@ -933,7 +959,7 @@ defmodule MishkaDocument.SectionDraft do
 
         # WHO MAY OPEN THE PAGE once the draft is applied: any of the permission names that exist,
         # stored by name. A draft of an existing page starts with that page's
-        # (`MishkaDocument.Resources.Changes.StartFromSourceSection`).
+        # (`MishkaDocument.Resources.Changes.StartFromSource`).
         field :permissions, :relation do
           resource MishkaCmsCore.Accounts.Permission
           display_field :name
@@ -1187,7 +1213,7 @@ defmodule MishkaDocument.SectionDraft do
 
       description "Creates section draft for tenant users - requires tenant context, auto-assigns site_id, language_group_id is optional"
 
-      change MishkaDocument.Resources.Changes.StartFromSourceSection
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
     end
 
     create :master_create do
@@ -1245,7 +1271,7 @@ defmodule MishkaDocument.SectionDraft do
 
       description "Creates section draft for master users - requires explicit site_id, language_group_id is optional"
 
-      change MishkaDocument.Resources.Changes.StartFromSourceSection
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
     end
 
     update :update do
@@ -1289,6 +1315,7 @@ defmodule MishkaDocument.SectionDraft do
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
       change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
 
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplySectionDraft
@@ -1333,6 +1360,7 @@ defmodule MishkaDocument.SectionDraft do
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
       change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
 
       # Auto-apply when both approvals are granted
       change MishkaDocument.Resources.Changes.AutoApplySectionDraft
@@ -1687,6 +1715,16 @@ defmodule MishkaDocument.SectionDraft do
       public? true
 
       description "Timestamp when this draft was applied to the actual section (null if not yet applied)"
+    end
+
+    attribute :changed_fields, {:array, :atom} do
+      allow_nil? false
+      default []
+      public? true
+      writable? false
+      constraints items: [one_of: @page_fields]
+
+      description "The page's fields this draft changes; applying it writes these and no other"
     end
 
     attribute :schema, {:array, :map} do

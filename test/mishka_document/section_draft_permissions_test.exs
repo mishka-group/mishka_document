@@ -6,7 +6,7 @@ defmodule MishkaDocument.SectionDraftPermissionsTest do
   @moduledoc """
   A draft carries the permissions its page opens with, as it carries its SEO Tags and structured
   data: a draft of an existing page starts with that page's
-  (`MishkaDocument.Resources.Changes.StartFromSourceSection`), and applying the draft — both reviews
+  (`MishkaDocument.Resources.Changes.StartFromSource`), and applying the draft — both reviews
   approved — writes what the draft holds onto the page
   (`MishkaDocument.Resources.Changes.AutoApplySectionDraft`).
   """
