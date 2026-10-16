@@ -448,10 +448,15 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
       Ash.Seed.update!(section, %{inserted_at: ~U[2024-03-09 10:00:00.000000Z]})
       Ash.Seed.update!(workspace, %{updated_at: ~U[2025-07-03 08:04:00.000000Z]})
 
+      # An event of the workspace's own, written at the moment asserted on. Its creation event is not
+      # rewritten to it: `MishkaDocument.EventLog` broadcasts every row a second time a moment after
+      # writing it, as written, and the Sections page takes that copy over the row it read.
       event =
         workspace.id
         |> event_about!()
-        |> Ash.Seed.update!(%{occurred_at: ~U[2099-07-03 08:04:00.000000Z]})
+        |> Map.take([:record_id, :resource, :action, :action_type, :metadata, :data, :actor_id])
+        |> Map.put(:occurred_at, ~U[2099-07-03 08:04:00.000000Z])
+        |> then(&Ash.create!(MishkaDocument.EventLog, &1, action: :create, authorize?: false))
 
       {:ok, view, _html} =
         live(
