@@ -95,29 +95,8 @@ SPDX-License-Identifier: Apache-2.0
       />
     </.modal>
 
-    <%!-- Stat cards. Illustrative, exactly as the design has them — not wired to data yet. --%>
-    <div
-      data-role="kpis"
-      class="mb-4 grid grid-cols-5 gap-3 max-[980px]:mb-5 max-[980px]:grid-cols-2! max-[560px]:grid-cols-1!"
-    >
-      <div
-        :for={{label, icon, tone, value, delta, delta_tone} <- kpi_cards()}
-        class="rounded-[15px] border border-[#ecebe6] bg-white p-4 shadow-[0_1px_2px_rgba(30,28,24,0.04)]"
-      >
-        <div class="flex items-center gap-2">
-          <span class={["grid size-7 flex-none place-items-center rounded-lg", tone]}>
-            <.icon name={icon} class="size-[15px]" />
-          </span>
-          <span class="text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#a8a5a0]">
-            {label}
-          </span>
-        </div>
-        <div class="mt-[11px] font-['Space_Grotesk'] text-[28px] font-semibold tracking-[-0.03em] text-[#17161a]">
-          {value}
-        </div>
-        <div class={["mt-[3px] text-[11px] font-semibold", delta_tone]}>{delta}</div>
-      </div>
-    </div>
+    <%!-- The figures across the top, read as the admin after the page is drawn. --%>
+    <.live_component module={StatsLive} id="document-stats" current_user={@current_user} />
 
     <%!-- The Issues toggle rides in the feed's own toggle row: the feed is full width so its panel is,
           and putting this beside the feed instead would narrow that panel by this button. --%>

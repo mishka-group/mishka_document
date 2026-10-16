@@ -748,10 +748,14 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
 
     describe "PUBLIC - Unauthenticated access" do
       test "anyone can list published versions (alpha, beta, stable)", %{site: site} do
+        # A version is public only while its document is active.
+        document = create_workspace!(site_id: site.id, skip_version: true, status: :active)
+
         # Create published versions (alpha, beta, stable) and draft versions
         alpha =
           create_workspace_version!(
             site_id: site.id,
+            workspace_id: document.id,
             version_number: "1.0.0",
             status: :alpha,
             published_at: DateTime.utc_now()
@@ -760,6 +764,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
         beta =
           create_workspace_version!(
             site_id: site.id,
+            workspace_id: document.id,
             version_number: "2.0.0",
             status: :beta,
             published_at: DateTime.utc_now()
@@ -768,13 +773,19 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
         stable =
           create_workspace_version!(
             site_id: site.id,
+            workspace_id: document.id,
             version_number: "3.0.0",
             status: :stable,
             published_at: DateTime.utc_now()
           )
 
         draft =
-          create_workspace_version!(site_id: site.id, version_number: "4.0.0", status: :draft)
+          create_workspace_version!(
+            site_id: site.id,
+            workspace_id: document.id,
+            version_number: "4.0.0",
+            status: :draft
+          )
 
         response =
           make_api_request(
@@ -801,9 +812,13 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
       end
 
       test "anyone can get published version by id (alpha, beta, or stable)", %{site: site} do
+        # A version is public only while its document is active.
+        document = create_workspace!(site_id: site.id, skip_version: true, status: :active)
+
         alpha_version =
           create_workspace_version!(
             site_id: site.id,
+            workspace_id: document.id,
             version_number: "1.0.0",
             status: :alpha,
             published_at: DateTime.utc_now()
@@ -812,6 +827,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
         beta_version =
           create_workspace_version!(
             site_id: site.id,
+            workspace_id: document.id,
             version_number: "2.0.0",
             status: :beta,
             published_at: DateTime.utc_now()
@@ -820,6 +836,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
         stable_version =
           create_workspace_version!(
             site_id: site.id,
+            workspace_id: document.id,
             version_number: "3.0.0",
             status: :stable,
             published_at: DateTime.utc_now()

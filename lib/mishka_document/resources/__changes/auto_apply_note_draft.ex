@@ -9,6 +9,9 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
   This change is triggered on NoteDraft update actions. When both
   content_review_status and technical_review_status are set to :approved,
   it automatically applies the note.
+
+  A draft of an existing note writes only the fields it changes (its `changed_fields`, kept by
+  `MishkaDocument.Resources.Changes.StartFromSource`); a draft of a new note writes all of itself.
   """
   use Ash.Resource.Change
   use Gettext, backend: MishkaCmsCore.Gettext
@@ -82,37 +85,32 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
     end
   end
 
+  # What the draft changes, and nothing else: a note field it leaves as the note has it is never
+  # written over (`MishkaDocument.Resources.Changes.StartFromSource`).
   defp update_existing_note(draft, tenant, _context) do
     case Ash.get(MishkaDocument.Note, draft.source_note_id,
            tenant: tenant,
            authorize?: false
          ) do
       {:ok, note} ->
-        # Update the note with draft data
-        note
-        |> Ash.Changeset.for_update(
-          :update,
-          %{
-            title: draft.title,
-            content: draft.content,
-            order_position: draft.order_position,
-            change_version: draft.change_version,
-            schema: draft.schema,
-            seo_tags: draft.seo_tags
-          },
-          tenant: tenant,
-          authorize?: false
-        )
-        |> Ash.update!()
+        write(note, Map.take(draft, changes(draft)), tenant)
 
-        # Mark draft as applied and return updated draft
-        updated_draft = mark_draft_applied(draft, tenant)
-
-        {:ok, updated_draft}
+        {:ok, mark_draft_applied(draft, tenant)}
 
       {:error, _} = error ->
         error
     end
+  end
+
+  defp changes(draft),
+    do: Enum.filter(MishkaDocument.NoteDraft.note_fields(), &(&1 in draft.changed_fields))
+
+  defp write(_record, changes, _tenant) when map_size(changes) == 0, do: :unchanged
+
+  defp write(record, changes, tenant) do
+    record
+    |> Ash.Changeset.for_update(:update, changes, tenant: tenant, authorize?: false)
+    |> Ash.update!()
   end
 
   defp create_new_note(draft, tenant, _context) do

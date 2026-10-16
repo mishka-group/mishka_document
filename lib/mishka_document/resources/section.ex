@@ -386,13 +386,7 @@ defmodule MishkaDocument.Section do
           end
 
           render fn record ->
-            preview =
-              case record.content do
-                text when is_binary(text) -> text |> String.trim() |> String.slice(0, 300)
-                _blank -> ""
-              end
-
-            assigns = %{preview: preview}
+            assigns = %{preview: MishkaDocument.ContentText.preview(record.content, 300) || ""}
 
             ~H"""
             <p
@@ -965,8 +959,8 @@ defmodule MishkaDocument.Section do
 
         field :workspace_version_id, :relation do
           required true
-          display_field :version_name
-          search_field :version_name
+          display_field &MishkaDocument.WorkspaceVersion.source_label/1
+          search_field :version_number
           mode :search
           depends_on :workspace
 

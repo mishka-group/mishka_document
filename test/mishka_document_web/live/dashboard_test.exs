@@ -19,7 +19,7 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
 
   alias MishkaCmsCore.Accounts.{Permission, User, UserPermission}
   alias MishkaCmsCore.Runtime.States.SiteState
-  alias MishkaDocument.Issue
+  alias MishkaDocument.{Issue, Section}
 
   require Ash.Query
 
@@ -253,6 +253,130 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     assert has_element?(view, ~s([data-role="sec-group"]), "Group")
     refute html =~ "/navigation-group"
   end
+
+  # A PAGE'S CONTENT IS HTML. Its card and its row in the plain table show the text it reads as, and
+  # its words are counted in that text.
+  test "the Sections screen previews a page's text, not its markup", %{
+    conn: conn
+  } do
+    site = master_site()
+    workspace = create_workspace!(site_id: site.id)
+    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+    content = ~s(<p dir="auto">Hello <strong>rich</strong> world</p><p>Second &amp; last</p>)
+    text = "Hello rich world Second & last"
+
+    section =
+      create_section!(
+        site_id: site.id,
+        workspace_version_id: version.id,
+        title: "Rich page",
+        content: content
+      )
+
+    conn = log_in(conn, create_admin("docpreview@example.com"))
+
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document/sections/#{version.id}")
+    render_async(view, 5_000)
+    html = render_async(view, 5_000)
+
+    assert has_element?(view, ~s([data-role="seccard"] [data-role="sec-preview"]), text)
+    assert has_element?(view, ~s([data-role="seccard"] [data-role="sec-words"]), "6 words")
+    refute html =~ "&lt;p"
+
+    row =
+      MishkaGervaz.Resource.Info.Table.column(Section, :section_content).render.(section)
+      |> rendered_to_string()
+
+    assert row |> LazyHTML.from_fragment() |> LazyHTML.text() |> String.trim() == text
+    refute row =~ "&lt;p"
+  end
+
+  # THE FIGURES ACROSS THE TOP ARE THE SITE'S OWN, read as the admin looking at them: how many
+  # documents, who wrote them, how much of their text both reviews approve and when it last changed.
+  # Page views have no source, so there is no card for them.
+  test "the dashboard's figures are read from the documents, as the admin looking at them", %{
+    conn: conn
+  } do
+    site = master_site()
+
+    [first, second] =
+      for email <- ~w(w1@example.com w2@example.com),
+          do: create_user!(site_id: site.id, email: email)
+
+    workspace = create_workspace!(site_id: site.id)
+    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+    for {writer, review} <- [{first, :approved}, {second, :pending}] do
+      Section
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          workspace_version_id: version.id,
+          title: "By #{writer.email}",
+          slug: "by-#{writer.id}",
+          language: "en",
+          content_review_status: review,
+          technical_review_status: review
+        },
+        tenant: site.id,
+        actor: writer,
+        authorize?: false
+      )
+      |> Ash.create!()
+    end
+
+    {:ok, view, html} =
+      live(log_in(conn, create_admin("docstats@example.com")), "/admin/dashboard/document")
+
+    assert has_element?(view, "#document-stats [data-role=kpi-loading]")
+    refute html =~ "15.3K"
+
+    render_async(view, 5_000)
+
+    assert figure(view, "documents") == {"1", "+1 this week"}
+    assert figure(view, "contributors") == {"2", "2 active in the last day"}
+    assert figure(view, "completion") == {"50%", "1 of 2 pages approved"}
+    assert {_ago, date} = figure(view, "last-updated")
+    assert date == MishkaCmsCore.Localized.date(DateTime.utc_now(), :yMMMd)
+    refute has_element?(view, "#document-stats", "Page Views")
+
+    assert view
+           |> element("#document-stats")
+           |> render()
+           |> LazyHTML.from_fragment()
+           |> LazyHTML.query("[data-role=kpi]")
+           |> Enum.count() == 4
+
+    create_workspace!(site_id: site.id)
+    render_async(view, 5_000)
+
+    assert figure(view, "documents") == {"2", "+2 this week"}
+  end
+
+  test "a figure whose records the admin cannot read is left out", %{conn: conn} do
+    site = master_site()
+    create_workspace!(site_id: site.id)
+
+    writer =
+      create_user_with_permissions!(["admin:dashboard:document:workspace"], site_id: site.id)
+
+    {:ok, view, _html} = live(log_in(conn, writer), "/admin/dashboard/document")
+    render_async(view, 5_000)
+
+    assert figure(view, "documents") == {"1", "+1 this week"}
+    assert has_element?(view, "#document-stat-contributors")
+    assert has_element?(view, "#document-stat-last-updated")
+    refute has_element?(view, "#document-stat-completion")
+  end
+
+  defp figure(view, id) do
+    card = view |> element("#document-stat-#{id}") |> render() |> LazyHTML.from_fragment()
+
+    {text(card, "[data-role=kpi-value]"), text(card, "[data-role=kpi-note]")}
+  end
+
+  defp text(card, selector),
+    do: card |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
 
   defp archived_issue!(site) do
     issue = create_issue!(site_id: site.id)

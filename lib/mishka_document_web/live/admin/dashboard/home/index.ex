@@ -13,6 +13,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   alias MishkaCmsCoreWeb.Live.Admin.Components.ExtensionInstallerPanel
   alias MishkaCmsCoreWeb.Live.Admin.Components.KitUpgradePanel
   alias MishkaDocument.Kit
+  alias MishkaDocumentWeb.Live.Admin.Dashboard.Home.StatsLive
   alias MishkaGervaz.Table.Web.UrlSync
   alias Phoenix.LiveView.AsyncResult
   require Ash.Query
@@ -288,6 +289,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
       id: "workspaces-table",
       pubsub_notification: notification
     )
+
+    send_update(StatsLive, id: "document-stats", refresh: true)
 
     {:noreply, socket}
   end
@@ -808,25 +811,4 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   def issue_severity_color(:open), do: "bg-[#fbf1df] text-[#cf8a24]"
   def issue_severity_color(:resolved), do: "bg-[#e6f6ee] text-[#1f9d6b]"
   def issue_severity_color(_), do: "bg-[#f2f1ec] text-[#8a877f]"
-
-  @doc """
-  The stat row across the top: `{label, icon, icon tone, value, delta, delta tone}`.
-
-  The figures are the design's own placeholders — this page has never wired them to data — so they
-  stay literal here rather than pretending to be measured.
-  """
-  def kpi_cards do
-    [
-      {gettext("Total Documents"), "hero-document-text", "bg-[#eeedfb] text-[#5b57d6]", "127",
-       gettext("+8 this week"), "text-[#1f9d6b]"},
-      {gettext("Page Views"), "hero-eye", "bg-[#e6f6ee] text-[#1f9d6b]", "15.3K",
-       gettext("+18% vs last month"), "text-[#1f9d6b]"},
-      {gettext("Contributors"), "hero-users", "bg-[#eeedfb] text-[#5b57d6]", "14",
-       gettext("3 active today"), "text-[#8a877f]"},
-      {gettext("Completion"), "hero-check-circle", "bg-[#fbf1df] text-[#cf8a24]", "89%",
-       gettext("+4% this month"), "text-[#1f9d6b]"},
-      {gettext("Last Updated"), "hero-clock", "bg-[#f2f1ec] text-[#6d6a63]", gettext("3h"),
-       gettext("ago"), "text-[#8a877f]"}
-    ]
-  end
 end

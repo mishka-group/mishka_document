@@ -46,7 +46,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   import MishkaCmsCore.CoreComponents, only: [show_form_modal: 2]
 
   alias MishkaCmsCore.Localized
-  alias MishkaDocument.Address
+  alias MishkaDocument.{Address, ContentText}
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
   alias Phoenix.LiveView.AsyncResult
@@ -336,13 +336,18 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
 
           <div
             :if={@preview}
+            data-role="sec-preview"
             class="mt-[9px] truncate rounded-[9px] border border-[#f0efea] bg-[#faf9f6] px-3 py-[9px] font-['Space_Grotesk'] text-[12.5px] font-medium leading-[1.5] text-[#8f8c85]"
           >
             {@preview}
           </div>
 
           <div data-role="sec-meta" class="mt-[11px] flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span :if={@words > 0} class="text-[11px] font-semibold text-[#a8a5a0]">
+            <span
+              :if={@words > 0}
+              data-role="sec-words"
+              class="text-[11px] font-semibold text-[#a8a5a0]"
+            >
               {dgettext("mishka_gervaz", "%{count} words", count: @words)}
             </span>
             <span class="text-[11px] font-semibold text-[#a8a5a0]">{@date}</span>
@@ -454,20 +459,15 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   def version(_record), do: "0.0.1"
 
   @doc """
-  The one-line taste of the section's content the card shows.
+  The one-line taste of the section's content the card shows: its text, without its markup
+  (`MishkaDocument.ContentText`).
 
   Kept to a single line by the design, so it is cut at a line's length and left for CSS to ellipsise.
   """
   @preview_length 160
 
   @spec preview(map()) :: String.t() | nil
-  def preview(%{content: content}) when is_binary(content) do
-    case String.trim(content) do
-      "" -> nil
-      trimmed -> String.slice(trimmed, 0, @preview_length)
-    end
-  end
-
+  def preview(%{content: content}), do: ContentText.preview(content, @preview_length)
   def preview(_record), do: nil
 
   @doc """

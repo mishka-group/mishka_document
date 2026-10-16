@@ -136,7 +136,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
   alias MishkaCmsCore.Runtime.{Languages, PageEditions, Seo}
   alias MishkaCmsCore.Settings
   alias MishkaInstaller.Event.Hook
-  alias MishkaDocument.{Address, Provision, Section, Workspace, WorkspaceVersion}
+  alias MishkaDocument.{Address, ContentText, Provision, Section, Workspace, WorkspaceVersion}
 
   @workspace_fields [
     :id,
@@ -633,20 +633,8 @@ defmodule MishkaDocument.Plugins.PageSeo do
   end
 
   # The start of a page's text, without its markup.
-  defp summary(html) when is_binary(html) do
-    text =
-      html
-      |> String.replace(~r/<[^>]*>/, " ")
-      |> String.replace(["&nbsp;", "&lt;", "&gt;", "&quot;", "&#39;", "&amp;"], fn
-        "&nbsp;" -> " "
-        "&lt;" -> "<"
-        "&gt;" -> ">"
-        "&quot;" -> "\""
-        "&#39;" -> "'"
-        "&amp;" -> "&"
-      end)
-      |> String.replace(~r/\s+/u, " ")
-      |> String.trim()
+  defp summary(html) do
+    text = ContentText.text(html)
 
     cond do
       text == "" -> nil
@@ -654,8 +642,6 @@ defmodule MishkaDocument.Plugins.PageSeo do
       true -> String.slice(text, 0, @summary - 1) |> String.trim_trailing() |> Kernel.<>("…")
     end
   end
-
-  defp summary(_no_text), do: nil
 
   # The address of the site the canonical address is on, as `Seo.base/1` writes it.
   defp base(%{url: url}) when is_binary(url),
