@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Test.WorkspaceScopeTest do
   @moduledoc """
   When the workspace list collapses translations into their master, and when it stops, and which of

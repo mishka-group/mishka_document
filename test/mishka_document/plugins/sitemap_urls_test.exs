@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Plugins.SitemapUrlsTest do
   @moduledoc """
   What the documentation adds to a site's `/sitemap.xml`: each active document's front page and the

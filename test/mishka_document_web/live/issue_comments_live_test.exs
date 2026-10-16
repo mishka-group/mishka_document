@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Test.IssueCommentsLiveTest do
   @moduledoc """
   The comments under an expanded issue on the Issues page, seen by a master and by a tenant admin of

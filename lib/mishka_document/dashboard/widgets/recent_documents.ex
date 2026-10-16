@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Dashboard.Widgets.RecentDocuments do
   @moduledoc """
   Dashboard widget (a `dashboard:widgets` plugin): the most recently updated workspaces, each with its

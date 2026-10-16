@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Plugins.PageRecords do
   @moduledoc """
   Names the kinds of record the documentation's pages show — a workspace's front page, one of its

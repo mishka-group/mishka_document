@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Test.DashboardTest do
   @moduledoc """
   Mounts this extension's admin dashboard as a logged-in master admin — the page-level guard a

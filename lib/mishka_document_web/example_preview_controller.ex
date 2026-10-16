@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.ExamplePreviewController do
   @moduledoc """
   Answers `/_preview/doc-example/:kind/:id/:index` with `MishkaDocumentWeb.Live.ExamplePreview`: one

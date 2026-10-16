@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Plugins.SectionShareCard do
   @moduledoc """
   A plain mishka_installer plugin: after a documentation page is saved (`document:section:after_save` — created or updated, a

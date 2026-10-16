@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Test.SidebarMenuTest do
   @moduledoc """
   The document extension's `"sidebar:menus"` plugin: that it contributes its entry to the admin nav,

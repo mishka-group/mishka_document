@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Plugins.ShareCardTargetsTest do
   @moduledoc """
   What the documentation answers on `runtime:share_card:targets`: every card of a site a visitor

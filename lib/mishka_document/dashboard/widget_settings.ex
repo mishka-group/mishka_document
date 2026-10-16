@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Dashboard.WidgetSettings do
   @moduledoc """
   Registers every mishka_document dashboard widget's own settings with the Settings page through the

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Calculations.EffectivePermissions do
   @moduledoc """
   The permissions a section — one page of a document — opens with on its page, in its sitemap

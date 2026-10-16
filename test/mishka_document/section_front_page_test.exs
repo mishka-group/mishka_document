@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Test.SectionFrontPageTest do
   @moduledoc """
   A page marked as its version's front page (`MishkaDocument.Section.front_page`) is drawn at its

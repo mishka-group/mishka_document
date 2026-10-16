@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Test.WorkspaceVersionCloneTest do
   @moduledoc """
   The versions screen's Clone row action, as an admin uses it: the button on each row for an admin

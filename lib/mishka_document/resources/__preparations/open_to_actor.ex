@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   @moduledoc """
   Keeps a public read to the records its reader may open, by the rule the record's page keeps: a

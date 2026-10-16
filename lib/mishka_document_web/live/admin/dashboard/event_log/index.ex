@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Live.Admin.Dashboard.EventLog.Index do
   @moduledoc """
   Admin event-log page at `/admin/dashboard/document/event-logs`. Mounts the standard

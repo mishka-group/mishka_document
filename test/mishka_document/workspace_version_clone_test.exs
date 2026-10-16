@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
   @moduledoc """
   `MishkaDocument.WorkspaceVersion`'s `:clone` and `:master_clone` write a new draft version of the

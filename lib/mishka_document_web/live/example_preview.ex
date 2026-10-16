@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Live.ExamplePreview do
   @moduledoc """
   One `doc-example` of a page of a document, or of one of its notes, drawn alone and live: the page

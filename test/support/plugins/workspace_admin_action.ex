@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Test.Plugins.WorkspaceAdminAction do
   @moduledoc """
   Test plugin on `document:workspace:admin_actions`: reports what it is handed to the

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Dashboard.WidgetsTest do
   @moduledoc """
   Each document dashboard widget is its own `dashboard:widgets` plugin. These call each plugin's
