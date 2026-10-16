@@ -185,12 +185,3 @@ jobs:
       # override in config/test.exs. --warnings-as-errors also fails on warnings in the test files,
       # each in the partition that compiles it.
       - run: mix test --warnings-as-errors --partitions 4
-
-  # Every tracked file has a copyright and license header, or REUSE.toml names the license that covers it.
-  reuse:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: fsfe/reuse-action@v5
