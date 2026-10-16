@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Templates.DocumentSection do
   @moduledoc """
   The sections list: full-width cards beside a rail of workspace panels.

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Validations.OpenToActor do
   @moduledoc """
   Refuses a write onto a record its actor may not open — a bookmark on a locked page of a document,

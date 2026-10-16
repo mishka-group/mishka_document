@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Test.SectionHighlightTest do
   @moduledoc """
   A page's text is a whole documentation page — kilobytes of it, code blocks and all — and its code

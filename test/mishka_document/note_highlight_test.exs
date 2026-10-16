@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Test.NoteHighlightTest do
   @moduledoc """
   A note's text is stored the way a page's is: scrubbed by the same `html5` sanitizer, so a code

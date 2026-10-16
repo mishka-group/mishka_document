@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Validations.SectionAddress do
   @moduledoc """
   Refuses a page whose whole address in its version (`MishkaDocument.Address`) another page of the

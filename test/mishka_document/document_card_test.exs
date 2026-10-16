@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Templates.DocumentCardTest do
   @moduledoc """
   The workspace card's data reads. Every one of them has to survive a record the viewer is not allowed

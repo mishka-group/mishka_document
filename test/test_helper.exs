@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # The CMS's application supervisor owns these; running the extension's suite on its own means
 # starting the ones a JSON API request actually touches, and nothing more:
 #

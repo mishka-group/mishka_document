@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.ActivityDiscoveryTest do
   @moduledoc """
   The activity log finds THIS extension's event log, and the shared source claims its broadcasts.

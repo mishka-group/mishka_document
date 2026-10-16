@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Helpers.DayMarks do
   @moduledoc """
   Ash preparation that tells each event-log row whether it opens a new day in the timeline, and — when

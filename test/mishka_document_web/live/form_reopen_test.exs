@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Test.FormReopenTest do
   @moduledoc """
   The document pages keep their forms mounted in a modal and only hide them, so a close that sends

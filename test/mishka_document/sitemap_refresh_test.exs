@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.SitemapRefreshTest do
   @moduledoc """
   A write of a workspace, a version or a section schedules its site's `"sitemap"` job, tenant and

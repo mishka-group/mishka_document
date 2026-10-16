@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.ShareCardsTest do
   @moduledoc """
   The documentation's share cards (`MishkaCmsCore.Runtime.ShareCard`): which card a document and a

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Changes.EnsureAddressPages do
   @moduledoc """
   Gives a document the two pages its own address is read at, when the address is set — its front

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.SectionDraftPermissionsTest do
   @moduledoc """
   A draft carries the permissions its page opens with, as it carries its SEO Tags and structured

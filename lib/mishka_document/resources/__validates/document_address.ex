@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Validations.DocumentAddress do
   @moduledoc """
   Refuses a document's `path` — its own address, `/chelekom/docs` — that the site could not answer,

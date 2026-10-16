@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.WorkspaceVersionLinksTest do
   @moduledoc """
   A section, a section draft and a note draft live in one workspace version and name the records

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Resources.Helpers.AdvisoryLockKeyGenerator do
   @moduledoc """
   Extends AshEvents default advisory lock key generator to support nil tenants.

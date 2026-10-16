@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.ForeignTenantJoinRowsTest do
   @moduledoc """
   A site user writes join, bookmark, follow and view rows for its own site only, even when the

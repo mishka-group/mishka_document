@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Api.Json.UserIncludeTest do
   @moduledoc """
   Every JSON:API include in this extension that ends at a `MishkaCmsCore.Accounts.User` — an issue's

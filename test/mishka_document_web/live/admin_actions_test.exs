@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocumentWeb.Test.AdminActionsTest do
   @moduledoc """
   The buttons plugins add to a document's Sections screen on `document:workspace:admin_actions`

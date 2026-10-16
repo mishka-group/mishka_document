@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mishka Group contributors <https://github.com/mishka-group/mishka_document/graphs/contributors>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule MishkaDocument.Plugins.SitemapUrls do
   @moduledoc """
   Lists a site's published documentation in its `/sitemap.xml`, through the `seo:sitemap:urls`
