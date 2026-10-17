@@ -80,7 +80,6 @@ defmodule MishkaDocument.MixProject do
       {:jump_credo_checks, "~> 0.6", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
-      {:reach, "~> 2.8", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mishka_cms_core, path: "../mishka_cms_core"},
       {:mishka_gervaz, path: "../mishka_gervaz"}
@@ -100,7 +99,6 @@ defmodule MishkaDocument.MixProject do
         "hex.audit",
         "dialyzer",
         "ex_dna --max-clones 0",
-        "reach.check --arch --smells",
         "test"
       ]
     ]
