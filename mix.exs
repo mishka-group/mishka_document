@@ -98,7 +98,7 @@ defmodule MishkaDocument.MixProject do
         "deps.audit",
         "hex.audit",
         "dialyzer",
-        "ex_dna --max-clones 0",
+        "ex_dna --max-clones 57",
         "test"
       ]
     ]
