@@ -95,10 +95,10 @@ defmodule MishkaDocumentWeb.Test.ExamplePreviewTest do
 
   @content "<p>Before.</p>" <>
              ~s(<pre><code>[[component doc-example]]Code[[/component]]</code></pre>) <>
-             "[[component doc-example title=\"First\"]][[component doc-callout tone=\"tip\"]]One" <>
+             ~s([[component doc-example title="First"]][[component doc-callout tone="tip"]]One) <>
              "[[/component]][[/component]]" <>
              "<p>Between.</p>" <>
-             "[[component doc-example title=\"Second\"]][[component doc-callout tone=\"info\"]]Two" <>
+             ~s([[component doc-example title="Second"]][[component doc-callout tone="info"]]Two) <>
              "[[/component]][[/component]]"
 
   defp drawn(html, selector),
@@ -163,7 +163,7 @@ defmodule MishkaDocumentWeb.Test.ExamplePreviewTest do
 
       assert [policy] = get_resp_header(conn, "content-security-policy")
       nonce = conn.assigns.csp_nonce
-      assert is_binary(nonce)
+      assert byte_size(nonce) >= 16
 
       directives =
         policy

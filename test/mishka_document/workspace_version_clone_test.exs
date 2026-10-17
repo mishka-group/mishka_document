@@ -474,7 +474,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
 
       {:ok, version} = clone(source, admin)
 
-      assert_receive {:version_cloned, payload, meta}, 5000
+      assert_receive {:version_cloned, payload, meta}
       assert payload.version_id == version.id
       assert payload.source_version_id == source.id
       assert payload.workspace_id == source.workspace_id
@@ -811,8 +811,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
       assert {:ok, detached} = detach(copy, admin)
       assert detached.source_version_id == nil
 
-      assert_receive {:version_cloned, %{version_id: id, source_version_id: from, pages: 6}, _},
-                     5000
+      assert_receive {:version_cloned, %{version_id: id, source_version_id: from, pages: 6}, _}
 
       assert id == copy.id and from == source.id
 

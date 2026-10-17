@@ -204,7 +204,9 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionLineageTest do
         body = Jason.decode!(response.resp_body)
         assert body["data"]["attributes"]["new_version_id"] == new_version.id
         assert body["data"]["attributes"]["source_version_id"] == source_version.id
-        assert body["data"]["attributes"]["cloned_at"] != nil
+
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["cloned_at"])
       end
 
       test "master admin can create lineage record with explicit site_id", %{
@@ -421,7 +423,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionLineageTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert length(body["data"]) >= 1
+        assert [_ | _] = body["data"]
         assert Enum.any?(body["data"], fn item -> item["id"] == lineage.id end)
       end
     end
@@ -560,7 +562,8 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionLineageTest do
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
         # Timestamps should be close (within a few seconds due to processing time)
-        assert body["data"]["attributes"]["cloned_at"] != nil
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["cloned_at"])
       end
 
       test "tenant admin cannot update other tenant's lineage", %{
@@ -696,7 +699,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionLineageTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert length(body["data"]) >= 1
+        assert [_ | _] = body["data"]
         assert Enum.any?(body["data"], fn item -> item["id"] == lineage.id end)
       end
 
@@ -986,7 +989,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionLineageTest do
         body = Jason.decode!(response.resp_body)
 
         # Verify included data
-        assert body["included"] != nil
+        assert [_ | _] = body["included"]
         included_versions = Enum.filter(body["included"], &(&1["type"] == "workspace_version"))
         assert length(included_versions) == 2
 

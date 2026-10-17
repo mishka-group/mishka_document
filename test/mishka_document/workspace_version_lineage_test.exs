@@ -21,7 +21,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionLineageTest do
         site = create_site!()
         lineage = create_workspace_version_lineage!(site_id: site.id)
 
-        assert is_binary(lineage.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(lineage.id)
         assert String.length(lineage.id) == 36
       end
 
@@ -57,7 +57,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionLineageTest do
         assert lineage.new_version_id == new_version.id
         assert lineage.source_version_id == source_version.id
         assert lineage.site_id == site.id
-        assert lineage.cloned_at != nil
+        assert %DateTime{} = lineage.cloned_at
       end
 
       test "auto-assigns site_id from tenant context" do
@@ -274,7 +274,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionLineageTest do
           )
           |> Ash.create!()
 
-        assert lineage.cloned_at != nil
+        assert %DateTime{} = lineage.cloned_at
         assert is_struct(lineage.cloned_at, DateTime)
       end
 
@@ -930,7 +930,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionLineageTest do
         site = create_site!()
         lineage = create_workspace_version_lineage!(site_id: site.id)
 
-        assert lineage.inserted_at != nil
+        assert %DateTime{} = lineage.inserted_at
         assert is_struct(lineage.inserted_at, DateTime)
       end
 
@@ -938,7 +938,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionLineageTest do
         site = create_site!()
         lineage = create_workspace_version_lineage!(site_id: site.id)
 
-        assert lineage.updated_at != nil
+        assert %DateTime{} = lineage.updated_at
         assert is_struct(lineage.updated_at, DateTime)
       end
 
@@ -991,9 +991,9 @@ defmodule MishkaDocument.Test.WorkspaceVersionLineageTest do
             authorize?: false
           )
 
-        assert loaded.new_version != nil
-        assert loaded.source_version != nil
-        assert loaded.site != nil
+        assert loaded.new_version.id == lineage.new_version_id
+        assert loaded.source_version.id == lineage.source_version_id
+        assert loaded.site.id == site.id
       end
     end
 
@@ -1039,13 +1039,13 @@ defmodule MishkaDocument.Test.WorkspaceVersionLineageTest do
         site = create_site!()
         lineage = create_workspace_version_lineage!(site_id: site.id)
 
-        assert lineage.id != nil
-        assert lineage.new_version_id != nil
-        assert lineage.source_version_id != nil
-        assert lineage.site_id != nil
-        assert lineage.cloned_at != nil
-        assert lineage.inserted_at != nil
-        assert lineage.updated_at != nil
+        assert {:ok, _uuid} = Ecto.UUID.cast(lineage.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(lineage.new_version_id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(lineage.source_version_id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(lineage.site_id)
+        assert %DateTime{} = lineage.cloned_at
+        assert %DateTime{} = lineage.inserted_at
+        assert %DateTime{} = lineage.updated_at
       end
     end
   end

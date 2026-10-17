@@ -4,11 +4,10 @@
 
 defmodule MishkaDocument.Test.ContentFactsTest do
   @moduledoc """
-  The components, the icons and the classes a page's or a note's text names, stored when it is
-  written —
-  `MishkaDocument.Resources.Changes.ContentFacts` — which
-  `MishkaDocument.Plugins.ContentComponents` hands a site's stylesheet. Reading either works out
-  nothing.
+  What a page's or a note's text names — its components, icons and classes — is stored when it is
+  written (`MishkaDocument.Resources.Changes.ContentFacts`), because
+  `MishkaDocument.Plugins.ContentComponents` hands a site's stylesheet what is stored and reading
+  either text out works nothing out.
   """
   use MishkaDocument.DataCase, async: false
   use Oban.Testing, repo: MishkaDocument.Repo

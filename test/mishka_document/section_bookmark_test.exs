@@ -19,7 +19,7 @@ defmodule MishkaDocument.Test.SectionBookmarkTest do
 
       test "uses UUID v7 for primary keys" do
         bookmark = create_section_bookmark!()
-        assert is_binary(bookmark.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(bookmark.id)
         assert String.length(bookmark.id) == 36
       end
 
@@ -195,7 +195,7 @@ defmodule MishkaDocument.Test.SectionBookmarkTest do
           |> Ash.Query.for_read(:my_bookmarks, %{}, authorize?: false)
           |> Ash.read!()
 
-        assert length(result.results) == 0
+        assert result.results == []
       end
 
       test "my_bookmarks supports pagination" do
@@ -427,7 +427,7 @@ defmodule MishkaDocument.Test.SectionBookmarkTest do
           |> Ash.Query.for_read(:my_bookmarks, %{}, authorize?: false)
           |> Ash.read!()
 
-        assert length(result.results) == 0
+        assert result.results == []
       end
 
       test "users can only read their own bookmarks with authorization" do
@@ -513,12 +513,12 @@ defmodule MishkaDocument.Test.SectionBookmarkTest do
     describe "timestamps" do
       test "sets inserted_at on creation" do
         bookmark = create_section_bookmark!()
-        assert bookmark.inserted_at != nil
+        assert %DateTime{} = bookmark.inserted_at
       end
 
       test "sets updated_at on creation" do
         bookmark = create_section_bookmark!()
-        assert bookmark.updated_at != nil
+        assert %DateTime{} = bookmark.updated_at
       end
     end
   end

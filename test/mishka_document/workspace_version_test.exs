@@ -19,7 +19,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionTest do
 
       test "uses UUID v7 for primary keys" do
         version = create_workspace_version!()
-        assert is_binary(version.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(version.id)
         assert String.length(version.id) == 36
       end
 
@@ -141,7 +141,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionTest do
           )
 
         assert version.status == :stable
-        assert version.published_at != nil
+        assert %DateTime{} = version.published_at
       end
 
       test "accepts optional source_version_id argument" do
@@ -506,7 +506,7 @@ defmodule MishkaDocument.Test.WorkspaceVersionTest do
           |> Ash.Changeset.for_update(:publish, %{}, tenant: site.id, authorize?: false)
           |> Ash.update!()
 
-        assert published.published_at != nil
+        assert %DateTime{} = published.published_at
         assert published.status == :stable
       end
 

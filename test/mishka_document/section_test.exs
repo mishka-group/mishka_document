@@ -18,7 +18,7 @@ defmodule MishkaDocument.Test.SectionTest do
 
       test "uses UUID v7 for primary keys" do
         section = create_section!()
-        assert is_binary(section.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(section.id)
         assert String.length(section.id) == 36
       end
     end
@@ -624,7 +624,7 @@ defmodule MishkaDocument.Test.SectionTest do
           |> Ash.Query.page(limit: 100)
           |> Ash.read!()
 
-        assert length(sections.results) > 0
+        assert [_ | _] = sections.results
       end
 
       test "public_get action retrieves single approved section" do

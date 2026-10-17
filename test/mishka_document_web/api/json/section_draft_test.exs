@@ -1548,7 +1548,8 @@ defmodule MishkaDocumentWeb.Api.Json.SectionDraftTest do
         body = Jason.decode!(response.resp_body)
 
         # Verify draft is marked as applied
-        assert body["data"]["attributes"]["applied_at"] != nil
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["applied_at"])
 
         # Verify the section was updated with draft changes
         updated_section =
@@ -1620,7 +1621,8 @@ defmodule MishkaDocumentWeb.Api.Json.SectionDraftTest do
         body = Jason.decode!(response.resp_body)
 
         # Verify draft is marked as applied
-        assert body["data"]["attributes"]["applied_at"] != nil
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["applied_at"])
 
         # Verify a new section was created
         sections =

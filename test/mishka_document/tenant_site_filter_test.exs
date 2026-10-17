@@ -61,8 +61,8 @@ defmodule MishkaDocument.Test.TenantSiteFilterTest do
         site1_events = Enum.filter(events, &(&1.metadata["site_id"] == site1.id))
         site2_events = Enum.filter(events, &(&1.metadata["site_id"] == site2.id))
 
-        assert length(site1_events) >= 1
-        assert length(site2_events) >= 1
+        assert [_ | _] = site1_events
+        assert [_ | _] = site2_events
       end
 
       test "sees events created by master users" do
@@ -74,7 +74,7 @@ defmodule MishkaDocument.Test.TenantSiteFilterTest do
         events = read_table(master_user)
         master_events = Enum.filter(events, &(&1.actor_id == master_user.id))
 
-        assert length(master_events) >= 1
+        assert [_ | _] = master_events
       end
 
       test "sees system events (no actor)" do
@@ -86,7 +86,7 @@ defmodule MishkaDocument.Test.TenantSiteFilterTest do
         events = read_table(master_user)
         system_events = Enum.filter(events, &is_nil(&1.actor_id))
 
-        assert length(system_events) >= 1
+        assert [_ | _] = system_events
       end
     end
 
@@ -100,7 +100,7 @@ defmodule MishkaDocument.Test.TenantSiteFilterTest do
         events = read_table(tenant_user)
         site_events = Enum.filter(events, &(&1.metadata["site_id"] == site.id))
 
-        assert length(site_events) >= 1
+        assert [_ | _] = site_events
       end
 
       test "does not see events from other sites" do
@@ -126,8 +126,7 @@ defmodule MishkaDocument.Test.TenantSiteFilterTest do
         events = read_table(tenant_user)
         found = Enum.find(events, &(&1.id == event.id))
 
-        assert found != nil
-        assert is_nil(found.actor_id)
+        assert %{actor_id: nil} = found
       end
     end
 
@@ -159,8 +158,8 @@ defmodule MishkaDocument.Test.TenantSiteFilterTest do
         events = read_table(tenant_user1)
         found = Enum.find(events, &(&1.id == event.id))
 
-        assert found != nil
-        assert found.actor_id == tenant_user2.id
+        assert %{actor_id: actor_id} = found
+        assert actor_id == tenant_user2.id
       end
 
       test "does not see events created by master users even with matching site_id" do
@@ -228,7 +227,8 @@ defmodule MishkaDocument.Test.TenantSiteFilterTest do
         events = read_table(tenant_user)
         found = Enum.find(events, &(&1.id == event.id))
 
-        assert found != nil
+        assert %{id: found_id} = found
+        assert found_id == event.id
       end
     end
   end

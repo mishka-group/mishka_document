@@ -516,10 +516,7 @@ defmodule MishkaDocumentWeb.Api.Json.IssueCommentTest do
         body = Jason.decode!(response.resp_body)
         assert body["errors"]
 
-        error_messages =
-          body["errors"]
-          |> Enum.map(& &1["detail"])
-          |> Enum.join(" ")
+        error_messages = Enum.map_join(body["errors"], " ", & &1["detail"])
 
         assert error_messages =~ "not found or does not belong to your site"
       end

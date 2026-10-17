@@ -14,8 +14,8 @@ defmodule MishkaDocument.ShareCardsTest do
 
   alias MishkaCmsCore.PluginRegistrations
   alias MishkaCmsCore.Runtime.Workers.ShareCardRefreshWorker
-  alias MishkaDocument.{Section, ShareCards, Workspace}
   alias MishkaDocument.Plugins.{SectionShareCard, WorkspaceShareCard}
+  alias MishkaDocument.{Section, ShareCards, Workspace}
   alias MishkaGervaz.Resource.Info.Form, as: FormInfo
   alias MishkaInstaller.Event.{Event, EventHandler}
 

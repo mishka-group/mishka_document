@@ -9,8 +9,8 @@ defmodule MishkaDocument.Test.SectionTagTest do
   use MishkaDocument.DataCase, async: false
 
   if Code.ensure_loaded?(MishkaDocument) do
-    alias MishkaDocument.SectionTag
     alias MishkaDocument.Section
+    alias MishkaDocument.SectionTag
     alias MishkaDocument.Tag
 
     require Ash.Query
@@ -23,8 +23,8 @@ defmodule MishkaDocument.Test.SectionTagTest do
 
       test "has composite primary key (section_id, tag_id)" do
         section_tag = create_section_tag!()
-        assert is_binary(section_tag.section_id)
-        assert is_binary(section_tag.tag_id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(section_tag.section_id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(section_tag.tag_id)
         assert String.length(section_tag.section_id) == 36
         assert String.length(section_tag.tag_id) == 36
       end
@@ -37,8 +37,7 @@ defmodule MishkaDocument.Test.SectionTagTest do
       test "has unique identity on section_id and tag_id" do
         identities = Ash.Resource.Info.identities(SectionTag)
         unique_identity = Enum.find(identities, &(&1.name == :unique_section_tag))
-        assert unique_identity != nil
-        assert unique_identity.keys == [:section_id, :tag_id]
+        assert %{keys: [:section_id, :tag_id]} = unique_identity
       end
     end
 
@@ -484,8 +483,7 @@ defmodule MishkaDocument.Test.SectionTagTest do
           |> Ash.Query.filter(expr(section_id == ^section.id and tag_id == ^tag.id))
           |> Ash.read!(authorize?: false)
 
-        assert length(section_tags_after) == 0
-
+        assert section_tags_after == []
         # Tag should still exist
         fetched_tag = Ash.get!(Tag, tag.id, action: :master_get, authorize?: false)
         assert fetched_tag.id == tag.id
@@ -521,8 +519,7 @@ defmodule MishkaDocument.Test.SectionTagTest do
           |> Ash.Query.filter(expr(section_id == ^section.id and tag_id == ^tag.id))
           |> Ash.read!(authorize?: false)
 
-        assert length(section_tags_after) == 0
-
+        assert section_tags_after == []
         # Section should still exist
         fetched_section =
           Ash.get!(Section, section.id, action: :master_get, authorize?: false)
@@ -565,8 +562,7 @@ defmodule MishkaDocument.Test.SectionTagTest do
           |> Ash.Query.filter(expr(section_id == ^section.id))
           |> Ash.read!(authorize?: false)
 
-        assert length(section_tags_after) == 0
-
+        assert section_tags_after == []
         # But all tags should still exist
         assert Ash.get!(Tag, tag1.id, action: :master_get, authorize?: false)
         assert Ash.get!(Tag, tag2.id, action: :master_get, authorize?: false)
@@ -608,8 +604,7 @@ defmodule MishkaDocument.Test.SectionTagTest do
           |> Ash.Query.filter(expr(tag_id == ^tag.id))
           |> Ash.read!(authorize?: false)
 
-        assert length(section_tags_after) == 0
-
+        assert section_tags_after == []
         # But all sections should still exist
         assert Ash.get!(Section, section1.id, action: :master_get, authorize?: false)
         assert Ash.get!(Section, section2.id, action: :master_get, authorize?: false)
@@ -721,20 +716,20 @@ defmodule MishkaDocument.Test.SectionTagTest do
           |> Ash.Query.filter(expr(section_id == ^section.id and tag_id == ^tag.id))
           |> Ash.read!(authorize?: false)
 
-        assert length(section_tags_after) == 0
+        assert section_tags_after == []
       end
     end
 
     describe "timestamps" do
       test "sets inserted_at on creation" do
         section_tag = create_section_tag!()
-        assert section_tag.inserted_at != nil
+        assert %DateTime{} = section_tag.inserted_at
         assert %DateTime{} = section_tag.inserted_at
       end
 
       test "sets updated_at on creation" do
         section_tag = create_section_tag!()
-        assert section_tag.updated_at != nil
+        assert %DateTime{} = section_tag.updated_at
         assert %DateTime{} = section_tag.updated_at
       end
     end

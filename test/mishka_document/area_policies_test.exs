@@ -526,8 +526,10 @@ defmodule MishkaDocument.AreaPoliciesTest do
       writers =
         MishkaDocument
         |> Ash.Domain.Info.resources()
-        |> Enum.filter(&(AshEvents.Events in Spark.extensions(&1)))
-        |> Enum.filter(&(AshEvents.Events.Info.events_event_log!(&1) == MishkaDocument.EventLog))
+        |> Enum.filter(fn resource ->
+          AshEvents.Events in Spark.extensions(resource) and
+            AshEvents.Events.Info.events_event_log!(resource) == MishkaDocument.EventLog
+        end)
 
       for resource <- writers do
         owners =
@@ -597,9 +599,13 @@ defmodule MishkaDocument.AreaPoliciesTest do
         |> Ash.Query.limit(1)
         |> Ash.read(actor: actor)
 
-      assert match?({:ok, []}, result) or match?({:ok, %{results: []}}, result) or
-               match?({:error, %Ash.Error.Forbidden{}}, result),
-             "#{inspect(resource)} gave a site admin every site's rows"
+      rows =
+        case result do
+          {:ok, %{results: rows}} -> rows
+          {:ok, rows} -> rows
+        end
+
+      assert rows == [], "#{inspect(resource)} gave a site admin every site's rows"
     end
   end
 

@@ -305,7 +305,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert is_list(body["data"])
+        assert [_ | _] = body["data"]
 
         ids = Enum.map(body["data"], & &1["id"])
         assert workspace1.id in ids
@@ -424,7 +424,6 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert is_list(body["data"])
         assert length(body["data"]) == 2
       end
 
@@ -460,7 +459,6 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert is_list(body["data"])
         assert length(body["data"]) == 2
       end
     end
@@ -848,7 +846,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert is_list(body["data"])
+        assert [_ | _] = body["data"]
 
         ids = Enum.map(body["data"], & &1["id"])
         assert active1.id in ids
@@ -1144,8 +1142,6 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceTest do
 
         # Verify the relationship version IDs match what we created
         relationship_version_ids = Enum.map(relationship_versions, & &1["id"])
-        # Note: The relationship may return versions in different order or filtered
-        # Let's just verify we got versions back
         assert length(relationship_version_ids) == 30
 
         # Fetch small workspace with all versions

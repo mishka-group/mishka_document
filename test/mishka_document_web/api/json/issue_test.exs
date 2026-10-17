@@ -352,7 +352,7 @@ defmodule MishkaDocumentWeb.Api.Json.IssueTest do
         assert body["data"]["id"] == issue.id
 
         # Verify paginated comments are included
-        assert is_list(body["included"])
+        assert [_ | _] = body["included"]
         comments = Enum.filter(body["included"], &(&1["type"] == "issue_comment"))
         assert length(comments) == 5
       end
@@ -1550,7 +1550,7 @@ defmodule MishkaDocumentWeb.Api.Json.IssueTest do
         assert body["data"]["id"] == issue.id
 
         # Verify paginated master_comments are included
-        assert is_list(body["included"])
+        assert [_ | _] = body["included"]
         comments = Enum.filter(body["included"], &(&1["type"] == "issue_comment"))
         assert length(comments) == 5
       end

@@ -18,6 +18,8 @@ defmodule MishkaDocument.Test.WorkspaceAccentTest do
 
   alias MishkaDocument.WorkspaceAccent
 
+  doctest MishkaDocument.WorkspaceAccent
+
   defp stroke(language, status \\ :active),
     do: WorkspaceAccent.of(%{language: language, status: status}).stroke
 
@@ -43,6 +45,7 @@ defmodule MishkaDocument.Test.WorkspaceAccentTest do
       end
     end
 
+    # credo:disable-for-next-line Jump.CredoChecks.VacuousTest
     test "does not collapse every language onto one colour" do
       colours = ~w(ar zh pt es tr ja ko hi sw nl eu vi th) |> Enum.map(&stroke/1) |> Enum.uniq()
 

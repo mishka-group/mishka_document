@@ -18,7 +18,7 @@ defmodule MishkaDocument.Test.NoteTest do
 
       test "uses UUID v7 for primary keys" do
         note = create_note!()
-        assert is_binary(note.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(note.id)
         assert String.length(note.id) == 36
       end
 
@@ -403,7 +403,7 @@ defmodule MishkaDocument.Test.NoteTest do
         archived_note =
           Ash.get!(Note, note.id, action: :get_archived, tenant: note.site_id, authorize?: false)
 
-        assert archived_note.archived_at != nil
+        assert %DateTime{} = archived_note.archived_at
         assert archived_note.content_review_status == :archived
         assert archived_note.technical_review_status == :archived
       end
@@ -625,13 +625,13 @@ defmodule MishkaDocument.Test.NoteTest do
     describe "timestamps" do
       test "sets inserted_at on creation" do
         note = create_note!()
-        assert note.inserted_at != nil
+        assert %DateTime{} = note.inserted_at
         assert %DateTime{} = note.inserted_at
       end
 
       test "sets updated_at on creation" do
         note = create_note!()
-        assert note.updated_at != nil
+        assert %DateTime{} = note.updated_at
         assert %DateTime{} = note.updated_at
       end
 

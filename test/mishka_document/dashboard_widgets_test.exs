@@ -19,9 +19,9 @@ defmodule MishkaDocument.Dashboard.WidgetsTest do
   alias MishkaCmsCore.Dashboard.Widget
 
   alias MishkaDocument.Dashboard.Widgets.{
+    OpenIssues,
     RecentDocuments,
     VersionActivity,
-    OpenIssues,
     WorkspacesSummary
   }
 
@@ -33,6 +33,7 @@ defmodule MishkaDocument.Dashboard.WidgetsTest do
   ]
 
   for {module, id, marker} <- @widgets do
+    # credo:disable-for-next-line Jump.CredoChecks.VacuousTest
     test "#{id}: call/1 appends a valid descriptor" do
       assert {:reply,
               %{widgets: [%Widget{id: unquote(id), component: {unquote(module), :render}}]}} =
@@ -40,7 +41,7 @@ defmodule MishkaDocument.Dashboard.WidgetsTest do
     end
 
     test "#{id}: load/1 runs and renders without the failure placeholder" do
-      data = apply(unquote(module), :load, [master()])
+      data = unquote(module).load(master())
 
       html =
         render_component(&Widget.card/1,

@@ -1693,7 +1693,7 @@ defmodule MishkaDocumentWeb.Api.Json.TagTest do
             authorize?: false
           )
 
-        refute is_nil(archived_tag.archived_at)
+        assert %DateTime{} = archived_tag.archived_at
       end
     end
   end

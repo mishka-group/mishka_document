@@ -26,8 +26,8 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
   alias MishkaCmsCore.Runtime.Component
   alias MishkaCmsCore.Runtime.Handlers.UiKitUpgrade
   alias MishkaCmsCore.Runtime.Page
-  alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaCmsCore.Runtime.PageDraft
+  alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaDocument.Plugins.ShareCardTargets
   alias MishkaDocument.Provision

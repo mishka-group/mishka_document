@@ -257,6 +257,7 @@ defmodule MishkaDocumentWeb.Test.AdminActionsTest do
       assert [%{id: "probe", label: "Probe action", icon: "hero-bolt", assigns: assigns}] =
                AdminActions.actions(context, nil)
 
+      # credo:disable-for-lines:4 Jump.CredoChecks.AvoidSocketAssignsInTest
       assert %{greeting: "hello", workspace: %{slug: "probe"}, current_user: :me} =
                AdminActions.assigns(%{assigns: assigns}, context, :me)
     end

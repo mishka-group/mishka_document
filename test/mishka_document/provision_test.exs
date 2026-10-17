@@ -112,9 +112,10 @@ defmodule MishkaDocument.ProvisionTest do
       Enum.map(snippets(site), &{&1.name, &1.source})
   end
 
-  # Both spellings, for the reason `ComponentCompiler.declared_keys/1` takes both: a declaration is a
-  # map that has been through JSON and through Ash's own casting.
-  defp attr_name(attr), do: to_string(attr["name"] || attr[:name])
+  # A declaration is a map that has been through JSON and through Ash's own casting, so its keys are
+  # strings or atoms (`ComponentCompiler.declared_keys/1` takes both).
+  defp attr_name(attr),
+    do: attr |> Map.new(fn {key, value} -> {to_string(key), value} end) |> Map.fetch!("name")
 
   defp bundle_components do
     MishkaDocument.Kit.bundle_path()

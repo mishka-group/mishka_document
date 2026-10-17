@@ -265,7 +265,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert is_list(body["data"])
+        assert [_ | _] = body["data"]
 
         ids = Enum.map(body["data"], & &1["id"])
         assert version1.id in ids
@@ -575,7 +575,9 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
         assert body["data"]["attributes"]["status"] == "stable"
-        assert body["data"]["attributes"]["published_at"] != nil
+
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["published_at"])
       end
 
       test "cannot publish already published version", %{
@@ -797,7 +799,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
 
         assert response.status == 200
         body = Jason.decode!(response.resp_body)
-        assert is_list(body["data"])
+        assert [_ | _] = body["data"]
 
         ids = Enum.map(body["data"], & &1["id"])
         assert alpha.id in ids
@@ -1258,19 +1260,17 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceVersionTest do
 
         # Find our version in the results
         version_data = Enum.find(body["data"], &(&1["id"] == version.id))
-        assert version_data != nil
+        assert %{"id" => _} = version_data
 
         # Verify workspace relationship is present
         assert version_data["relationships"]["workspace"]["data"]["id"] == workspace.id
 
         # Verify included workspace data
-        assert body["included"] != nil
+        assert [_ | _] = body["included"]
         included_workspaces = Enum.filter(body["included"], &(&1["type"] == "workspace"))
-        assert length(included_workspaces) >= 1
-
+        assert [_ | _] = included_workspaces
         workspace_included = Enum.find(included_workspaces, &(&1["id"] == workspace.id))
-        assert workspace_included != nil
-        assert workspace_included["attributes"]["name"] == "API Documentation"
+        assert %{"attributes" => %{"name" => "API Documentation"}} = workspace_included
       end
     end
   end
