@@ -1397,7 +1397,7 @@ defmodule MishkaDocument.WorkspaceVersion do
   defp source_number(version) do
     [Map.get(version, :master_source_version), Map.get(version, :source_version)]
     |> Enum.find_value(fn
-      %__MODULE__{version_number: number} -> number
+      %{version_number: number} -> number
       _not_loaded -> nil
     end)
     |> Kernel.||(gettext("its source"))
