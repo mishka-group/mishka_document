@@ -1,0 +1,6 @@
+[
+  router: "test/support/router.ex",
+  ignore: ["Config.HTTPS", "Config.CSP"],
+  skip: true,
+  exit: "low"
+]
