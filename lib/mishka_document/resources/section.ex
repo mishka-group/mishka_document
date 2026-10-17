@@ -43,6 +43,7 @@ defmodule MishkaDocument.Section do
   import MishkaCmsCore.CoreComponents, only: [icon: 1]
   import MishkaGervaz.UIAdapters.Tailwind, only: [copy_button: 1]
   alias MishkaCmsCore.Localized
+  alias MishkaDocument.Resources.Helpers.Contributors
 
   # The card's action squares. `MishkaDocumentWeb.Templates.DocumentSection` gives them a row of their
   # own, so every one is icon-only and hides its label — which still reaches the DOM as `title` and as a
@@ -673,27 +674,11 @@ defmodule MishkaDocument.Section do
               end
 
             if workspace_version_id do
-              sql = """
-              SELECT DISTINCT el.actor_id::text
-              FROM mishka_document_event_logs el
-              WHERE el.actor_id IS NOT NULL
-                AND el.action IN ('create', 'master_create', 'update', 'master_update')
-                AND (
-                  (el.resource = 'Elixir.MishkaDocument.Section'
-                   AND el.metadata->>'workspace_version_id' = $1)
-                  OR
-                  (el.resource = 'Elixir.MishkaDocument.Note'
-                   AND el.metadata->>'workspace_version_id' = $1)
-                )
-              """
-
-              case Ecto.Adapters.SQL.query(@repo, sql, [workspace_version_id]) do
-                {:ok, %{rows: rows}} when rows != [] ->
-                  user_ids = Enum.map(rows, fn [id] -> id end)
-                  Ash.Query.filter(query, id in ^user_ids)
-
-                _ ->
-                  Ash.Query.filter(query, is_nil(id))
+              case Contributors.writers_in_version(workspace_version_id,
+                     actor: state.current_user
+                   ) do
+                [] -> Ash.Query.filter(query, is_nil(id))
+                user_ids -> Ash.Query.filter(query, id in ^user_ids)
               end
             else
               query
@@ -707,41 +692,9 @@ defmodule MishkaDocument.Section do
                 id when is_binary(id) -> [id]
               end
 
-            {site_id_clause, extra_params} =
-              case state.current_user do
-                %{id: _, site_id: nil} ->
-                  {"", []}
-
-                %{site_id: site_id} when is_binary(site_id) ->
-                  idx = length(user_ids) + 1
-
-                  {" AND el.actor_id IN (SELECT id FROM users WHERE site_id::text = $#{idx})",
-                   [site_id]}
-
-                _ ->
-                  {" AND FALSE", []}
-              end
-
-            placeholders =
-              user_ids
-              |> Enum.with_index(1)
-              |> Enum.map_join(", ", fn {_id, i} -> "$#{i}" end)
-
-            sql = """
-            SELECT DISTINCT el.record_id::text
-            FROM mishka_document_event_logs el
-            WHERE el.actor_id::text IN (#{placeholders})
-              AND el.action IN ('create', 'master_create', 'update', 'master_update')
-              AND el.resource = 'Elixir.MishkaDocument.Section'#{site_id_clause}
-            """
-
-            case Ecto.Adapters.SQL.query(@repo, sql, user_ids ++ extra_params) do
-              {:ok, %{rows: rows}} when rows != [] ->
-                section_ids = Enum.map(rows, fn [id] -> id end)
-                Ash.Query.filter(query, id in ^section_ids)
-
-              _ ->
-                Ash.Query.filter(query, is_nil(id))
+            case Contributors.sections_written_by(user_ids, actor: state.current_user) do
+              [] -> Ash.Query.filter(query, is_nil(id))
+              section_ids -> Ash.Query.filter(query, id in ^section_ids)
             end
           end
 
