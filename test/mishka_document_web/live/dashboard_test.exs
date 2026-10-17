@@ -132,6 +132,37 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     assert {:error, _gone} = Ash.get(Issue, deleted.id, action: :master_get, authorize?: false)
   end
 
+  # THE FILTER'S VALUE COMES FROM THE BROWSER: only the two the buttons send are taken, and any
+  # other string leaves the panel as it was instead of becoming an atom or raising.
+  test "the issues panel's archive filter takes only active or archived from the browser", %{
+    conn: conn
+  } do
+    archived = archived_issue!(master_site())
+
+    conn = log_in(conn, create_admin("docfilter@example.com"))
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document")
+
+    view |> element("#toggle-issues-btn") |> render_click()
+    view |> element(~s(#issues-panel button[phx-value-status="archived"])) |> render_click()
+    render_async(view, 5_000)
+    assert has_element?(view, "#issues-#{archived.id}")
+
+    for value <- ["nil", "false", "no_such_atom_zq9x", "", nil, %{"a" => "1"}, 7] do
+      render_hook(view, "toggle_issues_archive_filter", %{"status" => value})
+      render_async(view, 5_000)
+
+      assert Process.alive?(view.pid)
+      assert has_element?(view, "#issues-#{archived.id}")
+    end
+
+    render_hook(view, "toggle_issues_archive_filter", %{})
+    assert Process.alive?(view.pid)
+
+    view |> element(~s(#issues-panel button[phx-value-status="active"])) |> render_click()
+    render_async(view, 5_000)
+    refute has_element?(view, "#issues-#{archived.id}")
+  end
+
   # A workspace's activity names who did each thing by their account's address. The page is an admin
   # page and loads that account as the admin looking at it, so the address is there to show — and the
   # event a later edit broadcasts is loaded the same way when the page prepends it.

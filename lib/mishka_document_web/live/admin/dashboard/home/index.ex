@@ -159,16 +159,13 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
     {:noreply, close_issues_panel(socket)}
   end
 
-  def handle_event("toggle_issues_archive_filter", %{"status" => status}, socket) do
-    new_status = String.to_existing_atom(status)
+  def handle_event("toggle_issues_archive_filter", %{"status" => "active"}, socket),
+    do: {:noreply, filter_issues(socket, :active)}
 
-    {:noreply,
-     socket
-     |> assign(:issues_archive_status, new_status)
-     |> assign(:issues_page, 1)
-     |> load_issues_async(page: 1, reset: true)
-     |> load_counts_async()}
-  end
+  def handle_event("toggle_issues_archive_filter", %{"status" => "archived"}, socket),
+    do: {:noreply, filter_issues(socket, :archived)}
+
+  def handle_event("toggle_issues_archive_filter", _params, socket), do: {:noreply, socket}
 
   def handle_event("unarchive_issue", %{"id" => id}, socket) do
     case unarchive_issue(socket.assigns.current_user, id) do
@@ -631,6 +628,14 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   # so its rows are only good while it is open. Dropping them on close makes the next open refetch
   # instead of showing a list that quietly stopped tracking; `issues_loaded?` goes with them, so that
   # open gets its skeleton back.
+  defp filter_issues(socket, status) do
+    socket
+    |> assign(:issues_archive_status, status)
+    |> assign(:issues_page, 1)
+    |> load_issues_async(page: 1, reset: true)
+    |> load_counts_async()
+  end
+
   defp close_issues_panel(%{assigns: %{show_issues: false}} = socket), do: socket
 
   defp close_issues_panel(socket) do
