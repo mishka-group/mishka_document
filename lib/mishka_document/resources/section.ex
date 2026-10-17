@@ -875,8 +875,7 @@ defmodule MishkaDocument.Section do
       end
 
       hooks do
-        on_expand fn id, socket ->
-          send(self(), {:expand_row, id})
+        on_expand fn _id, socket ->
           {:cont, socket}
         end
       end
