@@ -400,6 +400,46 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     refute has_element?(view, "#document-stat-completion")
   end
 
+  # THE DRAFT PAGES' BACK LINK is built from the `return_to` the section screens send, which is a
+  # version's id. Anything else in the query is not a place to go back to.
+  describe "the draft pages' back link" do
+    for {page, id} <- [
+          {"note-drafts", "note-drafts-back"},
+          {"section-drafts", "section-drafts-back"}
+        ] do
+      test "#{page}: goes back to the version it came from, and to the dashboard otherwise", %{
+        conn: conn
+      } do
+        conn = log_in(conn, create_admin("back-#{unquote(page)}@example.com"))
+        page_path = "/admin/dashboard/document/#{unquote(page)}"
+        link = "##{unquote(id)}"
+        version_id = Ecto.UUID.generate()
+
+        {:ok, view, _html} = live(conn, page_path <> "?return_to=#{version_id}")
+
+        assert has_element?(
+                 view,
+                 link <> ~s([href="/admin/dashboard/document/sections/#{version_id}"])
+               )
+
+        for query <- [
+              "?return_to=..%2F..%2Fruntime%2Fpages",
+              "?return_to=..",
+              "?return_to=#{version_id}%2F..%2Fx",
+              "?return_to[a]=1",
+              "?return_to[]=1",
+              "?return_to=",
+              ""
+            ] do
+          {:ok, view, _html} = live(conn, page_path <> query)
+
+          assert has_element?(view, link <> ~s([href="/admin/dashboard/document"]))
+          refute has_element?(view, link <> ~s([href*="sections"]))
+        end
+      end
+    end
+  end
+
   defp figure(view, id) do
     card = view |> element("#document-stat-#{id}") |> render() |> LazyHTML.from_fragment()
 

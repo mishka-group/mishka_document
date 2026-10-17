@@ -18,15 +18,23 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
       socket
       |> assign(:page_title, gettext("Section Drafts"))
       |> assign(:url_state, nil)
-      |> assign(:return_to, params["return_to"])
+      |> assign(:return_to, checked(params)["return_to"])
       |> subscribe_to_pubsub(current_user)
 
     {:ok, socket}
   end
 
+  # `return_to` is a version's id; anything else is dropped before the table keeps it in the URL.
+  defp checked(params) do
+    case Ecto.UUID.cast(params["return_to"]) do
+      {:ok, version_id} -> Map.put(params, "return_to", version_id)
+      :error -> Map.delete(params, "return_to")
+    end
+  end
+
   @impl true
   def handle_params(params, uri, socket) do
-    url_state = UrlSync.decode(params, uri, MishkaDocument.SectionDraft)
+    url_state = UrlSync.decode(checked(params), uri, MishkaDocument.SectionDraft)
     {:noreply, assign(socket, :url_state, url_state)}
   end
 
