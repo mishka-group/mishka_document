@@ -83,8 +83,14 @@
             # You can customize the priority of any check
             # Priority values are: `low, normal, high, higher`
             #
+            # Off for test/: a test names the module it exercises in full, which reads best there
             {Credo.Check.Design.AliasUsage,
-             [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0]},
+             [
+               priority: :low,
+               if_nested_deeper_than: 2,
+               if_called_more_often_than: 0,
+               files: %{excluded: ["test/"]}
+             ]},
             {Credo.Check.Design.TagFIXME, []},
             # You can also customize the exit_status of each check.
             # If you don't want TODO comments to cause `mix credo` to fail, just
@@ -202,7 +208,15 @@
             {Jump.CredoChecks.UnusedLiveViewAssign, []},
             {Jump.CredoChecks.VacuousTest, []},
             {Jump.CredoChecks.WeakAssertion, []}
-          ] ++ Enum.map(ExSlop.recommended_checks(), &{&1, []}),
+          ] ++
+            Enum.map(ExSlop.recommended_checks(), fn
+              # Off for test/: `length(x) == n` on a tiny list reads best there
+              ExSlop.Check.Refactor.LengthComparison ->
+                {ExSlop.Check.Refactor.LengthComparison, [files: %{excluded: ["test/"]}]}
+
+              check ->
+                {check, []}
+            end),
         disabled: [
           #
           # Checks scheduled for next check update (opt-in for now)
