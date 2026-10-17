@@ -46,7 +46,7 @@ defmodule MishkaDocument.Resources.Validations.MasterCommentReadOnly do
     contributor_id = Ash.Changeset.get_data(changeset, :contributor_id)
 
     with {:ok, masters} <- AuthoredByMaster.master_ids([contributor_id]) do
-      if MapSet.member?(masters, contributor_id) do
+      if Enum.member?(masters, contributor_id) do
         {:error,
          field: :contributor_id,
          message:
