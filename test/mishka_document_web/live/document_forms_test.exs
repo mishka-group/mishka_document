@@ -45,6 +45,7 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
   import Phoenix.LiveViewTest
   import MishkaDocument.Test.Factory
 
+  alias Ash.Resource.Info, as: ResourceInfo
   alias MishkaCmsCore.Accounts.{Permission, User, UserPermission}
   alias MishkaCmsCore.Runtime.States.SiteState
 
@@ -617,8 +618,8 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
     test "each offer an empty choice when the record can do without the link" do
       optional =
         for resource <- Ash.Domain.Info.resources(MishkaDocument),
-            %{validation: {SameWorkspaceVersion, opts}} <- Ash.Resource.Info.validations(resource),
-            Ash.Resource.Info.attribute(resource, opts[:field]).allow_nil?,
+            %{validation: {SameWorkspaceVersion, opts}} <- ResourceInfo.validations(resource),
+            ResourceInfo.attribute(resource, opts[:field]).allow_nil?,
             field = FormInfo.field(resource, opts[:field]),
             not is_nil(field),
             do: {resource, field}
