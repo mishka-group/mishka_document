@@ -21,7 +21,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   @impl true
   def mount(%{"id" => workspace_id}, _session, socket) do
     current_user = socket.assigns.current_user
-    workspace = load_workspace(current_user, workspace_id)
+    workspace = MishkaDocument.Workspace.for_viewer(current_user, workspace_id)
 
     socket =
       socket
@@ -284,24 +284,4 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
     do: Ash.get(WorkspaceVersion, id, action: :read, actor: user, tenant: site_id)
 
   defp load_version(_user, _id), do: :error
-
-  defp load_workspace(%User{site_id: nil} = user, workspace_id) do
-    case Ash.get(MishkaDocument.Workspace, workspace_id, action: :master_get, actor: user) do
-      {:ok, workspace} -> workspace
-      _ -> nil
-    end
-  end
-
-  defp load_workspace(%User{site_id: site_id} = user, workspace_id) when is_binary(site_id) do
-    case Ash.get(MishkaDocument.Workspace, workspace_id,
-           action: :read,
-           actor: user,
-           tenant: site_id
-         ) do
-      {:ok, workspace} -> workspace
-      _ -> nil
-    end
-  end
-
-  defp load_workspace(_, _), do: nil
 end

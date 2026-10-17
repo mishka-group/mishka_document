@@ -797,7 +797,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       version = load_workspace_version(current_user, workspace_version_id)
 
       if version do
-        workspace = load_workspace(current_user, version.workspace_id)
+        workspace = MishkaDocument.Workspace.for_viewer(current_user, version.workspace_id)
 
         if workspace do
           loads =
@@ -900,26 +900,6 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       version -> {:ok, version.id}
     end
   end
-
-  defp load_workspace(%User{site_id: nil} = user, workspace_id) do
-    case Ash.get(MishkaDocument.Workspace, workspace_id, action: :master_get, actor: user) do
-      {:ok, workspace} -> workspace
-      _ -> nil
-    end
-  end
-
-  defp load_workspace(%User{site_id: site_id} = user, workspace_id) when is_binary(site_id) do
-    case Ash.get(MishkaDocument.Workspace, workspace_id,
-           action: :read,
-           actor: user,
-           tenant: site_id
-         ) do
-      {:ok, workspace} -> workspace
-      _ -> nil
-    end
-  end
-
-  defp load_workspace(_, _), do: nil
 
   defp load_activity_logs_async(socket, workspace_id, version_ids) do
     current_user = socket.assigns.current_user

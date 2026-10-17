@@ -2093,6 +2093,27 @@ defmodule MishkaDocument.Workspace do
     end
   end
 
+  @doc """
+  The workspace `id` as `user` may read it, or `nil` when there is none or `user` may not read it.
+
+  A master (a user whose `site_id` is nil) reads it through `:master_get`; a user of a site through
+  `:read` under that site.
+  """
+  @spec for_viewer(map() | nil, Ash.UUID.t()) :: struct() | nil
+  def for_viewer(%{site_id: nil} = user, id), do: fetch(id, action: :master_get, actor: user)
+
+  def for_viewer(%{site_id: site_id} = user, id) when is_binary(site_id),
+    do: fetch(id, action: :read, actor: user, tenant: site_id)
+
+  def for_viewer(_user, _id), do: nil
+
+  defp fetch(id, opts) do
+    case Ash.get(__MODULE__, id, opts) do
+      {:ok, workspace} -> workspace
+      _not_readable -> nil
+    end
+  end
+
   # A `requires`-selected aggregate or calculation arrives as a truthy `%Ash.NotLoaded{}` or
   # `%Ash.ForbiddenField{}` when the viewer's field policy hides it, so `|| 0` lets the struct
   # through. Matching on the integer is what actually guards the cell.
