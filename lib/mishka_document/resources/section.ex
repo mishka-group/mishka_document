@@ -2541,114 +2541,18 @@ defmodule MishkaDocument.Section do
       description "Returns count of unique maintainers who created/updated this section or its notes (via EventLog)"
     end
 
-    calculate :breadcrumb_path, {:array, :map} do
+    calculate :breadcrumb_path,
+              {:array, :map},
+              MishkaDocument.Resources.Calculations.BreadcrumbPath do
       public? true
-
-      calculation fn records, _context ->
-        parent_ids =
-          records
-          |> Enum.map(& &1.parent_section_id)
-          |> Enum.reject(&is_nil/1)
-          |> Enum.uniq()
-
-        breadcrumbs_by_start_id =
-          if parent_ids == [] do
-            %{}
-          else
-            placeholders = Enum.map_join(1..length(parent_ids), ", ", fn i -> "$#{i}" end)
-            dumped_ids = Enum.map(parent_ids, &Ecto.UUID.dump!/1)
-
-            sql = """
-            WITH RECURSIVE ancestors AS (
-              SELECT id, title, slug, parent_section_id, site_id, id as start_id, 1 as depth
-              FROM mishka_document_sections
-              WHERE id IN (#{placeholders})
-                AND archived_at IS NULL
-
-              UNION ALL
-
-              SELECT s.id, s.title, s.slug, s.parent_section_id, s.site_id, a.start_id, a.depth + 1
-              FROM mishka_document_sections s
-              INNER JOIN ancestors a ON s.id = a.parent_section_id AND s.site_id = a.site_id
-              WHERE s.archived_at IS NULL
-            )
-            SELECT start_id, site_id, id, title, slug FROM ancestors ORDER BY start_id, depth DESC
-            """
-
-            case Ecto.Adapters.SQL.query(@repo, sql, dumped_ids) do
-              {:ok, %{rows: rows}} ->
-                Enum.group_by(
-                  rows,
-                  fn [start_id, site_id | _] ->
-                    {Ecto.UUID.load!(start_id), Ecto.UUID.load!(site_id)}
-                  end,
-                  fn [_, _, id, title, slug] ->
-                    %{"id" => Ecto.UUID.load!(id), "title" => title, "slug" => slug}
-                  end
-                )
-
-              _ ->
-                %{}
-            end
-          end
-
-        Enum.map(records, fn record ->
-          if is_nil(record.parent_section_id) do
-            []
-          else
-            Map.get(breadcrumbs_by_start_id, {record.parent_section_id, record.site_id}, [])
-          end
-        end)
-      end
 
       description "Returns breadcrumb path from root ancestor to immediate parent as list of {id, title, slug} maps, within the section's own site"
     end
 
-    calculate :section_versions_count, :integer do
+    calculate :section_versions_count,
+              :integer,
+              MishkaDocument.Resources.Calculations.SectionVersionsCount do
       public? true
-
-      calculation fn records, _context ->
-        lineage_ids =
-          records
-          |> Enum.map(& &1.section_lineage_id)
-          |> Enum.reject(&is_nil/1)
-          |> Enum.uniq()
-
-        counts_by_lineage =
-          if lineage_ids == [] do
-            %{}
-          else
-            placeholders = Enum.map_join(1..length(lineage_ids), ", ", fn i -> "$#{i}" end)
-            dumped_ids = Enum.map(lineage_ids, &Ecto.UUID.dump!/1)
-
-            sql = """
-            SELECT section_lineage_id, site_id, COUNT(*)
-            FROM mishka_document_sections
-            WHERE section_lineage_id IN (#{placeholders})
-              AND archived_at IS NULL
-            GROUP BY section_lineage_id, site_id
-            """
-
-            case Ecto.Adapters.SQL.query(@repo, sql, dumped_ids) do
-              {:ok, %{rows: rows}} ->
-                Map.new(rows, fn [lid, site_id, count] ->
-                  count = if is_float(count), do: trunc(count), else: count
-                  {{Ecto.UUID.load!(lid), Ecto.UUID.load!(site_id)}, count}
-                end)
-
-              _ ->
-                %{}
-            end
-          end
-
-        Enum.map(records, fn record ->
-          if is_nil(record.section_lineage_id) do
-            1
-          else
-            Map.get(counts_by_lineage, {record.section_lineage_id, record.site_id}, 1)
-          end
-        end)
-      end
 
       description "Returns count of versions of this section across workspace versions of its own site"
     end
