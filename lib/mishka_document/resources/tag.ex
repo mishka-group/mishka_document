@@ -543,7 +543,7 @@ defmodule MishkaDocument.Tag do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -568,7 +568,7 @@ defmodule MishkaDocument.Tag do
       end
 
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
 
       # Add metadata for event tracking
       change fn changeset, _context ->

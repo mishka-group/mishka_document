@@ -1098,7 +1098,7 @@ defmodule MishkaDocument.Workspace do
                 field: :language_group_id, resource: MishkaDocument.Workspace}
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
       # Add metadata for event tracking
@@ -1126,7 +1126,7 @@ defmodule MishkaDocument.Workspace do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
       # Add metadata for event tracking

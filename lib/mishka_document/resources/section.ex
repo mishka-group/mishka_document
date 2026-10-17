@@ -1484,7 +1484,7 @@ defmodule MishkaDocument.Section do
                 field: :source_section_id, resource: MishkaDocument.Section}
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change MishkaDocument.Resources.Changes.SetSectionLineageId
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
@@ -1536,7 +1536,7 @@ defmodule MishkaDocument.Section do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change MishkaDocument.Resources.Changes.SetSectionLineageId
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
