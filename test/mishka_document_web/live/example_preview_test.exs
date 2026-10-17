@@ -189,6 +189,40 @@ defmodule MishkaDocumentWeb.Test.ExamplePreviewTest do
       refute directives["script-src"] =~ "http"
     end
 
+    test "names the socket of the host and port the browser asked, and of nothing else", %{
+      conn: conn,
+      site: site
+    } do
+      page = page!(site, version!(site), @content)
+      path = "/_preview/doc-example/section/#{page.id}/0"
+      host = site.host
+
+      connect_src = fn header ->
+        conn =
+          Map.update!(conn, :req_headers, &[{"host", header} | List.keydelete(&1, "host", 0)])
+
+        assert [policy] = conn |> get(path) |> get_resp_header("content-security-policy")
+
+        policy |> String.split("; ") |> Enum.find(&String.starts_with?(&1, "connect-src"))
+      end
+
+      assert connect_src.(host) == "connect-src 'self' ws://#{host} wss://#{host}"
+
+      assert connect_src.("#{host}:4000") ==
+               "connect-src 'self' ws://#{host}:4000 wss://#{host}:4000"
+
+      # WHAT FOLLOWS THE PORT IS NEVER WRITTEN OUT: the sources are built from the host and the port
+      # the header parses to, not copied from it.
+      for trailing <- [" script-src *", ";x", ",https://other.example", "/path"] do
+        assert connect_src.("#{host}:4000#{trailing}") ==
+                 "connect-src 'self' ws://#{host}:4000 wss://#{host}:4000"
+      end
+
+      for port <- ["0", "99999", "65536"] do
+        assert connect_src.("#{host}:#{port}") == "connect-src 'self'"
+      end
+    end
+
     test "is a missing page for an address that names no example", %{conn: conn, site: site} do
       page = page!(site, version!(site), @content)
 
