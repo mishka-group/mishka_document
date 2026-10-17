@@ -64,7 +64,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
         pages: &MishkaDocument.Provision.sample_pages/2,
         draft_label: gettext("Documentation sample page")
       )
-      |> subscribe_to_pubsub(current_user)
+      |> subscribe_when_connected(current_user)
       |> load_counts_async()
       |> then(
         &ActivityFeed.setup(&1, resources: feed_resources(&1), feed_id: "document-activity")
@@ -86,6 +86,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   # pins the answer once an admin has said, so this follows what they said rather than re-deciding.
   defp gate(socket),
     do: assign(socket, :showing_installer?, ExtensionInstallerPanel.showing_installer?(socket))
+
+  defp subscribe_when_connected(socket, user) do
+    if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
+  end
 
   defp subscribe_to_pubsub(socket, %User{site_id: nil}) do
     Phoenix.PubSub.subscribe(MishkaCmsCore.PubSub, "workspace:created")

@@ -30,7 +30,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
       |> assign(:workspace, workspace)
       |> assign(:url_state, nil)
       |> assign_clone(nil, nil)
-      |> subscribe_to_pubsub(current_user)
+      |> subscribe_when_connected(current_user)
 
     {:ok, socket}
   end
@@ -39,6 +39,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
   def handle_params(params, uri, socket) do
     url_state = UrlSync.decode(params, uri, MishkaDocument.WorkspaceVersion)
     {:noreply, assign(socket, :url_state, url_state)}
+  end
+
+  defp subscribe_when_connected(socket, user) do
+    if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
   end
 
   defp subscribe_to_pubsub(socket, %User{site_id: nil}) do

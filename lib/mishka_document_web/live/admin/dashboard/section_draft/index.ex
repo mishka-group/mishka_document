@@ -19,7 +19,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
       |> assign(:page_title, gettext("Section Drafts"))
       |> assign(:url_state, nil)
       |> assign(:return_to, checked(params)["return_to"])
-      |> subscribe_to_pubsub(current_user)
+      |> subscribe_when_connected(current_user)
 
     {:ok, socket}
   end
@@ -36,6 +36,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
   def handle_params(params, uri, socket) do
     url_state = UrlSync.decode(checked(params), uri, MishkaDocument.SectionDraft)
     {:noreply, assign(socket, :url_state, url_state)}
+  end
+
+  defp subscribe_when_connected(socket, user) do
+    if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
   end
 
   defp subscribe_to_pubsub(socket, %User{site_id: nil}) do

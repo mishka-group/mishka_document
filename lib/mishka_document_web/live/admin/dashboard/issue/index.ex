@@ -22,7 +22,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index do
       |> assign(:show_comment_form, false)
       |> assign(:editing_comment_id, nil)
       |> assign(:comment_form_issue, nil)
-      |> subscribe_to_pubsub(current_user)
+      |> subscribe_when_connected(current_user)
 
     {:ok, socket}
   end
@@ -31,6 +31,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index do
   def handle_params(params, uri, socket) do
     url_state = UrlSync.decode(params, uri, MishkaDocument.Issue)
     {:noreply, assign(socket, :url_state, url_state)}
+  end
+
+  defp subscribe_when_connected(socket, user) do
+    if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
   end
 
   defp subscribe_to_pubsub(socket, %User{site_id: nil}) do

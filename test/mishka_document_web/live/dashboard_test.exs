@@ -400,6 +400,44 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     refute has_element?(view, "#document-stat-completion")
   end
 
+  # A PAGE'S FIRST RENDER IS A PLAIN REQUEST that no socket ever follows up in the same process, so a
+  # subscription made there is a topic left on a process that nothing will unsubscribe from. Only the
+  # connected LiveView holds the page's topics.
+  describe "the admin pages subscribe to their resource's topics only once connected" do
+    for {prefix, label} <- [
+          {"workspace", "document dashboard"},
+          {"issue", "issues"},
+          {"note_draft", "note drafts"},
+          {"section_draft", "section drafts"},
+          {"tag", "tags"},
+          {"workspace_version", "workspace versions"}
+        ] do
+      test "#{label}: the first render holds none, the connected view holds them", %{conn: conn} do
+        site = master_site()
+        workspace = create_workspace!(site_id: site.id)
+
+        path =
+          case unquote(prefix) do
+            "workspace" -> "/admin/dashboard/document"
+            "issue" -> "/admin/dashboard/document/issues"
+            "note_draft" -> "/admin/dashboard/document/note-drafts"
+            "section_draft" -> "/admin/dashboard/document/section-drafts"
+            "tag" -> "/admin/dashboard/document/tags"
+            "workspace_version" -> "/admin/dashboard/document/workspace-version/#{workspace.id}"
+          end
+
+        conn = log_in(conn, create_admin("pubsub-#{unquote(prefix)}@example.com"))
+        topic? = &String.starts_with?(&1, unquote(prefix) <> ":")
+
+        assert conn |> get(path) |> html_response(200)
+        refute Enum.any?(Registry.keys(MishkaCmsCore.PubSub, self()), topic?)
+
+        {:ok, view, _html} = live(conn, path)
+        assert Enum.any?(Registry.keys(MishkaCmsCore.PubSub, view.pid), topic?)
+      end
+    end
+  end
+
   # THE DRAFT PAGES' BACK LINK is built from the `return_to` the section screens send, which is a
   # version's id. Anything else in the query is not a place to go back to.
   describe "the draft pages' back link" do
