@@ -12,6 +12,11 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
 
   A draft of an existing note writes only the fields it changes (its `changed_fields`, kept by
   `MishkaDocument.Resources.Changes.StartFromSource`); a draft of a new note writes all of itself.
+
+  The note is written, and the draft marked applied, as whoever approved the draft, in the draft's
+  site, so the resources' own policies answer for the approval too. The note and the section draft
+  it depends on are looked up by id without the approver's read policies, since a lookup of a row
+  the draft names must find it whatever the approver may list.
   """
   use Ash.Resource.Change
   use Gettext, backend: MishkaCmsCore.Gettext
@@ -87,15 +92,15 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
 
   # What the draft changes, and nothing else: a note field it leaves as the note has it is never
   # written over (`MishkaDocument.Resources.Changes.StartFromSource`).
-  defp update_existing_note(draft, tenant, _context) do
+  defp update_existing_note(draft, tenant, context) do
     case Ash.get(MishkaDocument.Note, draft.source_note_id,
            tenant: tenant,
            authorize?: false
          ) do
       {:ok, note} ->
-        write(note, Map.take(draft, changes(draft)), tenant)
+        write(note, Map.take(draft, changes(draft)), tenant, context)
 
-        {:ok, mark_draft_applied(draft, tenant)}
+        {:ok, mark_draft_applied(draft, tenant, context)}
 
       {:error, _} = error ->
         error
@@ -105,22 +110,22 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
   defp changes(draft),
     do: Enum.filter(MishkaDocument.NoteDraft.note_fields(), &(&1 in draft.changed_fields))
 
-  defp write(_record, changes, _tenant) when map_size(changes) == 0, do: :unchanged
+  defp write(_record, changes, _tenant, _context) when map_size(changes) == 0, do: :unchanged
 
-  defp write(record, changes, tenant) do
+  defp write(record, changes, tenant, context) do
     record
-    |> Ash.Changeset.for_update(:update, changes, tenant: tenant, authorize?: false)
+    |> Ash.Changeset.for_update(:update, changes, Ash.Scope.to_opts(context, tenant: tenant))
     |> Ash.update!()
   end
 
-  defp create_new_note(draft, tenant, _context) do
+  defp create_new_note(draft, tenant, context) do
     # Determine section_id
     section_id =
       if draft.section_id do
         draft.section_id
       else
         # If section_draft_id is set, find the created section
-        get_section_from_draft(draft.section_draft_id, tenant)
+        get_section_from_draft(draft.section_draft_id, tenant, context)
       end
 
     case section_id do
@@ -143,13 +148,12 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
                  schema: draft.schema,
                  seo_tags: draft.seo_tags
                },
-               tenant: tenant,
-               authorize?: false
+               Ash.Scope.to_opts(context, tenant: tenant)
              )
              |> Ash.create() do
           {:ok, _new_note} ->
             # Mark draft as applied and return updated draft
-            updated_draft = mark_draft_applied(draft, tenant)
+            updated_draft = mark_draft_applied(draft, tenant, context)
 
             {:ok, updated_draft}
 
@@ -159,7 +163,7 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
     end
   end
 
-  defp get_section_from_draft(section_draft_id, tenant) do
+  defp get_section_from_draft(section_draft_id, tenant, context) do
     case Ash.get(MishkaDocument.SectionDraft, section_draft_id,
            tenant: tenant,
            authorize?: false
@@ -176,7 +180,7 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
                  workspace_version_id == ^section_draft.workspace_version_id and
                    slug == ^section_draft.slug
                )
-               |> Ash.read(tenant: tenant, authorize?: false) do
+               |> Ash.read(Ash.Scope.to_opts(context, tenant: tenant)) do
             {:ok, [section | _]} -> section.id
             _ -> nil
           end
@@ -187,13 +191,12 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
     end
   end
 
-  defp mark_draft_applied(draft, tenant) do
+  defp mark_draft_applied(draft, tenant, context) do
     draft
     |> Ash.Changeset.for_update(
       :mark_applied,
       %{applied_at: DateTime.utc_now()},
-      tenant: tenant,
-      authorize?: false
+      Ash.Scope.to_opts(context, tenant: tenant)
     )
     |> Ash.update!()
   end

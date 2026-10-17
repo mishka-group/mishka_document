@@ -204,6 +204,15 @@ defmodule MishkaDocument.DraftApplyTest do
       assert applied.metadata["title"] == "Salaries and bonuses"
     end
 
+    # THE APPROVER WRITES THE PAGE, through the page's own policy, so the history names them.
+    test "is written as whoever approved it", ctx do
+      before = page_updates(ctx)
+      ctx |> edit_draft!() |> approve!(ctx)
+
+      assert [applied] = page_updates(ctx) -- before
+      assert applied.actor_id == ctx.admin.id
+    end
+
     test "that changes nothing is applied without writing the page", ctx do
       before = page_updates(ctx)
 

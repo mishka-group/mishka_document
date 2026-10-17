@@ -11,6 +11,9 @@ defmodule MishkaDocument.Resources.Changes.SetSectionLineageId do
     write runs, after its validations. It may name a first section that has since been deleted; a
     first section of another site is refused.
   - A section_lineage_id the writer gives is kept, and must name a section of the same site.
+
+  Looking up the source and the lineage's first section sees every site, because a pointer into
+  another site is what is refused; the section's own lineage is written as whoever made the section.
   """
   use Ash.Resource.Change
   use Gettext, backend: MishkaCmsCore.Gettext
@@ -18,7 +21,7 @@ defmodule MishkaDocument.Resources.Changes.SetSectionLineageId do
   alias MishkaCmsCore.Runtime.Resources.Validations.SameSiteReference
 
   @impl true
-  def change(changeset, _opts, _context) do
+  def change(changeset, _opts, context) do
     section_lineage_id = Ash.Changeset.get_attribute(changeset, :section_lineage_id)
     source_section_id = Ash.Changeset.get_attribute(changeset, :source_section_id)
 
@@ -29,15 +32,18 @@ defmodule MishkaDocument.Resources.Changes.SetSectionLineageId do
 
       # Has source section - copy its lineage_id
       !is_nil(source_section_id) ->
-        Ash.Changeset.before_action(changeset, &copy_lineage_from_source(&1, source_section_id))
+        Ash.Changeset.before_action(
+          changeset,
+          &copy_lineage_from_source(&1, source_section_id, context)
+        )
 
       # New section - set lineage_id = record.id after insert
       true ->
-        own_lineage_after_insert(changeset)
+        own_lineage_after_insert(changeset, context)
     end
   end
 
-  defp copy_lineage_from_source(changeset, source_section_id) do
+  defp copy_lineage_from_source(changeset, source_section_id, context) do
     case Ash.get(MishkaDocument.Section, source_section_id,
            action: :read_any,
            authorize?: false
@@ -52,7 +58,7 @@ defmodule MishkaDocument.Resources.Changes.SetSectionLineageId do
 
       _ ->
         # Source not found - fall back to setting lineage_id after insert
-        own_lineage_after_insert(changeset)
+        own_lineage_after_insert(changeset, context)
     end
   end
 
@@ -82,12 +88,13 @@ defmodule MishkaDocument.Resources.Changes.SetSectionLineageId do
     end
   end
 
-  defp own_lineage_after_insert(changeset) do
+  defp own_lineage_after_insert(changeset, context) do
     Ash.Changeset.after_action(changeset, fn _changeset, record ->
       record
-      |> Ash.Changeset.for_update(:update, %{section_lineage_id: record.id},
-        tenant: record.site_id,
-        authorize?: false
+      |> Ash.Changeset.for_update(
+        :update,
+        %{section_lineage_id: record.id},
+        Ash.Scope.to_opts(context, tenant: record.site_id)
       )
       |> Ash.update()
     end)
