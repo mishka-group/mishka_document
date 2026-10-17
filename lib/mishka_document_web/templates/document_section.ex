@@ -46,8 +46,8 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   import MishkaCmsCore.CoreComponents, only: [show_form_modal: 2]
 
   alias MishkaCmsCore.Localized
-  alias MishkaDocument.{Address, ContentText}
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
+  alias MishkaDocument.{Address, ContentText}
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
   alias Phoenix.LiveView.AsyncResult
 

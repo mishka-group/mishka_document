@@ -42,6 +42,8 @@ defmodule MishkaDocument.Section do
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaCmsCore.CoreComponents, only: [icon: 1]
   import MishkaGervaz.UIAdapters.Tailwind, only: [copy_button: 1]
+  alias Ecto.Adapters.SQL
+  alias MishkaCmsCore.Runtime.Helpers
   alias MishkaDocument.Resources.Helpers.Contributors
   alias MishkaDocument.Resources.Helpers.Labels
 
@@ -614,7 +616,7 @@ defmodule MishkaDocument.Section do
 
         filter :language, :select do
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_sections WHERE language IS NOT NULL AND archived_at IS NULL ORDER BY language"
                  ) do
@@ -1024,7 +1026,7 @@ defmodule MishkaDocument.Section do
           required true
 
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_sections WHERE language IS NOT NULL AND archived_at IS NULL ORDER BY language"
                  ) do
@@ -1318,7 +1320,7 @@ defmodule MishkaDocument.Section do
       hooks do
         # While a section is added, its slug follows the title until the author types one.
         on_validate fn params, state ->
-          MishkaCmsCore.Runtime.Helpers.follow_slug(params, state, :title)
+          Helpers.follow_slug(params, state, :title)
         end
 
         on_cancel fn state -> state end

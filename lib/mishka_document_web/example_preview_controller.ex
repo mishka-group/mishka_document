@@ -36,6 +36,7 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
 
   import Plug.Conn
 
+  alias AshAuthentication.Phoenix.LiveSession
   alias MishkaCmsCore.ErrorsExceptions.NotFoundError
   alias MishkaCmsCore.Runtime.CspNonce
   alias MishkaCmsWeb.Runtime.Plugs.SecurityHeaders
@@ -63,7 +64,7 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
   # The session `MishkaCmsWeb.RuntimeLive` is handed, with the example's source and the nonce.
   defp session(conn, source) do
     conn
-    |> AshAuthentication.Phoenix.LiveSession.generate_session(nil, [])
+    |> LiveSession.generate_session(nil, [])
     |> Map.merge(CspNonce.session(conn))
     |> Map.put("source", source)
   end

@@ -48,6 +48,7 @@ defmodule MishkaDocument.EventLog do
   import MishkaCmsCore.CoreComponents, only: [icon: 1]
   require Ash.Query
 
+  alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Activity.Helpers
   alias MishkaCmsCore.Activity.Sources.EventLog, as: EventLogSource
   alias MishkaCmsCore.Localized
@@ -538,7 +539,7 @@ defmodule MishkaDocument.EventLog do
   """
   @spec actor_label(map()) :: String.t()
   def actor_label(event) do
-    MishkaCmsCore.Accounts.Helper.who(
+    Helper.who(
       Map.get(event, :actor),
       Map.get(event, :actor_master?) == true,
       (Map.get(event, :actor_id) && :unknown) || :system

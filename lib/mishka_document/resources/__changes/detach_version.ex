@@ -30,8 +30,8 @@ defmodule MishkaDocument.Resources.Changes.DetachVersion do
 
   require Ash.Query
 
-  alias MishkaDocument.{Section, WorkspaceVersionLineage}
   alias MishkaDocument.Resources.Helpers.VersionClones
+  alias MishkaDocument.{Section, WorkspaceVersionLineage}
   alias MishkaInstaller.Event.Hook
 
   @event "document:version:detached"

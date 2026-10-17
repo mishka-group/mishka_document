@@ -38,6 +38,9 @@ defmodule MishkaDocument.SectionDraft do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
+  alias Ecto.Adapters.SQL
+  alias MishkaCmsCore.Accounts.Helper
+  alias MishkaCmsCore.Runtime.Helpers
   alias MishkaDocument.Resources.Helpers.Labels
 
   @admin_fields [
@@ -486,7 +489,7 @@ defmodule MishkaDocument.SectionDraft do
 
         filter :language, :select do
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_section_drafts WHERE language IS NOT NULL AND archived_at IS NULL ORDER BY language"
                  ) do
@@ -743,7 +746,7 @@ defmodule MishkaDocument.SectionDraft do
           required true
 
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_section_drafts WHERE language IS NOT NULL AND archived_at IS NULL ORDER BY language"
                  ) do
@@ -1077,7 +1080,7 @@ defmodule MishkaDocument.SectionDraft do
       hooks do
         # While a draft is added, its slug follows the title until the author types one.
         on_validate fn params, state ->
-          MishkaCmsCore.Runtime.Helpers.follow_slug(params, state, :title)
+          Helpers.follow_slug(params, state, :title)
         end
 
         on_cancel fn state -> state end
@@ -1883,7 +1886,7 @@ defmodule MishkaDocument.SectionDraft do
   """
   @spec creator(map()) :: String.t()
   def creator(draft) do
-    MishkaCmsCore.Accounts.Helper.who(
+    Helper.who(
       Map.get(draft, :created_by_user),
       Map.get(draft, :created_by_master?) == true,
       :unknown

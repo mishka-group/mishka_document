@@ -27,6 +27,7 @@ defmodule MishkaDocument.Resources.Validations.OpenToActor do
   """
   use Ash.Resource.Validation
 
+  alias Ash.Resource.Info, as: ResourceInfo
   alias MishkaDocument.Resources.Preparations
 
   @impl true
@@ -56,5 +57,5 @@ defmodule MishkaDocument.Resources.Validations.OpenToActor do
 
   # An attribute is read with the record, a calculation loaded.
   defp loads(resource, lock),
-    do: if(Ash.Resource.Info.attribute(resource, lock), do: [], else: [lock])
+    do: if(ResourceInfo.attribute(resource, lock), do: [], else: [lock])
 end

@@ -49,6 +49,8 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   require Ash.Expr
   require Ash.Query
 
+  alias Ash.Error.Forbidden
+  alias Ash.Resource.Info, as: ResourceInfo
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaDocument.{Section, Workspace, WorkspaceVersion}
 
@@ -228,7 +230,7 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
 
     case Enum.reject(records, &opens?(locks, Map.get(&1, key), actor)) do
       [] -> {:ok, records}
-      _closed -> {:error, Ash.Error.Forbidden.exception([])}
+      _closed -> {:error, Forbidden.exception([])}
     end
   end
 
@@ -255,7 +257,7 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
 
   # An attribute is selected, a calculation loaded.
   defp with_field(query, field) do
-    case Ash.Resource.Info.attribute(query.resource, field) do
+    case ResourceInfo.attribute(query.resource, field) do
       nil -> Ash.Query.load(query, field)
       _attribute -> Ash.Query.ensure_selected(query, [field])
     end

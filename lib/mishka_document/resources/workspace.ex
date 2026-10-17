@@ -40,6 +40,8 @@ defmodule MishkaDocument.Workspace do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
+  alias Ecto.Adapters.SQL
+  alias MishkaCmsCore.Runtime.Helpers
   alias MishkaDocument.Resources.Helpers.Labels
 
   @admin_fields [
@@ -814,7 +816,7 @@ defmodule MishkaDocument.Workspace do
           required true
 
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_workspaces WHERE language IS NOT NULL ORDER BY language"
                  ) do
@@ -1008,7 +1010,7 @@ defmodule MishkaDocument.Workspace do
       hooks do
         # While a workspace is added, its slug follows the name until the author types one.
         on_validate fn params, state ->
-          MishkaCmsCore.Runtime.Helpers.follow_slug(params, state, :name)
+          Helpers.follow_slug(params, state, :name)
         end
 
         on_cancel fn state -> state end
@@ -1950,7 +1952,7 @@ defmodule MishkaDocument.Workspace do
 
           {:ok, workspace_id_bin} = Ecto.UUID.dump(record.id)
           {:ok, site_id_bin} = Ecto.UUID.dump(record.site_id)
-          result = Ecto.Adapters.SQL.query(@repo, sql, [workspace_id_bin, site_id_bin])
+          result = SQL.query(@repo, sql, [workspace_id_bin, site_id_bin])
 
           case result do
             {:ok,

@@ -41,6 +41,7 @@ defmodule MishkaDocument.NoteDraft do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
+  alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Localized
   alias MishkaDocument.Resources.Helpers.Labels
 
@@ -1729,7 +1730,7 @@ defmodule MishkaDocument.NoteDraft do
   """
   @spec creator(map()) :: String.t()
   def creator(draft) do
-    MishkaCmsCore.Accounts.Helper.who(
+    Helper.who(
       Map.get(draft, :created_by_user),
       Map.get(draft, :created_by_master?) == true,
       :unknown

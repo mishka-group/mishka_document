@@ -32,7 +32,9 @@ defmodule MishkaDocument.Tag do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
+  alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Localized
+  alias MishkaCmsCore.Runtime.Helpers
 
   @admin_fields [:name, :slug, :language, :language_group_id, :site_id]
 
@@ -287,7 +289,7 @@ defmodule MishkaDocument.Tag do
 
         filter :language, :select do
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_tags WHERE language IS NOT NULL ORDER BY language"
                  ) do
@@ -431,7 +433,7 @@ defmodule MishkaDocument.Tag do
           required true
 
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_tags WHERE language IS NOT NULL ORDER BY language"
                  ) do
@@ -501,7 +503,7 @@ defmodule MishkaDocument.Tag do
       hooks do
         # While a tag is added, its slug follows the name until the author types one.
         on_validate fn params, state ->
-          MishkaCmsCore.Runtime.Helpers.follow_slug(params, state, :name)
+          Helpers.follow_slug(params, state, :name)
         end
 
         on_cancel fn state -> state end

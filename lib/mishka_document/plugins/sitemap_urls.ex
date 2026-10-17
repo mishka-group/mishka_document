@@ -62,8 +62,8 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
 
   require Ash.Query
 
-  alias MishkaCmsCore.Runtime.{Languages, PageEditions}
   alias MishkaCmsCore.Runtime.Compilers.SitemapCompiler
+  alias MishkaCmsCore.Runtime.{Languages, PageEditions}
   alias MishkaDocument.{Address, Provision, Section, Workspace, WorkspaceVersion}
 
   # The most documents whose pages are read together.

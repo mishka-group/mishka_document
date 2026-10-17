@@ -36,9 +36,9 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
 
   import MishkaGervaz.Helpers, only: [dynamic_component: 1, accessible?: 2]
 
+  alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaCmsCore.LanguageEditions
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
-  alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaDocument.WorkspaceAccent
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
 

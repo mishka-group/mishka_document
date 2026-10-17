@@ -24,6 +24,7 @@ defmodule MishkaDocument.Resources.Calculations.WorkspaceMaintainers do
   """
   use Ash.Resource.Calculation
 
+  alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Accounts.Helper
 
   @repo Application.compile_env!(:mishka_cms_core, :repo)
@@ -110,7 +111,7 @@ defmodule MishkaDocument.Resources.Calculations.WorkspaceMaintainers do
     LIMIT 100
     """
 
-    case Ecto.Adapters.SQL.query(@repo, sql, params) do
+    case SQL.query(@repo, sql, params) do
       {:ok, %{rows: rows}} ->
         maintainers =
           Enum.map(rows, fn [user_id, email, user_site_id] ->
