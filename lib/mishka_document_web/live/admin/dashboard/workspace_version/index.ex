@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
+  @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
   alias MishkaCmsCore.Accounts.User
