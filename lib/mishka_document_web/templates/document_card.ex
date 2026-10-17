@@ -117,7 +117,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
           myself={@myself}
         />
 
-        <div class="relative" style="isolation: isolate;">
+        <div class="relative isolate">
           <Shared.loading_overlay
             :if={
               @state.has_initial_data? and @state.loading == :loading and
@@ -515,7 +515,15 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
         </span>
       </div>
       <div class={["h-1.5 overflow-hidden rounded", @progress.track]}>
-        <div class={["h-full rounded", @progress.fill]} style={"width:#{@completion}%"}></div>
+        <svg
+          data-role="completion-bar"
+          viewBox="0 0 100 1"
+          preserveAspectRatio="none"
+          class="size-full"
+          aria-hidden="true"
+        >
+          <rect width={@completion} height="1" fill={@progress.stroke} />
+        </svg>
       </div>
 
       <div class="mt-3 flex items-center gap-2">

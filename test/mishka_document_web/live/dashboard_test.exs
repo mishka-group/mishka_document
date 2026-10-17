@@ -102,6 +102,26 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     refute has_element?(view, "#document-activity-skeleton")
   end
 
+  # THE CSP HAS NO `style-src-attr`, so a `style` attribute on a card draws nothing: the grid is
+  # isolated by a class and the completion bar is drawn in SVG, wide as the workspace is done.
+  test "the workspace cards carry no style attribute, and draw their completion in SVG", %{
+    conn: conn
+  } do
+    create_workspace!(site_id: master_site().id, name: "Styled Handbook")
+
+    conn = log_in(conn, create_admin("docstyle@example.com"))
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document")
+    render_async(view, 5_000)
+
+    page = view |> render() |> LazyHTML.from_fragment()
+    grid = LazyHTML.query(page, ~s([data-role="wsgrid"]))
+
+    assert Enum.count(grid) == 1
+    assert Enum.count(LazyHTML.query(page, ~s(div.isolate [data-role="wsgrid"]))) == 1
+    refute Enum.empty?(LazyHTML.query(grid, ~s([data-role="completion-bar"] rect[width])))
+    assert Enum.empty?(LazyHTML.query(grid, "[style]"))
+  end
+
   # Restore and Permanent Delete run `:master_unarchive` and `:master_permanent_destroy`, an update
   # and a destroy, on the issue they read first — neither is a generic action to run as one.
   test "a master restores one archived issue and permanently deletes another from the issues panel",
