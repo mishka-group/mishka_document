@@ -1873,8 +1873,7 @@ defmodule MishkaDocument.Dev.Seeds do
     notes_by_section = Enum.group_by(live.notes, & &1.section_id)
 
     live.sections
-    |> Enum.reject(&(&1.order_position == 1))
-    |> Enum.reject(&MapSet.member?(live.masters, &1.id))
+    |> Enum.reject(&(&1.order_position == 1 or MapSet.member?(live.masters, &1.id)))
     |> Enum.filter(&archive_pick?(site_id, &1, 8))
     |> Enum.reduce(0, fn section, acc ->
       orphans =

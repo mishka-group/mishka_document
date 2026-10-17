@@ -35,11 +35,11 @@ defmodule MishkaDocument.Resources.Changes.SetEventMetadata do
   def init(opts) do
     resource_type = Keyword.get(opts, :resource_type)
 
-    if resource_type not in [:section, :note, :section_draft, :note_draft] do
+    if resource_type in [:section, :note, :section_draft, :note_draft] do
+      {:ok, opts}
+    else
       {:error,
        "resource_type must be one of :section, :note, :section_draft, :note_draft, got: #{inspect(resource_type)}"}
-    else
-      {:ok, opts}
     end
   end
 

@@ -33,6 +33,7 @@ defmodule MishkaDocument.Plugins.Installer do
       ]
     }
 
+  require Ash.Query
   require Logger
 
   alias MishkaDocument.Provision
@@ -88,8 +89,6 @@ defmodule MishkaDocument.Plugins.Installer do
   # ANY OF THEM, not all. A site an admin has pruned still has this extension; a site that has never
   # had it has none of them.
   defp pages_present?(site_id) do
-    require Ash.Query
-
     paths = Provision.page_paths()
 
     MishkaCmsCore.Runtime.Page

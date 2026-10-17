@@ -31,6 +31,25 @@ defmodule MishkaDocument.Resources.Helpers.LabelsTest do
     end
   end
 
+  describe "first_loaded/2" do
+    test "gives the first of the fields that is loaded" do
+      record = %{master_section: %Ash.NotLoaded{}, section: %{title: "Plain"}}
+
+      assert Labels.first_loaded(record, [:master_section, :section]) == %{title: "Plain"}
+
+      both = %{master_section: %{title: "Master"}, section: %{title: "Plain"}}
+      assert Labels.first_loaded(both, [:master_section, :section]) == %{title: "Master"}
+    end
+
+    test "gives nil when none is loaded, or the loaded one holds nil" do
+      none = %{master_section: %Ash.NotLoaded{}, section: %Ash.NotLoaded{}}
+      assert Labels.first_loaded(none, [:master_section, :section]) == nil
+
+      empty = %{master_section: nil, section: %{title: "Plain"}}
+      assert Labels.first_loaded(empty, [:master_section, :section]) == nil
+    end
+  end
+
   describe "increment_label/1" do
     test "words the five kinds of bump, and prints anything else" do
       assert Enum.map([:major, :minor, :patch, :prerelease, :none], &Labels.increment_label/1) ==

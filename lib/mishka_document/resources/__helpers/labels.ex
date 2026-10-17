@@ -55,6 +55,21 @@ defmodule MishkaDocument.Resources.Helpers.Labels do
   def counted(value) when is_integer(value) and value >= 0, do: value
   def counted(_unloaded), do: 0
 
+  @doc """
+  The first of `fields` of `record` that is loaded, `nil` when none is or the loaded one holds `nil`.
+
+  A record read by a master carries its relationships under `master_` names, one read by a site
+  user under the plain ones; the other set stays `%Ash.NotLoaded{}`.
+
+      Labels.first_loaded(draft, [:master_section, :section])
+  """
+  @spec first_loaded(map(), [atom()]) :: term()
+  def first_loaded(record, fields) do
+    fields
+    |> Enum.map(&Map.fetch!(record, &1))
+    |> Enum.find(&(not match?(%Ash.NotLoaded{}, &1)))
+  end
+
   @doc "The word for a kind of version bump, in the viewer's language."
   @spec increment_label(term()) :: String.t()
   def increment_label(:major), do: gettext("major")

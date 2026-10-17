@@ -74,16 +74,20 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
       language = language || Languages.primary(site_id)
       Gettext.put_locale(language)
 
-      {:ok,
-       assign(socket,
-         runtime_page: true,
-         current_site: site,
-         site_name: site.name,
-         page: %{language: language},
-         page_title: example.attrs |> Map.get("title") |> title(),
-         page_seo: %{tags: @robots, schema: []},
-         example: example.inner || ""
-       ), layout: false}
+      # The host's root layout reads `:current_site`, `:page`, `:page_seo` and `:runtime_page`.
+      # credo:disable-for-lines:10 Jump.CredoChecks.UnusedLiveViewAssign
+      socket =
+        assign(socket,
+          runtime_page: true,
+          current_site: site,
+          site_name: site.name,
+          page: %{language: language},
+          page_title: example.attrs |> Map.get("title") |> title(),
+          page_seo: %{tags: @robots, schema: []},
+          example: example.inner || ""
+        )
+
+      {:ok, socket, layout: false}
     else
       _missing -> raise NotFoundError, message: "Example not found"
     end
@@ -126,22 +130,17 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
   """
   @spec sources(String.t(), String.t()) :: String.t()
   def sources(html, source) when is_binary(html) and is_binary(source) do
-    case String.contains?(html, "doc-example") do
-      false ->
-        html
+    if String.contains?(html, "doc-example"), do: tag_sources(html, source), else: html
+  end
 
-      true ->
-        @code
-        |> Regex.split(html, include_captures: true)
-        |> Enum.map_reduce(0, fn part, at ->
-          case Regex.match?(@code_open, part) do
-            true -> {part, at}
-            false -> tagged(part, source, at)
-          end
-        end)
-        |> elem(0)
-        |> Enum.join()
-    end
+  defp tag_sources(html, source) do
+    @code
+    |> Regex.split(html, include_captures: true)
+    |> Enum.map_reduce(0, fn part, at ->
+      if Regex.match?(@code_open, part), do: {part, at}, else: tagged(part, source, at)
+    end)
+    |> elem(0)
+    |> Enum.join()
   end
 
   @doc """
@@ -163,14 +162,15 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
     {pieces, next} =
       @marker
       |> Regex.split(part, include_captures: true)
-      |> Enum.map_reduce(at, fn piece, n ->
-        case Regex.match?(@whole_marker, piece) do
-          true -> {piece <> ~s( source="#{source}/#{n}"), n + 1}
-          false -> {piece, n}
-        end
-      end)
+      |> Enum.map_reduce(at, &place(&1, &2, source))
 
     {Enum.join(pieces), next}
+  end
+
+  defp place(piece, n, source) do
+    if Regex.match?(@whole_marker, piece),
+      do: {piece <> ~s( source="#{source}/#{n}"), n + 1},
+      else: {piece, n}
   end
 
   @doc """
@@ -184,23 +184,21 @@ defmodule MishkaDocumentWeb.Live.ExamplePreview do
   """
   @spec with_version(String.t(), String.t() | nil) :: String.t()
   def with_version(html, number) when is_binary(html) and is_binary(number) do
-    case String.contains?(html, "{{") do
-      false ->
-        html
-
-      true ->
-        filled = number |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
-
-        Regex.replace(@version_placeholder, html, fn whole, escape ->
-          case escape do
-            "" -> filled
-            _escaped -> String.slice(whole, 1..-1//1)
-          end
-        end)
-    end
+    if String.contains?(html, "{{"), do: fill_version(html, number), else: html
   end
 
   def with_version(html, _no_number) when is_binary(html), do: html
+
+  defp fill_version(html, number) do
+    filled = number |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+    Regex.replace(@version_placeholder, html, fn whole, escape ->
+      placeholder(whole, escape, filled)
+    end)
+  end
+
+  defp placeholder(_whole, "", filled), do: filled
+  defp placeholder(whole, _escaped, _filled), do: String.slice(whole, 1..-1//1)
 
   # The marker with that source among the markers of `html`, at any depth.
   defp found(html, wanted) do

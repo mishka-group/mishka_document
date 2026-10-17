@@ -168,26 +168,30 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
            tenant: tenant,
            authorize?: false
          ) do
+      {:ok, %{source_section_id: source_section_id}} when not is_nil(source_section_id) ->
+        # Draft was updating existing section
+        source_section_id
+
       {:ok, section_draft} ->
-        if section_draft.source_section_id do
-          # Draft was updating existing section
-          section_draft.source_section_id
-        else
-          # Draft created new section, find it by matching criteria
-          # This is a simplification - in production you might want to store the created section_id on the draft
-          case MishkaDocument.Section
-               |> Ash.Query.filter(
-                 workspace_version_id == ^section_draft.workspace_version_id and
-                   slug == ^section_draft.slug
-               )
-               |> Ash.read(Ash.Scope.to_opts(context, tenant: tenant)) do
-            {:ok, [section | _]} -> section.id
-            _ -> nil
-          end
-        end
+        # Draft created new section, find it by matching criteria
+        # This is a simplification - in production you might want to store the created section_id on the draft
+        section_id_of(section_draft, tenant, context)
 
       _ ->
         nil
+    end
+  end
+
+  defp section_id_of(section_draft, tenant, context) do
+    MishkaDocument.Section
+    |> Ash.Query.filter(
+      workspace_version_id == ^section_draft.workspace_version_id and
+        slug == ^section_draft.slug
+    )
+    |> Ash.read(Ash.Scope.to_opts(context, tenant: tenant))
+    |> case do
+      {:ok, [section | _]} -> section.id
+      _ -> nil
     end
   end
 

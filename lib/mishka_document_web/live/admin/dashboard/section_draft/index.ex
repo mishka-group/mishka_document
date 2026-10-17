@@ -3,12 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
+  @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User
   alias MishkaDocument.Resources.Helpers.Labels
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
+  alias Phoenix.HTML.Safe
 
   @impl true
   def mount(params, _session, socket) do
@@ -187,37 +190,19 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
   end
 
   defp render_expanded_content(%{section_draft: sd}) do
-    wv =
-      cond do
-        !match?(%Ash.NotLoaded{}, sd.master_workspace_version) -> sd.master_workspace_version
-        !match?(%Ash.NotLoaded{}, sd.workspace_version) -> sd.workspace_version
-        true -> nil
-      end
-
+    wv = Labels.first_loaded(sd, [:master_workspace_version, :workspace_version])
     wv_name = if wv, do: wv.version_name, else: gettext("Unknown")
 
-    source =
-      cond do
-        !match?(%Ash.NotLoaded{}, sd.master_source_section) -> sd.master_source_section
-        !match?(%Ash.NotLoaded{}, sd.source_section) -> sd.source_section
-        true -> nil
-      end
-
+    source = Labels.first_loaded(sd, [:master_source_section, :source_section])
     source_title = if source, do: source.title, else: "-"
 
-    parent =
-      cond do
-        !match?(%Ash.NotLoaded{}, sd.master_parent_section) -> sd.master_parent_section
-        !match?(%Ash.NotLoaded{}, sd.parent_section) -> sd.parent_section
-        true -> nil
-      end
-
+    parent = Labels.first_loaded(sd, [:master_parent_section, :parent_section])
     parent_title = if parent, do: parent.title, else: "-"
 
     creator =
       if sd.created_by_user && !match?(%Ash.NotLoaded{}, sd.created_by_user),
         do: sd.created_by_user.email,
-        else: MishkaCmsCore.Accounts.Helper.label(:unknown)
+        else: Helper.label(:unknown)
 
     assigns = %{
       sd: sd,
@@ -318,7 +303,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
       </div>
     </div>
     """
-    |> Phoenix.HTML.Safe.to_iodata()
+    |> Safe.to_iodata()
     |> IO.iodata_to_binary()
   end
 end

@@ -57,26 +57,24 @@ defmodule MishkaDocument.Resources.Calculations.BreadcrumbPath do
 
   # Every ancestor of `ids` by id, `nil` for an id that is not there to read.
   defp read_up(site_id, ids, ancestors, context) do
-    case ids
-         |> Enum.reject(&is_nil/1)
-         |> Enum.uniq()
-         |> Enum.reject(&Map.has_key?(ancestors, &1)) do
-      [] ->
+    wanted =
+      ids |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.reject(&Map.has_key?(ancestors, &1))
+
+    climb(wanted, site_id, ancestors, context)
+  end
+
+  defp climb([], _site_id, ancestors, _context), do: ancestors
+
+  defp climb(wanted, site_id, ancestors, context) do
+    case read(site_id, wanted, context) do
+      {:ok, rows} ->
+        ancestors = Map.merge(ancestors, Map.new(wanted, &{&1, nil}))
+        ancestors = Enum.reduce(rows, ancestors, &Map.put(&2, &1.id, &1))
+
+        read_up(site_id, Enum.map(rows, & &1.parent_section_id), ancestors, context)
+
+      {:error, _refused} ->
         ancestors
-
-      wanted ->
-        case read(site_id, wanted, context) do
-          {:ok, rows} ->
-            ancestors =
-              Enum.reduce(rows, Map.merge(ancestors, Map.new(wanted, &{&1, nil})), fn row, acc ->
-                Map.put(acc, row.id, row)
-              end)
-
-            read_up(site_id, Enum.map(rows, & &1.parent_section_id), ancestors, context)
-
-          {:error, _refused} ->
-            ancestors
-        end
     end
   end
 

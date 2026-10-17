@@ -16,26 +16,26 @@ defmodule MishkaDocument.Resources.Changes.EnsureSingleLatestVersion do
   @impl true
   def change(changeset, _opts, context) do
     Ash.Changeset.after_action(changeset, fn _changeset, result ->
-      if result.is_latest_for_version do
-        MishkaDocument.WorkspaceVersion
-        |> Ash.Query.filter(
-          workspace_id == ^result.workspace_id and
-            is_latest_for_version == true and
-            id != ^result.id
-        )
-        |> Ash.read!(Ash.Scope.to_opts(context, tenant: result.site_id))
-        |> Enum.each(fn version ->
-          version
-          |> Ash.Changeset.for_update(
-            :update,
-            %{is_latest_for_version: false},
-            Ash.Scope.to_opts(context, tenant: result.site_id)
-          )
-          |> Ash.update!()
-        end)
-      end
+      if result.is_latest_for_version, do: unmark_others(result, context)
 
       {:ok, result}
+    end)
+  end
+
+  defp unmark_others(result, context) do
+    opts = Ash.Scope.to_opts(context, tenant: result.site_id)
+
+    MishkaDocument.WorkspaceVersion
+    |> Ash.Query.filter(
+      workspace_id == ^result.workspace_id and
+        is_latest_for_version == true and
+        id != ^result.id
+    )
+    |> Ash.read!(opts)
+    |> Enum.each(fn version ->
+      version
+      |> Ash.Changeset.for_update(:update, %{is_latest_for_version: false}, opts)
+      |> Ash.update!()
     end)
   end
 end
