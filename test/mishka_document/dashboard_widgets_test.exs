@@ -61,9 +61,9 @@ defmodule MishkaDocument.Dashboard.WidgetsTest do
     end
   end
 
-  # EACH WIDGET READS ITS DATA WITH NO POLICY IN THE WAY, so the area it names is the only gate on
-  # that data: the issue and document lists are the section area's, the version timeline and the
-  # summary the workspace area's. Its settings carry the same gate.
+  # EACH WIDGET IS OFFERED TO THE AREA IT NAMES: the issue and document lists are the section
+  # area's, the version timeline and the summary the workspace area's. Its settings carry the same
+  # gate, and the data it reads is read as the viewer, so the resources' policies answer for it too.
   @areas [
     {RecentDocuments, "admin:dashboard:document:section", "admin:dashboard:document:workspace"},
     {OpenIssues, "admin:dashboard:document:section", "admin:dashboard:document:workspace"},
@@ -227,6 +227,84 @@ defmodule MishkaDocument.Dashboard.WidgetsTest do
     assert tenant_html =~ "Broken anchor in guide"
     assert tenant_html =~ "Broken link"
     refute tenant_html =~ "Misspelled heading"
+  end
+
+  # THE WIDGETS READ AS THE VIEWER, so what a viewer is not allowed to read is not in the data.
+  describe "a widget loaded for a viewer who holds no document area" do
+    setup do
+      site = create_site!()
+      create_workspace!(site_id: site.id, name: "Walled Handbook", status: :active)
+      create_issue!(site_id: site.id, title: "Walled issue")
+
+      nobody = create_user_with_permissions!(["admin:dashboard:runtime:page"], site_id: site.id)
+
+      {:ok, site: site, nobody: nobody}
+    end
+
+    test "reads nothing, and does not raise", %{nobody: nobody} do
+      assert %{count: 0, latest: []} = OpenIssues.load(nobody)
+      assert %{workspaces: []} = RecentDocuments.load(nobody)
+      assert %{versions: [], total: 0} = VersionActivity.load(nobody)
+
+      assert %{
+               total: 0,
+               versions: 0,
+               sections: 0,
+               section_drafts: 0,
+               issues: 0,
+               note_drafts: 0,
+               languages: []
+             } = WorkspacesSummary.load(nobody)
+    end
+  end
+
+  describe "a widget loaded for a viewer who holds one area" do
+    setup do
+      site = create_site!()
+      workspace = create_workspace!(site_id: site.id, name: "Area Handbook", skip_version: true)
+      create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+      create_issue!(site_id: site.id, title: "Area issue")
+
+      workspace_admin =
+        create_user_with_permissions!(["admin:dashboard:document:workspace"], site_id: site.id)
+
+      section_admin =
+        create_user_with_permissions!(["admin:dashboard:document:section"], site_id: site.id)
+
+      {:ok, workspace_admin: workspace_admin, section_admin: section_admin}
+    end
+
+    test "the summary counts what the viewer's area reads, and nothing of the other", %{
+      workspace_admin: workspace_admin,
+      section_admin: section_admin
+    } do
+      assert %{
+               total: workspaces,
+               versions: versions,
+               sections: 0,
+               section_drafts: 0,
+               issues: 0,
+               note_drafts: 0,
+               languages: ["EN"]
+             } = WorkspacesSummary.load(workspace_admin)
+
+      assert workspaces >= 1
+      assert versions >= 1
+
+      assert %{total: ^workspaces, issues: 1} = WorkspacesSummary.load(section_admin)
+    end
+
+    test "the issues are the section area's alone, the versions both areas' to read", %{
+      workspace_admin: workspace_admin,
+      section_admin: section_admin
+    } do
+      assert %{count: 0, latest: []} = OpenIssues.load(workspace_admin)
+      assert %{count: 1, latest: [%{title: "Area issue"}]} = OpenIssues.load(section_admin)
+
+      assert %{total: total, versions: [_ | _]} = VersionActivity.load(workspace_admin)
+      assert total >= 1
+      assert %{total: ^total, versions: [_ | _]} = VersionActivity.load(section_admin)
+    end
   end
 
   defp render_widget(module, data) do

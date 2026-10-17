@@ -5,11 +5,11 @@
 defmodule MishkaDocument.Dashboard.Widgets.VersionActivity do
   @moduledoc """
   Dashboard widget (a `dashboard:widgets` plugin): the most recent workspace versions — workspace
-  name, version number, and status badge — read through the `WorkspaceVersion` `:master_read`
-  (tenancy-bypassing) action with the version's workspace loaded: `:master_workspace` for a master,
-  `:workspace` for a tenant admin. A master sees every site's versions; a tenant admin only its own
-  site's. Offered to holders of `admin:dashboard:document:workspace`, which is the only gate on what
-  it reads.
+  name, version number, and status badge — read as the viewer through
+  `MishkaDocument.Dashboard.Scope` with the version's workspace loaded: `:master_workspace` for a
+  master, `:workspace` for a site's admin. A master sees every site's versions, a site's admin only
+  their own site's, and a viewer without a document area none. Offered to holders of
+  `admin:dashboard:document:workspace`.
 
   How far back the timeline reaches is the viewer's own setting — the card's gear in customize mode,
   or Settings → Documents → Dashboard widgets, both writing the same per-user row
@@ -18,9 +18,9 @@ defmodule MishkaDocument.Dashboard.Widgets.VersionActivity do
   use MishkaInstaller.Event.Hook, event: "dashboard:widgets", initial: %{priority: 94}
   use Gettext, backend: MishkaCmsCore.Gettext
   import Phoenix.Component
-  require Ash.Query
 
   alias MishkaCmsCore.Dashboard.Widget
+  alias MishkaDocument.Dashboard.Scope
   alias MishkaDocument.WorkspaceVersion
 
   @count %{
@@ -57,29 +57,19 @@ defmodule MishkaDocument.Dashboard.Widgets.VersionActivity do
   end
 
   @doc """
-  Loads this widget's data off the dashboard render (in a Task), scoped to the viewer and sized by
+  Loads this widget's data off the dashboard render (in a Task), read as the viewer and sized by
   their own "Versions to show" setting. Called as `load/1` (a direct call, no dashboard) it uses the
   declared default.
   """
   def load(user, config \\ %{}) do
-    scope = Widget.scope(user)
-
-    %{results: versions} =
+    versions =
       WorkspaceVersion
-      |> Ash.Query.for_read(:master_read, %{}, actor: user, tenant: scope, authorize?: false)
-      |> scope_filter(scope)
+      |> Scope.query(user)
       |> Ash.Query.sort(inserted_at: :desc)
-      |> Ash.Query.load(workspace_load(scope))
-      |> Ash.read!(page: [limit: Map.get(config, @count.key, @count.default)], authorize?: false)
+      |> Ash.Query.load(workspace_load(Widget.scope(user)))
+      |> Scope.list(Map.get(config, @count.key, @count.default))
 
-    %{versions: versions, total: total(scope)}
-  end
-
-  defp total(scope) do
-    WorkspaceVersion
-    |> Ash.Query.for_read(:master_read, %{}, authorize?: false)
-    |> scope_filter(scope)
-    |> Ash.count!(authorize?: false)
+    %{versions: versions, total: WorkspaceVersion |> Scope.query(user) |> Scope.count()}
   end
 
   def render(assigns) do
@@ -109,9 +99,6 @@ defmodule MishkaDocument.Dashboard.Widgets.VersionActivity do
     <Widget.card_footer link={@widget.link} label={gettext("View all")} />
     """
   end
-
-  defp scope_filter(query, nil), do: query
-  defp scope_filter(query, site_id), do: Ash.Query.filter(query, site_id == ^site_id)
 
   defp workspace_load(nil), do: :master_workspace
   defp workspace_load(_site_id), do: :workspace

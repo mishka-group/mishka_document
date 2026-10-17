@@ -6,10 +6,10 @@ defmodule MishkaDocument.Dashboard.Widgets.WorkspacesSummary do
   @moduledoc """
   Dashboard widget (a `dashboard:widgets` plugin): the full-width dark "Documents" summary panel —
   a docstats row of totals for workspaces, versions, sections, section drafts, issues, note drafts,
-  and the set of primary languages. Every total is counted through each resource's `:master_read`
-  (tenancy-bypassing) action via `Ash.count!/2`, scoped by `Widget.scope/1`: a master counts every
-  site's documents, a tenant admin only its own site's. Offered to holders of
-  `admin:dashboard:document:workspace`, which is the only gate on what it counts.
+  and the set of primary languages. Every total is counted as the viewer through
+  `MishkaDocument.Dashboard.Scope`: a master counts every site's documents, a site's admin only
+  their own site's, and a total whose resource belongs to an area the viewer does not hold is `0`.
+  Offered to holders of `admin:dashboard:document:workspace`.
 
   Unlike the white list/stat widgets this one renders its OWN dark shell (bleeding to the card edges
   with `-m-5`) instead of `Widget.card_header`/`Widget.card_footer`.
@@ -20,6 +20,7 @@ defmodule MishkaDocument.Dashboard.Widgets.WorkspacesSummary do
   require Ash.Query
 
   alias MishkaCmsCore.Dashboard.Widget
+  alias MishkaDocument.Dashboard.Scope
   alias MishkaDocument.{Issue, NoteDraft, Section, SectionDraft, Workspace, WorkspaceVersion}
   alias Phoenix.LiveView.JS
 
@@ -56,18 +57,16 @@ defmodule MishkaDocument.Dashboard.Widgets.WorkspacesSummary do
     widget
   end
 
-  @doc "Loads this widget's data off the dashboard render (in a Task), scoped to the viewer."
+  @doc "Loads this widget's data off the dashboard render (in a Task), read as the viewer."
   def load(user) do
-    scope = Widget.scope(user)
-
     %{
-      total: count(Workspace, scope),
-      versions: count(WorkspaceVersion, scope),
-      sections: count(Section, scope),
-      section_drafts: count(SectionDraft, scope),
-      issues: open_issue_count(scope),
-      note_drafts: count(NoteDraft, scope),
-      languages: languages(scope)
+      total: count(Workspace, user),
+      versions: count(WorkspaceVersion, user),
+      sections: count(Section, user),
+      section_drafts: count(SectionDraft, user),
+      issues: open_issue_count(user),
+      note_drafts: count(NoteDraft, user),
+      languages: languages(user)
     }
   end
 
@@ -173,34 +172,26 @@ defmodule MishkaDocument.Dashboard.Widgets.WorkspacesSummary do
   defp num_tone(:red), do: "text-[#f2a79f]"
   defp num_tone(_), do: "text-white"
 
-  defp count(resource, scope) do
-    resource
-    |> Ash.Query.for_read(:master_read, %{}, authorize?: false)
-    |> scope_filter(scope)
-    |> Ash.count!(authorize?: false)
-  end
+  defp count(resource, user), do: resource |> Scope.query(user) |> Scope.count()
 
-  defp open_issue_count(scope) do
+  defp open_issue_count(user) do
     Issue
-    |> Ash.Query.for_read(:master_read, %{}, authorize?: false)
-    |> scope_filter(scope)
+    |> Scope.query(user)
     |> Ash.Query.filter(status in [:open, :in_progress])
-    |> Ash.count!(authorize?: false)
+    |> Scope.count()
   end
 
-  defp languages(scope) do
+  defp languages(user) do
     Workspace
-    |> Ash.Query.for_read(:master_read, %{}, authorize?: false)
-    |> scope_filter(scope)
+    |> Scope.query(user, :read_any)
     |> Ash.Query.select([:language])
-    |> Ash.stream!(authorize?: false, stream_with: :offset)
-    |> Stream.map(& &1.language)
-    |> Stream.reject(&(&1 in [nil, ""]))
-    |> Stream.map(&String.upcase/1)
+    |> Ash.Query.distinct(:language)
+    |> Ash.Query.sort(:language)
+    |> Scope.list()
+    |> Enum.map(& &1.language)
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.map(&String.upcase/1)
     |> Enum.uniq()
     |> Enum.sort()
   end
-
-  defp scope_filter(query, nil), do: query
-  defp scope_filter(query, site_id), do: Ash.Query.filter(query, site_id == ^site_id)
 end
