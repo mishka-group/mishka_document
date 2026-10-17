@@ -38,7 +38,7 @@ defmodule MishkaDocument.SectionDraft do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
-  alias MishkaCmsCore.Localized
+  alias MishkaDocument.Resources.Helpers.Labels
 
   @admin_fields [
     :workspace_version_id,
@@ -86,19 +86,6 @@ defmodule MishkaDocument.SectionDraft do
   @doc "The page's fields a draft of it holds."
   @spec page_fields() :: [atom()]
   def page_fields, do: @page_fields
-
-  # The review-chip palette the section card already uses, so a status reads the same colour whichever
-  # view you are in. `:archived` is carried for parity with the section card even though a draft's
-  # review status never reaches it.
-  @reviews %{
-    approved: %{label: gettext_noop("Approved"), class: "bg-[#e6f6ee] text-[#177a53]"},
-    pending: %{label: gettext_noop("Pending"), class: "bg-[#fbf1df] text-[#a5691a]"},
-    rejected: %{label: gettext_noop("Rejected"), class: "bg-[#fbe9e7] text-[#b3433a]"},
-    needs_revision: %{label: gettext_noop("Needs Revision"), class: "bg-[#f4ecfb] text-[#8a4bcc]"},
-    archived: %{label: gettext_noop("Archived"), class: "bg-[#f2f1ec] text-[#6d6a63]"}
-  }
-
-  @unknown_review %{label: "—", class: "bg-[#f2f1ec] text-[#8a877f]"}
 
   @repo Application.compile_env!(:mishka_cms_core, :repo)
 
@@ -255,15 +242,15 @@ defmodule MishkaDocument.SectionDraft do
           end
 
           render fn record ->
-            order = counted(record.order_position)
-            words = counted(record.content_word_count)
+            order = Labels.counted(record.order_position)
+            words = Labels.counted(record.content_word_count)
 
             items =
               [
                 draft_marker(record.source_section_id),
                 %{
                   icon: "hero-tag",
-                  value: version_label(record.change_version),
+                  value: Labels.version_label(record.change_version),
                   label: gettext("Target version"),
                   class: "text-[#4f4bcc]"
                 },
@@ -280,7 +267,7 @@ defmodule MishkaDocument.SectionDraft do
 
             chips = [
               %{
-                text: increment_label(record.version_increment_type),
+                text: Labels.increment_label(record.version_increment_type),
                 label: gettext("Increment type")
               },
               %{text: record.language, label: gettext("Language")}
@@ -351,8 +338,8 @@ defmodule MishkaDocument.SectionDraft do
           end
 
           render fn record ->
-            created = inserted_on(record.inserted_at)
-            updated = inserted_on(record.updated_at)
+            created = Labels.inserted_on(record.inserted_at)
+            updated = Labels.inserted_on(record.updated_at)
 
             assigns = %{
               id: record.id,
@@ -396,7 +383,7 @@ defmodule MishkaDocument.SectionDraft do
 
             assigns = %{
               site: (state.master_user? && site_name) || nil,
-              date: inserted_on(record.inserted_at)
+              date: Labels.inserted_on(record.inserted_at)
             }
 
             ~H"""
@@ -1903,22 +1890,8 @@ defmodule MishkaDocument.SectionDraft do
     )
   end
 
-  # A `requires`-selected aggregate or calculation arrives as a truthy `%Ash.NotLoaded{}` or
-  # `%Ash.ForbiddenField{}` when the viewer's field policy hides it, so `|| 0` lets the struct through
-  # and the row renders it. Matching on the integer is what actually guards the cell.
-  @spec counted(term()) :: non_neg_integer()
-  defp counted(value) when is_integer(value) and value >= 0, do: value
-  defp counted(_unloaded), do: 0
-
   @doc false
-  @spec review_badge(term()) :: %{label: String.t(), class: String.t()}
-  def review_badge(status) when is_map_key(@reviews, status),
-    do: translate_label(@reviews[status])
-
-  def review_badge(_unknown), do: @unknown_review
-
-  defp translate_label(%{label: label} = badge),
-    do: %{badge | label: Gettext.gettext(MishkaCmsCore.Gettext, label)}
+  defdelegate review_badge(status), to: Labels
 
   # A draft with a source section edits an existing one; without, it proposes a new section. The
   # marker colours the two apart the way the card does.
@@ -1943,28 +1916,10 @@ defmodule MishkaDocument.SectionDraft do
   defp applied_marker(at) when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
     do: %{
       icon: "hero-check-circle",
-      value: inserted_on(at),
+      value: Labels.inserted_on(at),
       label: gettext("Applied"),
       class: "text-[#177a53]"
     }
 
   defp applied_marker(_unapplied), do: nil
-
-  @spec increment_label(term()) :: String.t()
-  defp increment_label(:major), do: gettext("major")
-  defp increment_label(:minor), do: gettext("minor")
-  defp increment_label(:patch), do: gettext("patch")
-  defp increment_label(:prerelease), do: gettext("prerelease")
-  defp increment_label(:none), do: gettext("none")
-  defp increment_label(other), do: to_string(other)
-
-  @spec version_label(term()) :: String.t()
-  defp version_label(version) when is_binary(version) and version != "", do: "v" <> version
-  defp version_label(_missing), do: "v0.0.1"
-
-  @spec inserted_on(term()) :: String.t()
-  defp inserted_on(at) when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-    do: Localized.date(at, :yMMMd)
-
-  defp inserted_on(_missing), do: "—"
 end

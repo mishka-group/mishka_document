@@ -42,18 +42,7 @@ defmodule MishkaDocument.NoteDraft do
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
   alias MishkaCmsCore.Localized
-
-  # The review-chip palette the draft cards already use, so a status reads the same colour whichever
-  # view you land on and note drafts match section drafts row for row.
-  @reviews %{
-    approved: %{label: gettext_noop("Approved"), class: "bg-[#e6f6ee] text-[#177a53]"},
-    pending: %{label: gettext_noop("Pending"), class: "bg-[#fbf1df] text-[#a5691a]"},
-    rejected: %{label: gettext_noop("Rejected"), class: "bg-[#fbe9e7] text-[#b3433a]"},
-    needs_revision: %{label: gettext_noop("Needs Revision"), class: "bg-[#f4ecfb] text-[#8a4bcc]"},
-    archived: %{label: gettext_noop("Archived"), class: "bg-[#f2f1ec] text-[#6d6a63]"}
-  }
-
-  @unknown_review %{label: "—", class: "bg-[#f2f1ec] text-[#8a877f]"}
+  alias MishkaDocument.Resources.Helpers.Labels
 
   @applied_states %{
     applied: %{label: gettext_noop("Applied"), class: "bg-[#e6f6ee] text-[#177a53]"},
@@ -240,8 +229,8 @@ defmodule MishkaDocument.NoteDraft do
 
           render fn record ->
             assigns = %{
-              version: version_label(record.change_version),
-              type: increment_label(record.version_increment_type)
+              version: Labels.version_label(record.change_version),
+              type: Labels.increment_label(record.version_increment_type)
             }
 
             ~H"""
@@ -268,8 +257,8 @@ defmodule MishkaDocument.NoteDraft do
 
           render fn record ->
             assigns = %{
-              content: review_badge(record.content_review_status),
-              technical: review_badge(record.technical_review_status)
+              content: Labels.review_badge(record.content_review_status),
+              technical: Labels.review_badge(record.technical_review_status)
             }
 
             ~H"""
@@ -346,7 +335,9 @@ defmodule MishkaDocument.NoteDraft do
               id: record.id,
               creator: creator(record),
               updated:
-                dgettext("mishka_gervaz", "Updated %{date}", date: inserted_on(record.updated_at))
+                dgettext("mishka_gervaz", "Updated %{date}",
+                  date: Labels.inserted_on(record.updated_at)
+                )
             }
 
             ~H"""
@@ -383,7 +374,7 @@ defmodule MishkaDocument.NoteDraft do
 
             assigns = %{
               site: (state.master_user? && site_name) || nil,
-              date: inserted_on(record.inserted_at)
+              date: Labels.inserted_on(record.inserted_at)
             }
 
             ~H"""
@@ -1745,54 +1736,28 @@ defmodule MishkaDocument.NoteDraft do
     )
   end
 
-  @spec review_badge(term()) :: %{label: String.t(), class: String.t()}
-  defp review_badge(status) when is_map_key(@reviews, status),
-    do: translate_label(@reviews[status])
-
-  defp review_badge(_unknown), do: @unknown_review
-
   # The render fn only receives the `requires` fields, so this matches on those keys directly. A nil
   # `applied_at` fails the struct guard and falls through to the review-derived verdicts.
   @spec applied_status(map()) :: {%{label: String.t(), class: String.t()}, String.t() | nil}
   defp applied_status(%{applied_at: at})
        when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-       do: {translate_label(@applied_states.applied), Localized.datetime(at, :yMMMdHm)}
+       do: {Labels.translate_label(@applied_states.applied), Localized.datetime(at, :yMMMdHm)}
 
   defp applied_status(%{content_review_status: :approved, technical_review_status: :approved}),
-    do: {translate_label(@applied_states.ready), gettext("Both approved, pending apply")}
+    do: {Labels.translate_label(@applied_states.ready), gettext("Both approved, pending apply")}
 
   defp applied_status(%{content_review_status: :rejected}),
-    do: {translate_label(@applied_states.rejected), gettext("Review rejected")}
+    do: {Labels.translate_label(@applied_states.rejected), gettext("Review rejected")}
 
   defp applied_status(%{technical_review_status: :rejected}),
-    do: {translate_label(@applied_states.rejected), gettext("Review rejected")}
+    do: {Labels.translate_label(@applied_states.rejected), gettext("Review rejected")}
 
   defp applied_status(%{content_review_status: :needs_revision}),
-    do: {translate_label(@applied_states.revision), gettext("Needs revision")}
+    do: {Labels.translate_label(@applied_states.revision), gettext("Needs revision")}
 
   defp applied_status(%{technical_review_status: :needs_revision}),
-    do: {translate_label(@applied_states.revision), gettext("Needs revision")}
+    do: {Labels.translate_label(@applied_states.revision), gettext("Needs revision")}
 
   defp applied_status(_pending),
-    do: {translate_label(@applied_states.pending), gettext("Awaiting review")}
-
-  defp translate_label(%{label: label} = badge),
-    do: %{badge | label: Gettext.gettext(MishkaCmsCore.Gettext, label)}
-
-  defp increment_label(:major), do: gettext("major")
-  defp increment_label(:minor), do: gettext("minor")
-  defp increment_label(:patch), do: gettext("patch")
-  defp increment_label(:prerelease), do: gettext("prerelease")
-  defp increment_label(:none), do: gettext("none")
-  defp increment_label(type), do: to_string(type)
-
-  @spec version_label(term()) :: String.t()
-  defp version_label(version) when is_binary(version) and version != "", do: "v" <> version
-  defp version_label(_missing), do: "v0.0.1"
-
-  @spec inserted_on(term()) :: String.t()
-  defp inserted_on(at) when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-    do: Localized.date(at, :yMMMd)
-
-  defp inserted_on(_missing), do: "—"
+    do: {Labels.translate_label(@applied_states.pending), gettext("Awaiting review")}
 end

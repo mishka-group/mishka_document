@@ -40,7 +40,7 @@ defmodule MishkaDocument.Workspace do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
-  alias MishkaCmsCore.Localized
+  alias MishkaDocument.Resources.Helpers.Labels
 
   @admin_fields [
     :name,
@@ -326,7 +326,7 @@ defmodule MishkaDocument.Workspace do
               },
               %{
                 icon: "hero-share",
-                value: counted(record.versions_count),
+                value: Labels.counted(record.versions_count),
                 label: dgettext("mishka_gervaz", "Versions")
               },
               %{
@@ -419,7 +419,7 @@ defmodule MishkaDocument.Workspace do
 
             assigns = %{
               site: (state.master_user? && site_name) || nil,
-              date: inserted_on(record.inserted_at)
+              date: Labels.inserted_on(record.inserted_at)
             }
 
             ~H"""
@@ -2114,28 +2114,15 @@ defmodule MishkaDocument.Workspace do
     end
   end
 
-  # A `requires`-selected aggregate or calculation arrives as a truthy `%Ash.NotLoaded{}` or
-  # `%Ash.ForbiddenField{}` when the viewer's field policy hides it, so `|| 0` lets the struct
-  # through. Matching on the integer is what actually guards the cell.
-  @spec counted(term()) :: non_neg_integer()
-  defp counted(value) when is_integer(value) and value >= 0, do: value
-  defp counted(_unloaded), do: 0
-
   # `health_metrics` is field-policy gated, so a viewer who cannot see it gets a struct rather than
   # the map — reading a figure off it has to survive that.
   @spec metric(term(), atom()) :: non_neg_integer()
   defp metric(metrics, key) when is_map(metrics) and not is_struct(metrics),
-    do: counted(Map.get(metrics, key))
+    do: Labels.counted(Map.get(metrics, key))
 
   defp metric(_unloaded, _key), do: 0
 
   @spec maintainer_count(term()) :: non_neg_integer()
   defp maintainer_count(%{"count" => count}) when is_integer(count) and count >= 0, do: count
   defp maintainer_count(_unavailable), do: 0
-
-  @spec inserted_on(term()) :: String.t()
-  defp inserted_on(at) when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-    do: Localized.date(at, :yMMMd)
-
-  defp inserted_on(_missing), do: "—"
 end

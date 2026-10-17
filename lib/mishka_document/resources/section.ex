@@ -42,8 +42,8 @@ defmodule MishkaDocument.Section do
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaCmsCore.CoreComponents, only: [icon: 1]
   import MishkaGervaz.UIAdapters.Tailwind, only: [copy_button: 1]
-  alias MishkaCmsCore.Localized
   alias MishkaDocument.Resources.Helpers.Contributors
+  alias MishkaDocument.Resources.Helpers.Labels
 
   # The card's action squares. `MishkaDocumentWeb.Templates.DocumentSection` gives them a row of their
   # own, so every one is icon-only and hides its label — which still reaches the DOM as `title` and as a
@@ -59,18 +59,6 @@ defmodule MishkaDocument.Section do
   @danger_action_class "inline-flex size-8 flex-none items-center justify-center rounded-[9px] border " <>
                          "border-[#f0dcd8] bg-[#fdf3f1] text-[#c0473d] transition-colors " <>
                          "hover:bg-[#fbe9e7] [&_.lbl]:hidden"
-
-  # The palette the card's review chips already use (`MishkaDocumentWeb.Templates.DocumentSection`'s
-  # `@reviews`), so a status reads the same colour whichever view you are in.
-  @reviews %{
-    approved: %{label: gettext_noop("Approved"), class: "bg-[#e6f6ee] text-[#177a53]"},
-    pending: %{label: gettext_noop("Pending"), class: "bg-[#fbf1df] text-[#a5691a]"},
-    rejected: %{label: gettext_noop("Rejected"), class: "bg-[#fbe9e7] text-[#b3433a]"},
-    needs_revision: %{label: gettext_noop("Needs Revision"), class: "bg-[#f4ecfb] text-[#8a4bcc]"},
-    archived: %{label: gettext_noop("Archived"), class: "bg-[#f2f1ec] text-[#6d6a63]"}
-  }
-
-  @unknown_review %{label: "—", class: "bg-[#f2f1ec] text-[#8a877f]"}
 
   @admin_fields [
     :workspace_version_id,
@@ -426,15 +414,15 @@ defmodule MishkaDocument.Section do
 
           render fn record ->
             assigns = %{
-              version: version_label(record.change_version),
-              order: counted(record.order_position),
-              words: counted(record.content_word_count),
-              contributors: counted(record.contributors_count),
-              versions: counted(record.section_versions_count),
+              version: Labels.version_label(record.change_version),
+              order: Labels.counted(record.order_position),
+              words: Labels.counted(record.content_word_count),
+              contributors: Labels.counted(record.contributors_count),
+              versions: Labels.counted(record.section_versions_count),
               pending:
-                counted(record.pending_section_draft_content_review_count) +
-                  counted(record.pending_section_draft_technical_review_count),
-              approved: counted(record.approved_section_draft_count)
+                Labels.counted(record.pending_section_draft_content_review_count) +
+                  Labels.counted(record.pending_section_draft_technical_review_count),
+              approved: Labels.counted(record.approved_section_draft_count)
             }
 
             ~H"""
@@ -511,7 +499,7 @@ defmodule MishkaDocument.Section do
 
             assigns = %{
               site_name: site_name,
-              date: inserted_on(record.inserted_at),
+              date: Labels.inserted_on(record.inserted_at),
               master_user?: state.master_user? and !is_nil(site_name)
             }
 
@@ -2601,30 +2589,6 @@ defmodule MishkaDocument.Section do
     end
   end
 
-  # A `requires`-selected aggregate or calculation arrives as a truthy `%Ash.NotLoaded{}` or
-  # `%Ash.ForbiddenField{}` when the viewer's field policy hides it, so `|| 0` lets the struct
-  # through and the row renders it. Matching on the integer is what actually guards the cell.
-  @spec counted(term()) :: non_neg_integer()
-  defp counted(value) when is_integer(value) and value >= 0, do: value
-  defp counted(_unloaded), do: 0
-
   @doc false
-  @spec review_badge(term()) :: %{label: String.t(), class: String.t()}
-  def review_badge(status) when is_map_key(@reviews, status),
-    do: translate_label(@reviews[status])
-
-  def review_badge(_unknown), do: @unknown_review
-
-  defp translate_label(%{label: label} = badge),
-    do: %{badge | label: Gettext.gettext(MishkaCmsCore.Gettext, label)}
-
-  @spec version_label(term()) :: String.t()
-  defp version_label(version) when is_binary(version) and version != "", do: "v" <> version
-  defp version_label(_missing), do: "v0.0.1"
-
-  @spec inserted_on(term()) :: String.t()
-  defp inserted_on(at) when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-    do: Localized.date(at, :yMMMd)
-
-  defp inserted_on(_missing), do: "—"
+  defdelegate review_badge(status), to: Labels
 end

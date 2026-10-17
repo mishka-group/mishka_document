@@ -6,7 +6,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
   use MishkaCmsCore.ExtensionLiveView
 
   alias MishkaCmsCore.Accounts.User
-  alias MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index, as: SectionIndex
+  alias MishkaDocument.Resources.Helpers.Labels
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
 
@@ -247,7 +247,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
         </div>
         <div>
           <span class="font-semibold text-gray-500">{gettext("Increment Type:")}</span>
-          <p class="text-gray-900">{SectionIndex.increment_label(@nd.version_increment_type)}</p>
+          <p class="text-gray-900">{Labels.increment_label(@nd.version_increment_type)}</p>
         </div>
         <div>
           <span class="font-semibold text-gray-500">{gettext("Order:")}</span>

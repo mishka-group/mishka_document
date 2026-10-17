@@ -1192,15 +1192,6 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   def version_status_label(:archived), do: dgettext("mishka_gervaz", "Archived")
   def version_status_label(status), do: to_string(status)
 
-  @doc "The words a draft's version increment type reads, in the viewer's language."
-  @spec increment_label(atom()) :: String.t()
-  def increment_label(:major), do: gettext("major")
-  def increment_label(:minor), do: gettext("minor")
-  def increment_label(:patch), do: gettext("patch")
-  def increment_label(:prerelease), do: gettext("prerelease")
-  def increment_label(:none), do: gettext("none")
-  def increment_label(type), do: to_string(type)
-
   def get_event_title(event) do
     cond do
       event.data && is_map(event.data) && event.data["title"] ->
