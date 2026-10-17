@@ -21,12 +21,14 @@ defmodule MishkaDocument.ProvisionTest do
   """
   use MishkaDocument.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
+  alias MishkaCmsCore.Install.Extensions
   alias MishkaCmsCore.Runtime.Component
   alias MishkaCmsCore.Runtime.Languages
   alias MishkaCmsCore.Runtime.Page
   alias MishkaCmsCore.Runtime.PageProvision
   alias MishkaCmsCore.Runtime.Snippet
-  alias MishkaCmsCore.Install.Extensions
   alias MishkaDocument.Plugins.Installer
   alias MishkaDocument.Provision
   alias MishkaInstaller.Event.EventHandler
@@ -715,6 +717,43 @@ defmodule MishkaDocument.ProvisionTest do
       assert entry.app == :mishka_document
       assert entry.plugin == Installer
       assert entry.fields == []
+    end
+
+    # THE SCREEN GETS A FIXED MESSAGE, never the exception's own text; the log has the detail.
+    test "a failed install reports the fixed message and logs the exception", %{site: site} do
+      refused = create_user_with_permissions!(["admin:dashboard:document"], site_id: site.id)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:extension_failed, message}} =
+                   Extensions.install(site.id, "mishka_document", %{}, refused)
+
+          assert message ==
+                   "The install did not finish. Press Install again; details are in the server log."
+
+          refute message =~ "admin:dashboard"
+        end)
+
+      assert log =~ "[MishkaDocument] install on #{site.id} failed:"
+      assert log =~ "admin:dashboard:runtime:component"
+      refute Extensions.installed?(site.id, :mishka_document)
+    end
+
+    # ANY OF THE PAGES IS ENOUGH, and a page of another site is not this site's.
+    test "a site holding one of the pages counts as installed, and one holding none does not", %{
+      site: site
+    } do
+      refute Extensions.installed?(site.id, :mishka_document)
+
+      other = create_site!(active: true)
+      create_page!(site_id: other.id, path: hd(Provision.page_paths()), active: true)
+
+      refute Extensions.installed?(site.id, :mishka_document),
+             "a page of another site made this site look set up"
+
+      create_page!(site_id: site.id, path: hd(Provision.page_paths()), active: true)
+
+      assert Extensions.installed?(site.id, :mishka_document)
     end
 
     # A SITE IS NEVER SET UP BEHIND SOMEBODY'S BACK. Creating one used to queue this work; it does

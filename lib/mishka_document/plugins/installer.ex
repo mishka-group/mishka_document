@@ -72,12 +72,15 @@ defmodule MishkaDocument.Plugins.Installer do
     {:reply, %{payload | reports: reports ++ [Provision.ensure!(site_id, answers, actor: actor)]}}
   rescue
     error ->
-      # WHAT THE SITE DID GET STAYS WRITTEN. The components go in before the pages, so a run that
-      # raises has usually written some of it, and rolling back would take away what works. The
-      # screen is told the run failed and the logs say why; a second run writes only what is still
-      # missing, which is what makes pressing the button again the right thing to do.
+      # THE RESCUE STAYS BECAUSE CORE OFFERS ONLY `ensure!/4`: the install writes through the
+      # raising API, and one extension's failure must not take the installer down with it. WHAT THE
+      # SITE DID GET STAYS WRITTEN. The components go in before the pages, so a run that raises has
+      # usually written some of it, and rolling back would take away what works. The screen gets a
+      # fixed message, never the exception's own text, and the logs carry the detail; a second run
+      # writes only what is still missing, which is what makes pressing the button again the right
+      # thing to do.
       Logger.error("[MishkaDocument] install on #{site_id} failed: #{Exception.message(error)}")
-      {:reply, %{payload | reports: payload.reports ++ [%{error: Exception.message(error)}]}}
+      {:reply, %{payload | reports: payload.reports ++ [%{error: install_failed_message()}]}}
   end
 
   def call(payload), do: {:reply, payload}
@@ -93,9 +96,14 @@ defmodule MishkaDocument.Plugins.Installer do
     |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
     |> Ash.Query.filter(site_id == ^site_id and path in ^paths)
     |> Ash.Query.select([:id])
-    |> Ash.read!(authorize?: false, page: [limit: 1])
-    |> then(fn %{results: rows} -> rows != [] end)
-  rescue
-    _unreadable -> false
+    |> Ash.read(authorize?: false, page: [limit: 1])
+    |> case do
+      {:ok, %{results: rows}} -> rows != []
+      {:error, _unreadable} -> false
+    end
+  end
+
+  defp install_failed_message do
+    gettext("The install did not finish. Press Install again; details are in the server log.")
   end
 end
