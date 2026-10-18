@@ -13,8 +13,13 @@ defmodule MishkaDocument.Plugins.Installer do
 
   A SITE IS NEVER SET UP BEHIND SOMEBODY'S BACK. This answers a request naming a site; it does not
   listen for a site being created. A site added to a running CMS gets its own core content and
-  nothing else until an admin asks for the blog from the Documents menu — which is the only honest
+  nothing else until an admin asks for the documentation from the Documents menu — which is the only honest
   default, because a site may be a shop that will never have documentation.
+
+  The request's `:actor` is whoever pressed the button and must hold what
+  `MishkaCmsCore.Runtime.ExtensionProvision.required/1` names. A request with no actor is the
+  install wizard's own run and is answered only until the CMS is installed
+  (`MishkaCmsCore.Install.installed?/0`); after that it is refused like an actor holding nothing.
   """
 
   use Gettext, backend: MishkaCmsCore.Gettext
@@ -36,6 +41,8 @@ defmodule MishkaDocument.Plugins.Installer do
   require Ash.Query
   require Logger
 
+  alias MishkaCmsCore.Install
+  alias MishkaCmsCore.Runtime.ExtensionProvision
   alias MishkaDocument.Provision
 
   @key "mishka_document"
@@ -67,10 +74,25 @@ defmodule MishkaDocument.Plugins.Installer do
 
     # THE ACTOR RIDES ON THE PAYLOAD, put there by whoever asked. The wizard sends none — it runs
     # before there is a user — and a dashboard sends the session's, so what this writes is written
-    # as them and the resource's own policy answers for it.
+    # as them and the resource's own policy answers for it. NOBODY IS ANSWERED ONLY WHILE THE CMS IS
+    # BEING INSTALLED: once it is, a request with no actor is refused like an actor holding nothing.
     actor = Map.get(payload, :actor)
 
-    {:reply, %{payload | reports: reports ++ [Provision.ensure!(site_id, answers, actor: actor)]}}
+    report =
+      case missing(actor) do
+        [] ->
+          Provision.ensure!(site_id, answers, actor: actor)
+
+        names ->
+          %{
+            error:
+              gettext("Setting the documentation up needs these permissions: %{names}",
+                names: Enum.join(names, ", ")
+              )
+          }
+      end
+
+    {:reply, %{payload | reports: reports ++ [report]}}
   rescue
     error ->
       # THE RESCUE STAYS BECAUSE CORE OFFERS ONLY `ensure!/4`: the install writes through the
@@ -85,6 +107,14 @@ defmodule MishkaDocument.Plugins.Installer do
   end
 
   def call(payload), do: {:reply, payload}
+
+  defp missing(nil) do
+    if Install.installed?(),
+      do: ExtensionProvision.missing(Provision.manifest(), nil),
+      else: []
+  end
+
+  defp missing(actor), do: ExtensionProvision.missing(Provision.manifest(), actor)
 
   # ANY OF THEM, not all. A site an admin has pruned still has this extension; a site that has never
   # had it has none of them.
