@@ -357,7 +357,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
             </span>
             <span class="text-[11px] font-semibold text-[#a8a5a0]">{@date}</span>
             <span data-role="sec-contributors" class="text-[11px] font-semibold text-[#a8a5a0]">
-              {dgettext("mishka_gervaz", "%{count} contributors", count: @contributors)}
+              {dngettext("mishka_gervaz", "1 contributor", "%{count} contributors", @contributors)}
             </span>
             <span
               :if={@pending > 0}
