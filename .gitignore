@@ -33,3 +33,7 @@ mishka_document-*.tar
 # Mnesia writes a crash dump into the CWD, next to `erl_crash.dump` and for the same reasons. One
 # is 800 KB of binary, and a test run of this extension left one here.
 MnesiaCore.*
+
+# Template files the CMS compiler writes while tests set up a site (priv/static/temp/runtime/<site>/…),
+# for Tailwind to scan. They are output, never a source; mishka_cms_core ignores the same folder.
+/priv/static/temp/
