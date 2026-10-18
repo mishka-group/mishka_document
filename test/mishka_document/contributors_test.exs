@@ -5,7 +5,7 @@
 defmodule MishkaDocument.ContributorsTest do
   @moduledoc """
   A page's `contributors_count`: how many accounts created or updated the page, or a note of it,
-  counted from the event log by the database for each page asked about.
+  counted from the event log by the database, one statement for the whole batch of pages asked about.
 
   The count is gated upstream, by the page's field policy: a reader who may not see it is never
   asked for it, and the database is not asked either.
@@ -13,6 +13,7 @@ defmodule MishkaDocument.ContributorsTest do
   use MishkaDocument.DataCase, async: false
 
   alias MishkaDocument.{Note, Section}
+  alias MishkaDocument.Resources.Calculations.SectionMaintainers
 
   setup do
     site = create_site!()
@@ -159,6 +160,88 @@ defmodule MishkaDocument.ContributorsTest do
         assert %Ash.ForbiddenField{} = fetched.contributors_count
         assert log_reads(queries) == 0
       end
+    end
+  end
+
+  describe "a batch of pages" do
+    setup ctx do
+      site = create_site!()
+      workspace = create_workspace!(site_id: site.id, status: :active, skip_version: true)
+
+      version =
+        create_workspace_version!(workspace_id: workspace.id, site_id: site.id, status: :beta)
+
+      %{
+        other: %{
+          ctx
+          | site: site,
+            version: version,
+            first: create_user!(site_id: site.id, email: "other-site-first@test.com"),
+            second: create_user!(site_id: site.id, email: "other-site-second@test.com")
+        }
+      }
+    end
+
+    defp calculated(records), do: SectionMaintainers.calculate(records, [], %{})
+
+    test "mixing two sites and a page with no site counts each page as asked alone", ctx do
+      guide = write_section!(ctx, ctx.first, "Guide")
+      write_note!(ctx, guide, ctx.second)
+      notes = write_section!(ctx, ctx.first, "Notes")
+      unwritten = create_section!(site_id: ctx.site.id, workspace_version_id: ctx.version.id)
+
+      abroad = write_section!(ctx.other, ctx.other.first, "Abroad")
+      write_note!(ctx.other, abroad, ctx.other.second)
+      write_note!(ctx.other, abroad, ctx.other.second)
+      memo = write_section!(ctx.other, ctx.other.first, "Memo")
+      shared = write_section!(ctx.other, ctx.other.first, "Shared")
+      write_note!(ctx.other, shared, ctx.other.second)
+
+      assert calculated([guide, notes, abroad, memo, shared, unwritten]) == [2, 1, 2, 1, 2, 0]
+
+      batch = [
+        guide,
+        abroad,
+        unwritten,
+        %{id: notes.id, site_id: ctx.other.site.id},
+        %{id: memo.id, site_id: ctx.site.id},
+        %{id: shared.id, site_id: nil},
+        %{id: Ecto.UUID.generate(), site_id: nil}
+      ]
+
+      assert calculated(batch) == [2, 2, 0, 0, 0, 2, 0]
+      assert calculated(batch) == Enum.flat_map(batch, &calculated([&1]))
+    end
+
+    test "a batch with no page asks the database nothing" do
+      {counts, queries} = with_queries(fn -> calculated([]) end)
+
+      assert counts == []
+      assert log_reads(queries) == 0
+    end
+
+    test "fifty pages are counted by one statement on the log", ctx do
+      written = for n <- 1..3, do: write_section!(ctx, ctx.first, "Written #{n}")
+      write_note!(ctx, hd(written), ctx.second)
+
+      unwritten =
+        for _n <- 1..47,
+            do: create_section!(site_id: ctx.site.id, workspace_version_id: ctx.version.id)
+
+      batch = written ++ unwritten
+
+      {loaded, queries} =
+        with_queries(fn ->
+          Ash.load!(batch, [:contributors_count], actor: ctx.admin, tenant: ctx.site.id)
+        end)
+
+      assert length(loaded) == 50
+      assert log_reads(queries) == 1
+
+      assert loaded |> Enum.map(& &1.contributors_count) |> Enum.frequencies() ==
+               %{0 => 47, 1 => 2, 2 => 1}
+
+      assert Enum.map(loaded, & &1.id) == Enum.map(batch, & &1.id)
     end
   end
 end

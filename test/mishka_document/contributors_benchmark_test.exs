@@ -7,14 +7,14 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
   How long the Sections page's contributor figure takes on a busy event log: `contributors_count`
   over 50 pages with `EVENTS` rows (5,000 by default) in `mishka_document_event_logs`. The first 5,000
   are the 50 pages' own events (about 100 each); any more are other records' events, which the
-  figure has to read past.
+  figure has to read past. The 50 pages are one batch, counted by one statement.
 
   Left out of `mix test`; run it on its own:
 
       mix test --include benchmark test/mishka_document/contributors_benchmark_test.exs
       EVENTS=200000 mix test --include benchmark test/mishka_document/contributors_benchmark_test.exs
 
-  It prints how many statements the load ran, how long it took, and the plan of one of them.
+  It prints how many statements the load ran, how long it took, and the plan of the statement.
   """
   use MishkaDocument.DataCase, async: false
 
@@ -97,7 +97,8 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
         @writers,
         total,
         @page_events
-      ]
+      ],
+      timeout: :infinity
     )
   end
 
@@ -123,14 +124,15 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
         micros
       end
 
-    [first | _] = ctx.sections
     statement = Enum.find(statements, &String.contains?(&1, "mishka_document_event_logs"))
+    section_ids = Enum.map(ctx.sections, & &1.id)
+    site_ids = Enum.map(ctx.sections, fn _ -> ctx.site.id end)
 
     %{rows: plan} =
       Ecto.Adapters.SQL.query!(
         MishkaDocument.Repo,
         "EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY ON) " <> statement,
-        [first.id, ctx.site.id]
+        [section_ids, site_ids]
       )
 
     IO.puts("""
@@ -139,11 +141,11 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
       statements on the event log per load: #{log_reads}
       load times (ms, 5 rounds): #{Enum.map_join(micros, ", ", &Float.round(&1 / 1000, 1))}
       median: #{micros |> Enum.sort() |> Enum.at(2) |> Kernel./(1000) |> Float.round(1)} ms
-      plan of one statement:
+      plan of the statement:
     #{Enum.map_join(plan, "\n", fn [line] -> "        " <> line end)}
     """)
 
-    assert log_reads == @pages
+    assert log_reads == 1
     assert Enum.all?(loaded, &is_integer(&1.contributors_count))
     assert Enum.any?(loaded, &(&1.contributors_count > 0))
     assert %Section{} = hd(loaded)
