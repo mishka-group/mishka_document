@@ -368,26 +368,6 @@ defmodule MishkaDocumentWeb.Test.WhoLabelTest do
     |> Ash.read_one!(authorize?: false)
   end
 
-  # Waits until the event log has announced every event this test wrote. It announces each one from
-  # a task of its own a moment after the write, so a page opened sooner hears them after it loads.
-  defp await_event_announcements do
-    Process.list()
-    |> Enum.filter(&announcing_for_this_test?/1)
-    |> Enum.map(&Process.monitor/1)
-    |> Enum.each(fn ref -> assert_receive {:DOWN, ^ref, :process, _pid, _reason} end)
-  end
-
-  defp announcing_for_this_test?(pid) do
-    case Process.info(pid, :dictionary) do
-      {:dictionary, dictionary} ->
-        match?({MishkaDocument.EventLog, _fun, 0}, dictionary[:"$initial_call"]) and
-          self() in List.wrap(dictionary[:"$callers"])
-
-      nil ->
-        false
-    end
-  end
-
   defp open(user, path) do
     {:ok, view, _html} = live(conn_for(user), path)
     render_async(view, @await)

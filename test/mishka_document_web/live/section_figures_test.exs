@@ -147,6 +147,8 @@ defmodule MishkaDocumentWeb.Test.SectionFiguresTest do
   defp admin(names, site), do: create_user_with_permissions!(names, site_id: site.id)
 
   defp open_sections(conn, site, version) do
+    await_event_announcements()
+
     {:ok, view, _html} =
       live(
         log_in(conn, admin([@site_loads, @section], site)),
