@@ -11,9 +11,12 @@ defmodule MishkaDocument.ConnCase do
   it. See the test-only `MishkaDocument.Repo` shim for how the database is reached.
 
   `make_api_request/3` is here rather than in the factory: it builds requests, it does not build data.
+  `await_event_announcements/0` is here because it decides when a page may be opened.
   """
 
   use ExUnit.CaseTemplate
+
+  import ExUnit.Assertions, only: [assert_receive: 1]
 
   using do
     quote do
@@ -30,6 +33,38 @@ defmodule MishkaDocument.ConnCase do
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
 
     {:ok, conn: Phoenix.ConnTest.build_conn()}
+  end
+
+  @doc """
+  Returns once `MishkaDocument.EventLog` has announced every event the calling test wrote.
+
+  The log announces each event on `"event_log:created"` a second time, from a task of its own a
+  moment after the write. A page subscribed to that topic re-renders when the announcement lands, so
+  a page opened before then is redrawn under whatever the test is doing to it. Call this after the
+  writes and before opening the page:
+
+      await_event_announcements()
+      {:ok, view, _html} = live(conn, path)
+  """
+  @spec await_event_announcements() :: :ok
+  def await_event_announcements do
+    caller = self()
+
+    Process.list()
+    |> Enum.filter(&announcing_for?(&1, caller))
+    |> Enum.map(&Process.monitor/1)
+    |> Enum.each(fn ref -> assert_receive {:DOWN, ^ref, :process, _pid, _reason} end)
+  end
+
+  defp announcing_for?(pid, caller) do
+    case Process.info(pid, :dictionary) do
+      {:dictionary, dictionary} ->
+        match?({MishkaDocument.EventLog, _fun, 0}, dictionary[:"$initial_call"]) and
+          caller in List.wrap(dictionary[:"$callers"])
+
+      nil ->
+        false
+    end
   end
 
   @doc """
