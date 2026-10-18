@@ -4,134 +4,161 @@
 
 defmodule MishkaDocument.ContributorsTest do
   @moduledoc """
-  `MishkaDocument.Resources.Helpers.Contributors`: who wrote the pages and notes of a version, read
-  from the event log as the actor asking, so the log's own policy decides what each can see.
+  A page's `contributors_count`: how many accounts created or updated the page, or a note of it,
+  counted from the event log by the database for each page asked about.
+
+  The count is gated upstream, by the page's field policy: a reader who may not see it is never
+  asked for it, and the database is not asked either.
   """
   use MishkaDocument.DataCase, async: false
 
   alias MishkaDocument.{Note, Section}
-  alias MishkaDocument.Resources.Helpers.Contributors
 
   setup do
     site = create_site!()
-    workspace = create_workspace!(site_id: site.id)
-    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+    workspace = create_workspace!(site_id: site.id, status: :active, skip_version: true)
 
-    first = create_user!(site_id: site.id, email: "first-writer@test.com")
-    second = create_user!(site_id: site.id, email: "second-writer@test.com")
-    master_writer = create_user!(email: "master-writer@test.com")
-
-    section =
-      Section
-      |> Ash.Changeset.for_create(
-        :create,
-        %{workspace_version_id: version.id, title: "Guide", slug: "guide"},
-        actor: first,
-        tenant: site.id,
-        authorize?: false
-      )
-      |> Ash.create!()
-
-    Note
-    |> Ash.Changeset.for_create(
-      :create,
-      %{section_id: section.id, title: "Aside", content: "A note"},
-      actor: second,
-      tenant: site.id,
-      authorize?: false
-    )
-    |> Ash.create!()
-
-    other_section =
-      Section
-      |> Ash.Changeset.for_create(
-        :create,
-        %{workspace_version_id: version.id, title: "Other", slug: "other"},
-        actor: master_writer,
-        tenant: site.id,
-        authorize?: false
-      )
-      |> Ash.create!()
+    version =
+      create_workspace_version!(workspace_id: workspace.id, site_id: site.id, status: :beta)
 
     %{
       site: site,
       version: version,
-      section: section,
-      other_section: other_section,
-      first: first,
-      second: second,
-      master_writer: master_writer,
+      first: create_user!(site_id: site.id, email: "first-writer@test.com"),
+      second: create_user!(site_id: site.id, email: "second-writer@test.com"),
+      master_writer: create_user!(email: "master-writer@test.com"),
       admin: create_user_with_permissions!(["admin:dashboard:*"], site_id: site.id),
-      master: create_user_with_permissions!(["admin:dashboard:*"]),
-      outsider: create_user_with_permissions!(["admin:dashboard:*"], site_id: create_site!().id),
       nobody: create_user_with_permissions!(["admin:dashboard:runtime:page"], site_id: site.id)
     }
   end
 
-  describe "writers_in_version/2" do
-    test "names everybody who created or updated a page or a note of the version", ctx do
-      expected = Enum.sort([ctx.first.id, ctx.second.id, ctx.master_writer.id])
-
-      assert ctx.version.id |> Contributors.writers_in_version(actor: ctx.master) |> Enum.sort() ==
-               expected
-
-      assert ctx.version.id |> Contributors.writers_in_version(actor: ctx.admin) |> Enum.sort() ==
-               expected
-    end
-
-    test "names nobody to a viewer of another site, or one holding no document area", ctx do
-      assert Contributors.writers_in_version(ctx.version.id, actor: ctx.outsider) == []
-      assert Contributors.writers_in_version(ctx.version.id, actor: ctx.nobody) == []
-      assert Contributors.writers_in_version(ctx.version.id, actor: nil) == []
-    end
-
-    test "names nobody for a version nothing was written in", ctx do
-      assert Contributors.writers_in_version(Ecto.UUID.generate(), actor: ctx.master) == []
-    end
+  defp write_section!(ctx, actor, title) do
+    Section
+    |> Ash.Changeset.for_create(
+      :create,
+      %{workspace_version_id: ctx.version.id, title: title, slug: String.downcase(title)},
+      actor: actor,
+      tenant: ctx.site.id,
+      authorize?: false
+    )
+    |> Ash.create!()
   end
 
-  describe "sections_written_by/2" do
-    test "gives the pages the accounts wrote", ctx do
-      assert Contributors.sections_written_by([ctx.first.id], actor: ctx.master) ==
-               [ctx.section.id]
-
-      assert Contributors.sections_written_by([ctx.master_writer.id], actor: ctx.master) ==
-               [ctx.other_section.id]
-
-      assert Contributors.sections_written_by([ctx.second.id], actor: ctx.master) == []
-    end
-
-    test "gives a site admin only what accounts of its own site wrote", ctx do
-      assert Contributors.sections_written_by([ctx.first.id], actor: ctx.admin) ==
-               [ctx.section.id]
-
-      assert Contributors.sections_written_by([ctx.master_writer.id], actor: ctx.admin) == []
-    end
-
-    test "gives a viewer without the area, or another site's, nothing", ctx do
-      assert Contributors.sections_written_by([ctx.first.id], actor: ctx.outsider) == []
-      assert Contributors.sections_written_by([ctx.first.id], actor: ctx.nobody) == []
-    end
+  defp write_note!(ctx, section, actor) do
+    Note
+    |> Ash.Changeset.for_create(
+      :create,
+      %{section_id: section.id, title: "Aside", content: "A note"},
+      actor: actor,
+      tenant: ctx.site.id,
+      authorize?: false
+    )
+    |> Ash.create!()
   end
 
-  describe "writer_counts/2" do
-    test "counts the accounts that wrote each page or its notes", ctx do
-      ids = [ctx.section.id, ctx.other_section.id]
+  defp rewrite!(ctx, section, actor) do
+    section
+    |> Ash.Changeset.for_update(:update, %{title: "Rewritten"},
+      actor: actor,
+      tenant: ctx.site.id,
+      authorize?: false
+    )
+    |> Ash.update!()
+  end
 
-      assert Contributors.writer_counts(ids, actor: ctx.master) ==
-               %{ctx.section.id => 2, ctx.other_section.id => 1}
+  defp counts(ctx, sections, opts) do
+    sections
+    |> Ash.load!([:contributors_count], [tenant: ctx.site.id] ++ opts)
+    |> Map.new(&{&1.id, &1.contributors_count})
+  end
+
+  test "counts each account once however often it wrote, and the accounts that wrote notes",
+       ctx do
+    guide = write_section!(ctx, ctx.first, "Guide")
+    rewrite!(ctx, guide, ctx.first)
+    write_note!(ctx, guide, ctx.second)
+    write_note!(ctx, guide, ctx.second)
+    rewrite!(ctx, guide, ctx.master_writer)
+
+    assert counts(ctx, [guide], actor: ctx.admin) == %{guide.id => 3}
+  end
+
+  test "counts every page of a batch for itself", ctx do
+    guide = write_section!(ctx, ctx.first, "Guide")
+    write_note!(ctx, guide, ctx.second)
+    other = write_section!(ctx, ctx.master_writer, "Other")
+    alone = write_section!(ctx, ctx.first, "Alone")
+    unwritten = create_section!(site_id: ctx.site.id, workspace_version_id: ctx.version.id)
+
+    assert counts(ctx, [guide, other, alone, unwritten], actor: ctx.admin) == %{
+             guide.id => 2,
+             other.id => 1,
+             alone.id => 1,
+             unwritten.id => 0
+           }
+  end
+
+  test "does not count what was written to another page", ctx do
+    guide = write_section!(ctx, ctx.first, "Guide")
+    other = write_section!(ctx, ctx.second, "Other")
+    write_note!(ctx, other, ctx.master_writer)
+
+    assert counts(ctx, [guide], actor: ctx.admin) == %{guide.id => 1}
+  end
+
+  describe "who is let reach the count" do
+    defp public_count(ctx, section, actor) do
+      with_queries(fn ->
+        Ash.get!(Section, section.id,
+          action: :public_get,
+          actor: actor,
+          tenant: ctx.site.id,
+          load: [:contributors_count]
+        )
+      end)
     end
 
-    test "counts only what the viewer may read, and nothing for a page nobody wrote", ctx do
-      assert Contributors.writer_counts([Ecto.UUID.generate()], actor: ctx.master) == %{}
-      assert Contributors.writer_counts([ctx.section.id], actor: ctx.outsider) == %{}
-      assert Contributors.writer_counts([ctx.section.id], actor: ctx.nobody) == %{}
-      assert Contributors.writer_counts([], actor: ctx.master) == %{}
+    defp log_reads(queries),
+      do: Enum.count(queries, &String.contains?(&1, "mishka_document_event_logs"))
+
+    test "a reader of the section area has it counted by one query on the log", ctx do
+      guide =
+        create_section!(
+          site_id: ctx.site.id,
+          workspace_version_id: ctx.version.id,
+          content_review_status: :approved,
+          technical_review_status: :approved
+        )
+
+      {fetched, queries} = public_count(ctx, guide, ctx.admin)
+
+      assert fetched.contributors_count == 0
+      assert log_reads(queries) == 1
     end
 
-    test "reads without checks when the caller does", ctx do
-      assert Contributors.writer_counts([ctx.section.id], authorize?: false) ==
-               %{ctx.section.id => 2}
+    test "a reader without the section area cannot read the page itself", ctx do
+      guide = write_section!(ctx, ctx.first, "Guide")
+
+      assert {:error, _refused} =
+               Ash.get(Section, guide.id, actor: ctx.nobody, tenant: ctx.site.id)
+    end
+
+    test "a visitor, or a reader without the section area, gets it forbidden and the log is not read",
+         ctx do
+      guide =
+        create_section!(
+          site_id: ctx.site.id,
+          workspace_version_id: ctx.version.id,
+          content_review_status: :approved,
+          technical_review_status: :approved
+        )
+
+      for actor <- [nil, ctx.nobody] do
+        {fetched, queries} = public_count(ctx, guide, actor)
+
+        assert %Ash.ForbiddenField{} = fetched.contributors_count
+        assert log_reads(queries) == 0
+      end
     end
   end
 end

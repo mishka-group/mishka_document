@@ -4,21 +4,27 @@
 
 defmodule MishkaDocument.SectionPathCalculationsTest do
   @moduledoc """
-  A section's `breadcrumb_path` and `section_versions_count`, which read the sections around it as
-  whoever asked: the path walks the parents level by level, the count gathers the sections of one
-  lineage, and a reader who may not read sections is shown neither.
+  A section's `breadcrumb_path` and `section_versions_count`, which the database works out: the path
+  is the parents above the section in one recursive query, the count is the sections of one lineage
+  in the section's own site.
+
+  Both sit behind the page's field policy, so a reader who may not see them is never asked for
+  them, and the database is not asked either.
   """
   use MishkaDocument.DataCase, async: false
 
   import MishkaDocument.Test.Factory
 
-  alias MishkaDocument.Resources.Calculations.{BreadcrumbPath, SectionVersionsCount}
   alias MishkaDocument.Section
+
+  require Ash.Query
 
   setup do
     site = create_site!()
-    workspace = create_workspace!(site_id: site.id, skip_version: true)
-    version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+    workspace = create_workspace!(site_id: site.id, status: :active, skip_version: true)
+
+    version =
+      create_workspace_version!(workspace_id: workspace.id, site_id: site.id, status: :beta)
 
     {:ok,
      site: site,
@@ -33,16 +39,11 @@ defmodule MishkaDocument.SectionPathCalculationsTest do
       workspace_version_id: ctx.version.id,
       title: title,
       slug: String.downcase(String.replace(title, " ", "-")),
-      parent_section_id: parent && parent.id
+      parent_section_id: parent && parent.id,
+      content_review_status: :approved,
+      technical_review_status: :approved
     )
   end
-
-  defp context(ctx, actor, authorize? \\ true),
-    do: %Ash.Resource.Calculation.Context{
-      actor: actor,
-      tenant: ctx.site.id,
-      authorize?: authorize?
-    }
 
   defp titles(path), do: Enum.map(path, & &1["title"])
 
@@ -77,6 +78,19 @@ defmodule MishkaDocument.SectionPathCalculationsTest do
       assert id == root.id
     end
 
+    test "is worked out for every section of a batch in one query", ctx do
+      root = page!(ctx, "Guides")
+      leaves = for n <- 1..5, do: page!(ctx, "Leaf #{n}", root)
+
+      {loaded, queries} =
+        with_queries(fn ->
+          Ash.load!(leaves, [:breadcrumb_path], actor: ctx.admin, tenant: ctx.site.id)
+        end)
+
+      assert Enum.all?(loaded, &(titles(&1.breadcrumb_path) == ["Guides"]))
+      assert Enum.count(queries, &String.contains?(&1, "WITH RECURSIVE")) == 1
+    end
+
     test "ends where an archived ancestor stands, and is empty under an archived parent", ctx do
       root = page!(ctx, "Guides")
       middle = page!(ctx, "Install", root)
@@ -91,7 +105,7 @@ defmodule MishkaDocument.SectionPathCalculationsTest do
       assert leaf.breadcrumb_path == []
     end
 
-    test "ends where the parents loop back on themselves", ctx do
+    test "stops at 20 levels when the parents loop back on themselves", ctx do
       first = page!(ctx, "First")
       second = page!(ctx, "Second", first)
       first = point!(first, :parent_section_id, second.id)
@@ -99,21 +113,13 @@ defmodule MishkaDocument.SectionPathCalculationsTest do
       [first, second] =
         Ash.load!([first, second], [:breadcrumb_path], actor: ctx.admin, tenant: ctx.site.id)
 
-      assert titles(first.breadcrumb_path) == ["First", "Second"]
-      assert titles(second.breadcrumb_path) == ["Second", "First"]
-    end
+      assert length(first.breadcrumb_path) == 20
+      assert length(second.breadcrumb_path) == 20
 
-    test "is read as the reader: one who may not read sections is shown no ancestor", ctx do
-      root = page!(ctx, "Guides")
-      leaf = page!(ctx, "Install", root)
-
-      assert [[%{"title" => "Guides"}]] =
-               BreadcrumbPath.calculate([leaf], [], context(ctx, ctx.admin))
-
-      assert [[]] = BreadcrumbPath.calculate([leaf], [], context(ctx, ctx.nobody))
-
-      assert [[%{"title" => "Guides"}]] =
-               BreadcrumbPath.calculate([leaf], [], context(ctx, nil, false))
+      assert first.breadcrumb_path |> titles() |> Enum.uniq() |> Enum.sort() == [
+               "First",
+               "Second"
+             ]
     end
   end
 
@@ -122,7 +128,11 @@ defmodule MishkaDocument.SectionPathCalculationsTest do
       first = page!(ctx, "Guides")
 
       other_version =
-        create_workspace_version!(workspace_id: ctx.version.workspace_id, site_id: ctx.site.id)
+        create_workspace_version!(
+          workspace_id: ctx.version.workspace_id,
+          site_id: ctx.site.id,
+          status: :alpha
+        )
 
       clone =
         create_section!(
@@ -150,21 +160,82 @@ defmodule MishkaDocument.SectionPathCalculationsTest do
       assert first.section_versions_count == 1
     end
 
-    test "is read as the reader: one who may not read sections counts the section alone", ctx do
-      first = page!(ctx, "Guides")
+    test "is worked out for every section of a batch in one query", ctx do
+      pages = for n <- 1..5, do: page!(ctx, "Page #{n}")
 
-      other_version =
-        create_workspace_version!(workspace_id: ctx.version.workspace_id, site_id: ctx.site.id)
+      {loaded, queries} =
+        with_queries(fn ->
+          Ash.load!(pages, [:section_versions_count], actor: ctx.admin, tenant: ctx.site.id)
+        end)
 
-      create_section!(
-        site_id: ctx.site.id,
-        workspace_version_id: other_version.id,
-        source_section_id: first.id
-      )
+      assert Enum.all?(loaded, &(&1.section_versions_count == 1))
+      assert Enum.count(queries, &String.contains?(&1, "GROUP BY section_lineage_id")) == 1
+    end
+  end
 
-      assert [2] = SectionVersionsCount.calculate([first], [], context(ctx, ctx.admin))
-      assert [1] = SectionVersionsCount.calculate([first], [], context(ctx, ctx.nobody))
-      assert [2] = SectionVersionsCount.calculate([first], [], context(ctx, nil, false))
+  describe "on a read that selects only some of the section's fields" do
+    test "all three are still worked out", ctx do
+      root = page!(ctx, "Guides")
+      leaf = page!(ctx, "Install", root)
+
+      {:ok, [selected]} =
+        Section
+        |> Ash.Query.filter(id == ^leaf.id)
+        |> Ash.Query.select([:id, :title])
+        |> Ash.Query.load([:breadcrumb_path, :section_versions_count, :contributors_count])
+        |> Ash.read(actor: ctx.admin, tenant: ctx.site.id)
+
+      assert titles(selected.breadcrumb_path) == ["Guides"]
+      assert selected.section_versions_count == 1
+      assert selected.contributors_count == 0
+    end
+  end
+
+  describe "a reader who may not see them" do
+    test "cannot read the section they belong to", ctx do
+      root = page!(ctx, "Guides")
+      leaf = page!(ctx, "Install", root)
+
+      assert {:error, _refused} =
+               Ash.get(Section, leaf.id, actor: ctx.nobody, tenant: ctx.site.id)
+    end
+
+    test "gets them forbidden on a public section, and the database is not asked", ctx do
+      root = page!(ctx, "Guides")
+      leaf = page!(ctx, "Install", root)
+
+      for actor <- [nil, ctx.nobody] do
+        {fetched, queries} =
+          with_queries(fn ->
+            Ash.get!(Section, leaf.id,
+              action: :public_get,
+              actor: actor,
+              tenant: ctx.site.id,
+              load: [:breadcrumb_path, :section_versions_count]
+            )
+          end)
+
+        assert %Ash.ForbiddenField{} = fetched.breadcrumb_path
+        assert %Ash.ForbiddenField{} = fetched.section_versions_count
+        refute Enum.any?(queries, &String.contains?(&1, "WITH RECURSIVE"))
+        refute Enum.any?(queries, &String.contains?(&1, "GROUP BY section_lineage_id"))
+      end
+    end
+
+    test "is shown them on that section when it holds the section area", ctx do
+      root = page!(ctx, "Guides")
+      leaf = page!(ctx, "Install", root)
+
+      fetched =
+        Ash.get!(Section, leaf.id,
+          action: :public_get,
+          actor: ctx.admin,
+          tenant: ctx.site.id,
+          load: [:breadcrumb_path, :section_versions_count]
+        )
+
+      assert titles(fetched.breadcrumb_path) == ["Guides"]
+      assert fetched.section_versions_count == 1
     end
   end
 end

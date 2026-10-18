@@ -68,5 +68,5 @@ children = [
     name: MishkaDocument.TestSupervisor
   )
 
-ExUnit.start(assert_receive_timeout: 5_000)
+ExUnit.start(assert_receive_timeout: 5_000, exclude: [:benchmark])
 Ecto.Adapters.SQL.Sandbox.mode(MishkaDocument.Repo, :manual)

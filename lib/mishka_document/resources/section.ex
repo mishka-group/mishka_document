@@ -44,7 +44,6 @@ defmodule MishkaDocument.Section do
   import MishkaGervaz.UIAdapters.Tailwind, only: [copy_button: 1]
   alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Runtime.Helpers
-  alias MishkaDocument.Resources.Helpers.Contributors
   alias MishkaDocument.Resources.Helpers.Labels
 
   # The card's action squares. `MishkaDocumentWeb.Templates.DocumentSection` gives them a row of their
@@ -664,11 +663,27 @@ defmodule MishkaDocument.Section do
               end
 
             if workspace_version_id do
-              case Contributors.writers_in_version(workspace_version_id,
-                     actor: state.current_user
-                   ) do
-                [] -> Ash.Query.filter(query, is_nil(id))
-                user_ids -> Ash.Query.filter(query, id in ^user_ids)
+              sql = """
+              SELECT DISTINCT el.actor_id::text
+              FROM mishka_document_event_logs el
+              WHERE el.actor_id IS NOT NULL
+                AND el.action IN ('create', 'master_create', 'update', 'master_update')
+                AND (
+                  (el.resource = 'Elixir.MishkaDocument.Section'
+                   AND el.metadata->>'workspace_version_id' = $1)
+                  OR
+                  (el.resource = 'Elixir.MishkaDocument.Note'
+                   AND el.metadata->>'workspace_version_id' = $1)
+                )
+              """
+
+              case SQL.query(@repo, sql, [workspace_version_id]) do
+                {:ok, %{rows: rows}} when rows != [] ->
+                  user_ids = Enum.map(rows, fn [id] -> id end)
+                  Ash.Query.filter(query, id in ^user_ids)
+
+                _ ->
+                  Ash.Query.filter(query, is_nil(id))
               end
             else
               query
@@ -682,9 +697,41 @@ defmodule MishkaDocument.Section do
                 id when is_binary(id) -> [id]
               end
 
-            case Contributors.sections_written_by(user_ids, actor: state.current_user) do
-              [] -> Ash.Query.filter(query, is_nil(id))
-              section_ids -> Ash.Query.filter(query, id in ^section_ids)
+            {site_id_clause, extra_params} =
+              case state.current_user do
+                %{id: _, site_id: nil} ->
+                  {"", []}
+
+                %{site_id: site_id} when is_binary(site_id) ->
+                  idx = length(user_ids) + 1
+
+                  {" AND el.actor_id IN (SELECT id FROM users WHERE site_id::text = $#{idx})",
+                   [site_id]}
+
+                _ ->
+                  {" AND FALSE", []}
+              end
+
+            placeholders =
+              user_ids
+              |> Enum.with_index(1)
+              |> Enum.map_join(", ", fn {_id, i} -> "$#{i}" end)
+
+            sql = """
+            SELECT DISTINCT el.record_id::text
+            FROM mishka_document_event_logs el
+            WHERE el.actor_id::text IN (#{placeholders})
+              AND el.action IN ('create', 'master_create', 'update', 'master_update')
+              AND el.resource = 'Elixir.MishkaDocument.Section'#{site_id_clause}
+            """
+
+            case SQL.query(@repo, sql, user_ids ++ extra_params) do
+              {:ok, %{rows: rows}} when rows != [] ->
+                section_ids = Enum.map(rows, fn [id] -> id end)
+                Ash.Query.filter(query, id in ^section_ids)
+
+              _ ->
+                Ash.Query.filter(query, is_nil(id))
             end
           end
 
@@ -2484,18 +2531,117 @@ defmodule MishkaDocument.Section do
       description "Returns count of unique maintainers who created/updated this section or its notes (via EventLog)"
     end
 
-    calculate :breadcrumb_path,
-              {:array, :map},
-              MishkaDocument.Resources.Calculations.BreadcrumbPath do
+    calculate :breadcrumb_path, {:array, :map} do
       public? true
+      load [:parent_section_id, :site_id]
+
+      calculation fn records, _context ->
+        parent_ids =
+          records
+          |> Enum.map(& &1.parent_section_id)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.uniq()
+
+        breadcrumbs_by_start_id =
+          if parent_ids == [] do
+            %{}
+          else
+            placeholders = Enum.map_join(1..length(parent_ids), ", ", fn i -> "$#{i}" end)
+            dumped_ids = Enum.map(parent_ids, &Ecto.UUID.dump!/1)
+
+            sql = """
+            WITH RECURSIVE ancestors AS (
+              SELECT id, title, slug, parent_section_id, site_id, id as start_id, 1 as depth
+              FROM mishka_document_sections
+              WHERE id IN (#{placeholders})
+                AND archived_at IS NULL
+
+              UNION ALL
+
+              SELECT s.id, s.title, s.slug, s.parent_section_id, s.site_id, a.start_id, a.depth + 1
+              FROM mishka_document_sections s
+              INNER JOIN ancestors a ON s.id = a.parent_section_id AND s.site_id = a.site_id
+              WHERE s.archived_at IS NULL
+                AND a.depth < 20
+            )
+            SELECT start_id, site_id, id, title, slug FROM ancestors ORDER BY start_id, depth DESC
+            """
+
+            case SQL.query(@repo, sql, dumped_ids) do
+              {:ok, %{rows: rows}} ->
+                Enum.group_by(
+                  rows,
+                  fn [start_id, site_id | _] ->
+                    {Ecto.UUID.load!(start_id), Ecto.UUID.load!(site_id)}
+                  end,
+                  fn [_, _, id, title, slug] ->
+                    %{"id" => Ecto.UUID.load!(id), "title" => title, "slug" => slug}
+                  end
+                )
+
+              _ ->
+                %{}
+            end
+          end
+
+        Enum.map(records, fn record ->
+          if is_nil(record.parent_section_id) do
+            []
+          else
+            Map.get(breadcrumbs_by_start_id, {record.parent_section_id, record.site_id}, [])
+          end
+        end)
+      end
 
       description "Returns breadcrumb path from root ancestor to immediate parent as list of {id, title, slug} maps, within the section's own site"
     end
 
-    calculate :section_versions_count,
-              :integer,
-              MishkaDocument.Resources.Calculations.SectionVersionsCount do
+    calculate :section_versions_count, :integer do
       public? true
+      load [:section_lineage_id, :site_id]
+
+      calculation fn records, _context ->
+        lineage_ids =
+          records
+          |> Enum.map(& &1.section_lineage_id)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.uniq()
+
+        counts_by_lineage =
+          if lineage_ids == [] do
+            %{}
+          else
+            placeholders = Enum.map_join(1..length(lineage_ids), ", ", fn i -> "$#{i}" end)
+            dumped_ids = Enum.map(lineage_ids, &Ecto.UUID.dump!/1)
+
+            sql = """
+            SELECT section_lineage_id, site_id, COUNT(*)
+            FROM mishka_document_sections
+            WHERE section_lineage_id IN (#{placeholders})
+              AND archived_at IS NULL
+            GROUP BY section_lineage_id, site_id
+            """
+
+            case SQL.query(@repo, sql, dumped_ids) do
+              {:ok, %{rows: rows}} ->
+                Map.new(rows, fn [lid, site_id, count] ->
+                  count = if is_float(count), do: trunc(count), else: count
+                  {{Ecto.UUID.load!(lid), Ecto.UUID.load!(site_id)}, count}
+                end)
+
+              _ ->
+                %{}
+            end
+          end
+
+        Enum.map(records, fn record ->
+          if is_nil(record.section_lineage_id) do
+            1
+          else
+            Map.get(counts_by_lineage, {record.section_lineage_id, record.site_id}, 1)
+          end
+        end)
+      end
 
       description "Returns count of versions of this section across workspace versions of its own site"
     end
