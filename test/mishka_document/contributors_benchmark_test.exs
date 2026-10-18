@@ -5,7 +5,9 @@
 defmodule MishkaDocument.ContributorsBenchmarkTest do
   @moduledoc """
   How long the Sections page's contributor figure takes on a busy event log: `contributors_count`
-  over 50 pages with `EVENTS` rows (5,000 by default) in `mishka_document_event_logs`.
+  over 50 pages with `EVENTS` rows (5,000 by default) in `mishka_document_event_logs`. The first 5,000
+  are the 50 pages' own events (about 100 each); any more are other records' events, which the
+  figure has to read past.
 
   Left out of `mix test`; run it on its own:
 
@@ -22,6 +24,7 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
   alias MishkaDocument.Section
 
   @pages 50
+  @page_events 5_000
   @writers 20
 
   setup do
@@ -63,8 +66,12 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
         (id, record_id, metadata, data, changed_attributes, occurred_at, resource, action, action_type, actor_id)
       SELECT
         uuid_generate_v7(),
-        CASE WHEN n % 3 = 0 THEN gen_random_uuid() ELSE ($1::uuid[])[1 + n % $5] END,
+        CASE WHEN n % 3 = 0 OR n > $9 THEN gen_random_uuid() ELSE ($1::uuid[])[1 + n % $5] END,
         CASE
+          WHEN n > $9 THEN
+            jsonb_build_object('site_id', gen_random_uuid()::text,
+                               'workspace_version_id', gen_random_uuid()::text,
+                               'section_id', gen_random_uuid()::text)
           WHEN n % 3 = 0 THEN
             jsonb_build_object('site_id', $2::text, 'workspace_version_id', $3::text,
                                'section_id', ($4::text[])[1 + n % $5])
@@ -88,7 +95,8 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
         @pages,
         writer_ids,
         @writers,
-        total
+        total,
+        @page_events
       ]
     )
   end
@@ -96,6 +104,7 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
   test "contributors_count over 50 pages", ctx do
     total = events()
     seed_events!(ctx, total)
+    Ecto.Adapters.SQL.query!(MishkaDocument.Repo, "ANALYZE mishka_document_event_logs")
 
     {loaded, statements} =
       with_queries(fn ->

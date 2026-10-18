@@ -80,6 +80,17 @@ defmodule MishkaDocument.EventLog do
 
     custom_indexes do
       index [:occurred_at]
+
+      index [:resource, "(record_id::text)"],
+        name: "mishka_document_event_logs_resource_record_text_index"
+
+      index [:resource, "(actor_id::text)"],
+        name: "mishka_document_event_logs_resource_actor_text_index"
+
+      index ["(metadata->>'section_id')"], name: "mishka_document_event_logs_section_id_index"
+
+      index ["(metadata->>'workspace_version_id')"],
+        name: "mishka_document_event_logs_workspace_version_id_index"
     end
   end
 
