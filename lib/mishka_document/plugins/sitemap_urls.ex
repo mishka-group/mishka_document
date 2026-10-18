@@ -47,6 +47,12 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   published version still draws its front page, which its head lets a search engine index, so that
   is listed, dated by the document's `updated_at`, and no page of it.
 
+  DATED BY WHEN THE PAGE LAST CHANGED. A page's `lastmod` is its `last_modified_at`
+  (`MishkaDocument.Resources.Calculations.LastModified`): the newest of its own `updated_at`, the
+  `updated_at` of its approved notes and the time a note of it was archived. A document's front
+  page is dated by the newest of the document's `updated_at` and those of its pages. The notes are
+  read in the same query as the pages, so a batch of pages is one read.
+
   READ WHEN THE BUILD READS IT. The addresses are appended as a stream, and nothing is read until
   the build reads it: the documents a hundred at a time, the version each of them shows in one read
   per hundred, then the pages of those hundred together, a hundred at a time, and their front pages
@@ -209,7 +215,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
          Map.update!(
            changed,
            section.workspace_version_id,
-           &Enum.max([&1, section.updated_at], DateTime)
+           &Enum.max([&1, section.last_modified_at], DateTime)
          )}
       end,
       fn changed ->
@@ -260,7 +266,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       served,
       workspace,
       segments,
-      section.updated_at,
+      section.last_modified_at,
       PageEditions.listed?(%{section | permissions: section.effective_permissions}, workspace)
     )
   end
@@ -367,12 +373,11 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       :front_page,
       :group_heading,
       :group_page,
-      :updated_at,
       :workspace_version_id,
       :permissions,
       :seo_tags
     ])
-    |> Ash.Query.load(:effective_permissions)
+    |> Ash.Query.load([:effective_permissions, :last_modified_at])
     |> SitemapCompiler.stream_rows(actor: nil, tenant: site_id)
   end
 end

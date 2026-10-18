@@ -29,6 +29,7 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
 
   @january ~U[2026-01-01 00:00:00Z]
   @march ~U[2026-03-01 00:00:00Z]
+  @april ~U[2026-04-01 00:00:00Z]
 
   setup do
     site = create_site!(active: true)
@@ -361,6 +362,59 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       refute html =~ "&amp;amp;"
       assert meta_content(html, ~s(meta[property="og:title"])) == ["Install & run"]
       assert %{"headline" => "Install & run"} = json_ld(html, "TechArticle")
+    end
+
+    # A PAGE IS MODIFIED WHEN IT, A NOTE ITS PAGE SHOWS OR THE ARCHIVING OF ONE LAST CHANGED, in
+    # `doc.modified_at` and in the article's `dateModified` alike.
+    defp dated_page!(site, version),
+      do: site |> page!(version, "tabs", []) |> Ash.Seed.update!(%{updated_at: @january})
+
+    defp modified(site) do
+      answered =
+        answer(
+          given(site, :section, %{"lang" => "en", "workspace" => "guide", "section" => "tabs"})
+        )
+
+      assert answered.vars["doc.modified_at"] ==
+               schema_of(answered, "TechArticle")["dateModified"]
+
+      answered.vars["doc.modified_at"]
+    end
+
+    test "is modified when the page itself changed, with no notes", %{site: site, latest: latest} do
+      dated_page!(site, latest)
+
+      assert modified(site) == iso(@january)
+    end
+
+    test "is modified when a note of it was edited after the page", %{site: site, latest: latest} do
+      page = dated_page!(site, latest)
+      create_shown_note!(page, @march)
+
+      assert modified(site) == iso(@march)
+
+      stored = Ash.get!(MishkaDocument.Section, page.id, tenant: site.id, authorize?: false)
+      assert DateTime.truncate(stored.updated_at, :second) == @january
+    end
+
+    test "is modified when a note of it was archived", %{site: site, latest: latest} do
+      site |> dated_page!(latest) |> create_shown_note!(@march) |> archive_note_at!(@april)
+
+      assert modified(site) == iso(@april)
+    end
+
+    test "is modified by its own change while its notes are older", %{site: site, latest: latest} do
+      site |> dated_page!(latest) |> create_shown_note!(~U[2025-12-01 00:00:00Z])
+
+      assert modified(site) == iso(@january)
+    end
+
+    test "is not modified by a note its page does not show", %{site: site, latest: latest} do
+      site
+      |> dated_page!(latest)
+      |> create_shown_note!(@march, content_review_status: :pending)
+
+      assert modified(site) == iso(@january)
     end
 
     test "is the page in the version `?v=` names", %{site: site} do

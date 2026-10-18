@@ -40,6 +40,7 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
   @january ~U[2026-01-01 00:00:00Z]
   @february ~U[2026-02-01 00:00:00Z]
   @march ~U[2026-03-01 00:00:00Z]
+  @april ~U[2026-04-01 00:00:00Z]
 
   setup %{mode: mode} do
     name = "sitemapdocs#{System.unique_integer([:positive])}"
@@ -367,6 +368,94 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       do: Ash.get!(Workspace, document.id, tenant: site.id, authorize?: false).updated_at
   end
 
+  # A PAGE IS DATED BY WHEN IT LAST CHANGED: its own time, its approved notes' and the time one of
+  # them was archived. Nothing is written to the page when a note changes, and a document's front
+  # page takes the newest of its pages'.
+  describe "a page's date" do
+    setup %{site: site, mode: mode} do
+      document = document!(site, slug: "guide")
+      Ash.Seed.update!(document, %{updated_at: @january})
+      version = version!(site, document, is_latest_for_version: true)
+      page = Ash.Seed.update!(page!(site, version, "install"), %{updated_at: @february})
+
+      {:ok,
+       page: page,
+       version: version,
+       front: english(mode, "/docs/guide"),
+       address: english(mode, "/docs/guide/install")}
+    end
+
+    defp lastmods(site),
+      do: site |> listed() |> Map.new(&{&1.path, DateTime.truncate(&1.lastmod, :second)})
+
+    test "is its own while it has no notes", ctx do
+      assert lastmods(ctx.site) == %{ctx.front => @february, ctx.address => @february}
+    end
+
+    test "moves to a note edited after it, and its document's front page with it", ctx do
+      create_shown_note!(ctx.page, @january)
+      create_shown_note!(ctx.page, @march)
+
+      assert lastmods(ctx.site) == %{ctx.front => @march, ctx.address => @march}
+
+      stored =
+        Ash.get!(MishkaDocument.Section, ctx.page.id, tenant: ctx.site.id, authorize?: false)
+
+      assert DateTime.truncate(stored.updated_at, :second) == @february
+    end
+
+    test "moves to the time one of its notes was archived", ctx do
+      ctx.page |> create_shown_note!(@january) |> archive_note_at!(@april)
+
+      assert lastmods(ctx.site) == %{ctx.front => @april, ctx.address => @april}
+    end
+
+    test "stays its own while it is newer than its notes", ctx do
+      create_shown_note!(ctx.page, @january)
+
+      assert lastmods(ctx.site) == %{ctx.front => @february, ctx.address => @february}
+    end
+
+    test "does not move for a note its page does not show", ctx do
+      create_shown_note!(ctx.page, @march, content_review_status: :pending)
+      create_shown_note!(ctx.page, @april, technical_review_status: :rejected)
+
+      assert lastmods(ctx.site) == %{ctx.front => @february, ctx.address => @february}
+    end
+
+    test "moves only the page whose note changed", ctx do
+      other = Ash.Seed.update!(page!(ctx.site, ctx.version, "steps"), %{updated_at: @february})
+      create_shown_note!(other, @march)
+
+      assert lastmods(ctx.site) == %{
+               ctx.front => @march,
+               ctx.address => @february,
+               String.replace(ctx.address, "install", "steps") => @march
+             }
+    end
+
+    test "is read with the pages, never with a read of its own", ctx do
+      {bare, bare_reads} = reads_while(fn -> listed(ctx.site) end)
+
+      for slug <- ["beta", "gamma"] do
+        version = version!(ctx.site, document!(ctx.site, slug: slug), [])
+        create_shown_note!(page!(ctx.site, version, "#{slug}-intro"), @march)
+      end
+
+      create_shown_note!(ctx.page, @march)
+      {noted, noted_reads} = reads_while(fn -> listed(ctx.site) end)
+
+      assert length(bare) == 2
+      assert length(noted) == 6
+      assert page_reads(noted_reads) == page_reads(bare_reads)
+
+      assert Enum.all?(noted_reads, fn query ->
+               not (query =~ ~s("mishka_document_notes")) or
+                 query =~ ~s("mishka_document_sections")
+             end)
+    end
+  end
+
   describe "what is never listed" do
     test "a document that is not active", %{site: site} do
       published!(site, "drafted", status: :draft)
@@ -649,7 +738,10 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       mode: mode
     } do
       open = version!(site, document!(site, slug: "open"), [])
-      hidden = version!(site, document!(site, slug: "hidden", seo_tags: [robots_meta("noindex")]), [])
+
+      hidden =
+        version!(site, document!(site, slug: "hidden", seo_tags: [robots_meta("noindex")]), [])
+
       locked = version!(site, document!(site, slug: "locked", permissions: ["members:read"]), [])
 
       page!(site, open, "plain")

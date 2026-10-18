@@ -381,6 +381,32 @@ defmodule MishkaDocument.Test.Factory do
     |> generate()
   end
 
+  # A note its page shows (approved on both reviews) whose `updated_at` is `at`.
+  def create_shown_note!(section, at, overrides \\ []) do
+    [
+      site_id: section.site_id,
+      section_id: section.id,
+      content_review_status: :approved,
+      technical_review_status: :approved
+    ]
+    |> Keyword.merge(overrides)
+    |> create_note!()
+    |> Ash.Seed.update!(%{updated_at: at})
+  end
+
+  # Archives `note` the way an editor does, then dates the archiving `at`.
+  def archive_note_at!(note, at) do
+    Ash.destroy!(note, action: :destroy, tenant: note.site_id, authorize?: false)
+
+    Ecto.Adapters.SQL.query!(
+      MishkaDocument.Repo,
+      "UPDATE mishka_document_notes SET archived_at = $1, updated_at = $1 WHERE id = $2",
+      [at, Ecto.UUID.dump!(note.id)]
+    )
+
+    :ok
+  end
+
   # SectionTag factory (MishkaDocument.SectionTag - join table)
   def create_section_tag!(overrides \\ []) do
     # Get or create section_id and tag_id
