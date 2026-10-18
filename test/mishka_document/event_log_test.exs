@@ -50,12 +50,11 @@ defmodule MishkaDocument.Test.EventLogTest do
 
         events = get_events_for_record(workspace.id)
 
-        # Workspace may create multiple events (create + language_group_id update)
-        assert length(events) >= 1
-
+        # Creating a workspace is one event
+        assert [_only_event] = events
         # Find the create event
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.resource == MishkaDocument.Workspace
         assert create_event.record_id == workspace.id
       end
@@ -124,7 +123,7 @@ defmodule MishkaDocument.Test.EventLogTest do
 
         event = get_events_for_record(workspace.id) |> Enum.find(&(&1.action == :master_create))
 
-        assert event != nil
+        assert %{action: :master_create} = event
         assert event.metadata["title"] == "Master Workspace"
       end
     end
@@ -148,12 +147,8 @@ defmodule MishkaDocument.Test.EventLogTest do
           get_events_for_record(workspace.id)
           |> Enum.sort_by(& &1.occurred_at, DateTime)
 
-        # Create + language_group_id update + manual update = 3 events
-        assert length(events) >= 3
-
-        create_event = Enum.at(events, 0)
-        # Skip the language_group_id update at index 1
-        update_event = Enum.at(events, 2)
+        # Create + manual update = 2 events
+        assert [create_event, update_event] = events
 
         assert create_event.action == :create
         assert create_event.metadata["title"] == "Original"
@@ -181,19 +176,13 @@ defmodule MishkaDocument.Test.EventLogTest do
           get_events_for_record(workspace.id)
           |> Enum.sort_by(& &1.occurred_at, DateTime)
 
-        # Create + language_group_id update + 2 manual updates = 4 events
-        assert length(events) >= 4
+        # Create + 2 manual updates = 3 events
+        assert [created, second, third] = events
 
-        assert Enum.at(events, 0).action == :create
-        assert Enum.at(events, 1).action == :update
-        assert Enum.at(events, 2).action == :update
-        assert Enum.at(events, 3).action == :update
+        assert {created.action, second.action, third.action} == {:create, :update, :update}
 
-        assert Enum.at(events, 0).metadata["title"] == "First"
-        # Event 1 is the language_group_id update, title still "First"
-        assert Enum.at(events, 1).metadata["title"] == "First"
-        assert Enum.at(events, 2).metadata["title"] == "Second"
-        assert Enum.at(events, 3).metadata["title"] == "Third"
+        assert {created.metadata["title"], second.metadata["title"], third.metadata["title"]} ==
+                 {"First", "Second", "Third"}
       end
     end
 
@@ -208,11 +197,11 @@ defmodule MishkaDocument.Test.EventLogTest do
 
         events = get_events_for_record(workspace.id)
 
-        # Should have create + language_group_id update + destroy
-        assert length(events) >= 3
+        # Should have create + destroy
+        assert length(events) == 2
 
         destroy_event = Enum.find(events, &(&1.action == :destroy))
-        assert destroy_event != nil
+        assert %{action: :destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Archive"
         assert destroy_event.metadata["site_id"] == site.id
       end
@@ -229,11 +218,11 @@ defmodule MishkaDocument.Test.EventLogTest do
 
         events = get_events_for_record(workspace.id)
 
-        # Should have create + language_group_id update + permanent_destroy
-        assert length(events) >= 3
+        # Should have create + permanent_destroy
+        assert length(events) == 2
 
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Delete"
         assert destroy_event.metadata["site_id"] == site.id
       end
@@ -250,14 +239,12 @@ defmodule MishkaDocument.Test.EventLogTest do
         site1_events = get_events_for_site(site1.id)
         site2_events = get_events_for_site(site2.id)
 
-        # Each workspace creates 2 events (create + language_group_id update)
-        assert length(site1_events) >= 2
+        # Each workspace creates one event
         workspace1_events = Enum.filter(site1_events, &(&1.record_id == ws1.id))
-        assert length(workspace1_events) == 2
+        assert [%{action: :create}] = workspace1_events
 
-        assert length(site2_events) >= 2
         workspace2_events = Enum.filter(site2_events, &(&1.record_id == ws2.id))
-        assert length(workspace2_events) == 2
+        assert [%{action: :create}] = workspace2_events
       end
 
       test "can filter events by resource type" do
@@ -270,7 +257,7 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.read!()
           |> Enum.filter(&(&1.resource == MishkaDocument.Workspace))
 
-        assert length(workspace_events) >= 1
+        assert [_ | _] = workspace_events
         assert Enum.all?(workspace_events, &(&1.resource == MishkaDocument.Workspace))
       end
 
@@ -291,8 +278,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         update_events = Enum.filter(all_events, &(&1.action == :update))
 
         assert length(create_events) == 1
-        # 2 updates: language_group_id + manual update
-        assert length(update_events) == 2
+        assert length(update_events) == 1
       end
 
       test "can sort events by time" do
@@ -307,17 +293,17 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Enum.filter(&(&1.resource == MishkaDocument.Workspace))
           |> Enum.sort_by(& &1.occurred_at, {:desc, DateTime})
 
-        # Each workspace creates 2 events (create + language_group_id update)
-        assert length(events) >= 6
+        # Each workspace creates one event
+        assert length(events) >= 3
 
         # Most recent events should be from ws3, then ws2, then ws1
         ws3_events = Enum.filter(events, &(&1.record_id == ws3.id))
         ws2_events = Enum.filter(events, &(&1.record_id == ws2.id))
         ws1_events = Enum.filter(events, &(&1.record_id == ws1.id))
 
-        assert length(ws3_events) == 2
-        assert length(ws2_events) == 2
-        assert length(ws1_events) == 2
+        assert length(ws3_events) == 1
+        assert length(ws2_events) == 1
+        assert length(ws1_events) == 1
 
         # Verify ws3 events are more recent than ws2 events
         assert DateTime.compare(
@@ -396,15 +382,15 @@ defmodule MishkaDocument.Test.EventLogTest do
         assert anonymous.actor.id == user.id
         assert %Ash.ForbiddenField{} = anonymous.actor.email
 
-        assert event.id != nil
+        assert {:ok, _uuid} = Ecto.UUID.cast(event.id)
         assert event.resource == MishkaDocument.Workspace
         assert event.action == :create
         assert event.record_id == workspace.id
         assert event.actor_id == user.id
-        assert event.actor.email != nil
+        assert to_string(event.actor.email) == to_string(user.email)
         assert event.metadata["site_id"] == site.id
         assert event.metadata["title"] == "Activity Workspace"
-        assert event.occurred_at != nil
+        assert %DateTime{} = event.occurred_at
 
         activity_message = "#{event.actor.email} created workspace '#{event.metadata["title"]}'"
         assert activity_message =~ to_string(user.email)
@@ -449,8 +435,8 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Enum.sort_by(& &1.occurred_at, DateTime)
           |> Enum.map(&Ash.load!(&1, :actor))
 
-        # Create event + language_group_id update + manual update + destroy
-        assert length(events) >= 3
+        # Create event + manual update + destroy
+        assert length(events) == 3
 
         # Find specific event types
         create_event = Enum.find(events, &(&1.action == :create))
@@ -467,7 +453,6 @@ defmodule MishkaDocument.Test.EventLogTest do
         # Verify actor tracking for user-initiated actions
         assert create_event.actor_id == user.id
         assert update_event.actor_id == user.id
-        # Note: automatic language_group_id update has actor_id = nil
       end
     end
 
@@ -482,10 +467,8 @@ defmodule MishkaDocument.Test.EventLogTest do
 
         events = get_events_for_record(workspace.id)
 
-        # Create + language_group_id update = 2 events
-        assert length(events) == 2
-        # Verify only create and update actions exist (no read actions)
-        assert Enum.all?(events, &(&1.action in [:create, :update]))
+        # Create = 1 event, and no read adds one
+        assert [%{action: :create}] = events
       end
 
       test "does not create events for list queries" do
@@ -554,10 +537,9 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(issue.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "Test Issue"
         assert create_event.metadata["site_id"] == site.id
       end
@@ -615,7 +597,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(issue.id)
         update_event = Enum.find(events, &(&1.action == :update))
 
-        assert update_event != nil
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "Updated Issue"
       end
 
@@ -667,7 +649,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(issue.id)
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
 
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Delete"
       end
     end
@@ -729,10 +711,9 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(comment.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "Issue Comment"
         assert create_event.metadata["site_id"] == site.id
       end
@@ -804,7 +785,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(comment.id)
         update_event = Enum.find(events, &(&1.action == :update))
 
-        assert update_event != nil
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "Issue Comment"
       end
 
@@ -870,7 +851,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(comment.id)
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
 
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "Issue Comment"
       end
     end
@@ -915,10 +896,9 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(note.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "Test Note"
         assert create_event.metadata["site_id"] == site.id
       end
@@ -973,7 +953,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(note.id)
         update_event = Enum.find(events, &(&1.action == :update))
 
-        assert update_event != nil
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "Updated Note"
       end
 
@@ -1022,8 +1002,82 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(note.id)
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
 
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Delete"
+      end
+    end
+
+    # A CREATE WRITES ITS OWN LANGUAGE GROUP AND LINEAGE WITH THE ROW, so the log shows the one thing
+    # that happened: not a create followed by updates nobody made.
+    describe "creating a record" do
+      test "is one event for a workspace, a page, a copy of a page and a tag" do
+        site = create_site!()
+        user = create_user!(site_id: site.id)
+        workspace = create_workspace!(site_id: site.id)
+        version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+        other_version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+        opts = [tenant: site.id, actor: user, authorize?: false]
+
+        page =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{workspace_version_id: version.id, title: "Guide", slug: "guide"},
+            opts
+          )
+          |> Ash.create!()
+
+        copy =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :create,
+            %{
+              workspace_version_id: other_version.id,
+              title: "Guide",
+              slug: "guide",
+              source_section_id: page.id
+            },
+            opts
+          )
+          |> Ash.create!()
+
+        tag =
+          MishkaDocument.Tag
+          |> Ash.Changeset.for_create(
+            :create,
+            %{name: "guide-tag", slug: "guide-tag", language: "en"},
+            opts
+          )
+          |> Ash.create!()
+
+        for record <- [workspace, page, tag], do: assert(record.language_group_id == record.id)
+
+        assert page.section_lineage_id == page.id
+        assert copy.section_lineage_id == page.id
+
+        for record <- [workspace, page, copy, tag] do
+          assert [%{action: :create}] = get_events_for_record(record.id)
+        end
+      end
+
+      test "is one event for a page made by a master" do
+        site = create_site!()
+        master = create_user!()
+        workspace = create_workspace!(site_id: site.id)
+        version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+        page =
+          MishkaDocument.Section
+          |> Ash.Changeset.for_create(
+            :master_create,
+            %{workspace_version_id: version.id, site_id: site.id, title: "Guide", slug: "guide"},
+            actor: master,
+            authorize?: false
+          )
+          |> Ash.create!()
+
+        assert page.section_lineage_id == page.id
+        assert [%{action: :master_create}] = get_events_for_record(page.id)
       end
     end
 
@@ -1052,16 +1106,13 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(section.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "Test Section"
         assert create_event.metadata["site_id"] == site.id
       end
 
-      # TODO: https://discord.com/channels/711271361523351632/1019647368196534283
-      # TODO: We should fix the problem with the event log when section is updated
       test "creates event when section is updated" do
         site = create_site!()
         workspace = create_workspace!(site_id: site.id)
@@ -1094,12 +1145,12 @@ defmodule MishkaDocument.Test.EventLogTest do
         )
         |> Ash.update!()
 
-        events = get_events_for_record(section.id)
-        # Find the update event with the new title (not the language_group_id auto-update)
-        update_event =
-          Enum.find(events, &(&1.action == :update && &1.metadata["title"] == "Updated Section"))
+        events =
+          get_events_for_record(section.id)
+          |> Enum.sort_by(& &1.occurred_at, DateTime)
 
-        assert update_event != nil
+        assert [%{action: :create}, update_event] = events
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "Updated Section"
       end
 
@@ -1133,7 +1184,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(section.id)
         destroy_event = Enum.find(events, &(&1.action == :destroy))
 
-        assert destroy_event != nil
+        assert %{action: :destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Archive Section"
       end
 
@@ -1167,7 +1218,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(section.id)
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
 
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Delete"
       end
     end
@@ -1190,10 +1241,9 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(tag.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "Test Tag"
         assert create_event.metadata["site_id"] == site.id
       end
@@ -1228,7 +1278,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         update_event =
           Enum.find(events, &(&1.action == :update && &1.metadata["title"] == "Updated Tag"))
 
-        assert update_event != nil
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "Updated Tag"
       end
 
@@ -1255,7 +1305,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(tag.id)
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
 
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Delete"
       end
     end
@@ -1280,10 +1330,9 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(workspace_version.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "1.0.0"
         assert create_event.metadata["site_id"] == site.id
       end
@@ -1318,7 +1367,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(workspace_version.id)
         update_event = Enum.find(events, &(&1.action == :update))
 
-        assert update_event != nil
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "2.0.0"
       end
 
@@ -1347,7 +1396,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(workspace_version.id)
         publish_event = Enum.find(events, &(&1.action == :publish))
 
-        assert publish_event != nil
+        assert %{action: :publish} = publish_event
         assert publish_event.metadata["title"] == "1.0.0"
       end
 
@@ -1376,7 +1425,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(workspace_version.id)
         mark_event = Enum.find(events, &(&1.action == :mark_as_latest))
 
-        assert mark_event != nil
+        assert %{action: :mark_as_latest} = mark_event
         assert mark_event.metadata["title"] == "1.0.0"
       end
     end
@@ -1423,10 +1472,9 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(note_draft.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "Test Note Draft"
         assert create_event.metadata["site_id"] == site.id
       end
@@ -1483,7 +1531,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(note_draft.id)
         update_event = Enum.find(events, &(&1.action == :update))
 
-        assert update_event != nil
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "Updated Draft"
       end
 
@@ -1534,7 +1582,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(note_draft.id)
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
 
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Delete"
       end
     end
@@ -1566,10 +1614,9 @@ defmodule MishkaDocument.Test.EventLogTest do
           |> Ash.create!()
 
         events = get_events_for_record(section_draft.id)
-        assert length(events) >= 1
-
+        assert [_ | _] = events
         create_event = Enum.find(events, &(&1.action == :create))
-        assert create_event != nil
+        assert %{action: :create} = create_event
         assert create_event.metadata["title"] == "Test Section Draft"
         assert create_event.metadata["site_id"] == site.id
       end
@@ -1616,7 +1663,7 @@ defmodule MishkaDocument.Test.EventLogTest do
             &(&1.action == :update && &1.metadata["title"] == "Updated Section Draft")
           )
 
-        assert update_event != nil
+        assert %{action: :update} = update_event
         assert update_event.metadata["title"] == "Updated Section Draft"
       end
 
@@ -1652,7 +1699,7 @@ defmodule MishkaDocument.Test.EventLogTest do
         events = get_events_for_record(section_draft.id)
         destroy_event = Enum.find(events, &(&1.action == :permanent_destroy))
 
-        assert destroy_event != nil
+        assert %{action: :permanent_destroy} = destroy_event
         assert destroy_event.metadata["title"] == "To Delete"
       end
     end

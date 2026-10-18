@@ -18,7 +18,7 @@ defmodule MishkaDocument.Test.WorkspaceTest do
 
       test "uses UUID v7 for primary keys" do
         workspace = create_workspace!()
-        assert is_binary(workspace.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(workspace.id)
         assert String.length(workspace.id) == 36
       end
 
@@ -98,7 +98,7 @@ defmodule MishkaDocument.Test.WorkspaceTest do
 
         workspace = create_workspace!(name: "Master Workspace", site_id: site.id)
 
-        assert workspace.language_group_id != nil
+        assert workspace.language_group_id == workspace.id
       end
 
       test "defaults status to draft" do
@@ -454,7 +454,7 @@ defmodule MishkaDocument.Test.WorkspaceTest do
           |> Ash.Changeset.for_destroy(:destroy, %{}, tenant: site.id, authorize?: false)
           |> Ash.destroy!(return_destroyed?: true)
 
-        assert archived.archived_at != nil
+        assert %DateTime{} = archived.archived_at
         assert archived.status == :archived
 
         # Should not appear in normal reads
@@ -524,7 +524,7 @@ defmodule MishkaDocument.Test.WorkspaceTest do
           )
 
         assert fetched.id == workspace.id
-        assert fetched.archived_at != nil
+        assert %DateTime{} = fetched.archived_at
       end
 
       test "master_unarchive restores workspace" do

@@ -14,8 +14,8 @@ defmodule MishkaDocument.PluginHooksTest do
 
   import MishkaDocument.Test.Factory
 
-  alias MishkaInstaller.Event.{Event, EventHandler}
   alias MishkaDocument.Test.Plugins.SectionAfterCreate
+  alias MishkaInstaller.Event.{Event, EventHandler}
 
   @event "document:section:after_create"
 
@@ -30,7 +30,7 @@ defmodule MishkaDocument.PluginHooksTest do
     section = create_section!()
     id = section.id
 
-    assert_receive {:document_section_after_create, ^id, _meta}, 5000
+    assert_receive {:document_section_after_create, ^id, _meta}
   end
 
   defp register_plugin(module, event) do

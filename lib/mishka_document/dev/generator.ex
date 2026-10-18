@@ -497,7 +497,7 @@ defmodule MishkaDocument.Dev.Generator do
         published_at:
           StreamData.repeatedly(fn ->
             days_ago = :rand.uniform(365)
-            DateTime.add(DateTime.utc_now(), -days_ago * 86400, :second)
+            DateTime.add(DateTime.utc_now(), -days_ago * 86_400, :second)
           end),
         site_id: nil
       ],

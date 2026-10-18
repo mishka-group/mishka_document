@@ -21,12 +21,17 @@ defmodule MishkaDocument.ProvisionTest do
   """
   use MishkaDocument.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
+  alias MishkaCmsCore.Install
+  alias MishkaCmsCore.Install.{Bootstrap, Extensions}
   alias MishkaCmsCore.Runtime.Component
+  alias MishkaCmsCore.Runtime.ExtensionProvision
   alias MishkaCmsCore.Runtime.Languages
   alias MishkaCmsCore.Runtime.Page
   alias MishkaCmsCore.Runtime.PageProvision
   alias MishkaCmsCore.Runtime.Snippet
-  alias MishkaCmsCore.Install.Extensions
+  alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaDocument.Plugins.Installer
   alias MishkaDocument.Provision
   alias MishkaInstaller.Event.EventHandler
@@ -110,9 +115,10 @@ defmodule MishkaDocument.ProvisionTest do
       Enum.map(snippets(site), &{&1.name, &1.source})
   end
 
-  # Both spellings, for the reason `ComponentCompiler.declared_keys/1` takes both: a declaration is a
-  # map that has been through JSON and through Ash's own casting.
-  defp attr_name(attr), do: to_string(attr["name"] || attr[:name])
+  # A declaration is a map that has been through JSON and through Ash's own casting, so its keys are
+  # strings or atoms (`ComponentCompiler.declared_keys/1` takes both).
+  defp attr_name(attr),
+    do: attr |> Map.new(fn {key, value} -> {to_string(key), value} end) |> Map.fetch!("name")
 
   defp bundle_components do
     MishkaDocument.Kit.bundle_path()
@@ -717,6 +723,49 @@ defmodule MishkaDocument.ProvisionTest do
       assert entry.fields == []
     end
 
+    # THE SCREEN GETS A FIXED MESSAGE, never the exception's own text; the log has the detail. An
+    # admin of another site holds every name the install asks for, so the refusal is the
+    # provision's own check of whose site it is, which raises after the plugin's permission gate.
+    test "a failed install reports the fixed message and logs the exception", %{site: site} do
+      elsewhere =
+        create_site!(name: "elsewhere#{System.unique_integer([:positive])}", active: true)
+
+      tenant = create_user_with_permissions!(["admin:dashboard:*"], site_id: elsewhere.id)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:extension_failed, message}} =
+                   Extensions.install(site.id, "mishka_document", %{}, tenant)
+
+          assert message ==
+                   "The install did not finish. Press Install again; details are in the server log."
+
+          refute message =~ "admin:dashboard"
+        end)
+
+      assert log =~ "[MishkaDocument] install on #{site.id} failed:"
+      assert log =~ "a site admin may only provision their own site"
+      refute Extensions.installed?(site.id, :mishka_document)
+      assert components(site) == []
+    end
+
+    # ANY OF THE PAGES IS ENOUGH, and a page of another site is not this site's.
+    test "a site holding one of the pages counts as installed, and one holding none does not", %{
+      site: site
+    } do
+      refute Extensions.installed?(site.id, :mishka_document)
+
+      other = create_site!(active: true)
+      create_page!(site_id: other.id, path: hd(Provision.page_paths()), active: true)
+
+      refute Extensions.installed?(site.id, :mishka_document),
+             "a page of another site made this site look set up"
+
+      create_page!(site_id: site.id, path: hd(Provision.page_paths()), active: true)
+
+      assert Extensions.installed?(site.id, :mishka_document)
+    end
+
     # A SITE IS NEVER SET UP BEHIND SOMEBODY'S BACK. Creating one used to queue this work; it does
     # not any more, and a site added to a running CMS waits to be asked.
     test "is not what creating a site does" do
@@ -726,6 +775,110 @@ defmodule MishkaDocument.ProvisionTest do
       assert components(site) == []
       assert pages(site) == []
       assert snippets(site) == []
+    end
+  end
+
+  # WHO MAY ASK. A request with nobody behind it is the install wizard's own run, made before there
+  # is a user, and it is answered only until the CMS is installed. After that it is refused like an
+  # actor holding nothing, and nothing is written.
+  describe "who may ask for an install" do
+    setup do
+      :persistent_term.erase(:mishka_installed)
+      on_exit(fn -> :persistent_term.erase(:mishka_installed) end)
+
+      listening!()
+    end
+
+    test "a request with nobody behind it installs while the CMS is not installed yet", %{
+      site: site
+    } do
+      refute Install.installed?()
+
+      assert {:ok, report} = Extensions.install(site.id, "mishka_document")
+
+      assert report.pages != []
+      assert length(components(site)) == length(Provision.component_names())
+      assert Extensions.installed?(site.id, :mishka_document)
+    end
+
+    test "a request with nobody behind it is refused once the CMS is installed, and writes nothing",
+         %{site: site} do
+      Install.mark_installed!()
+      names = Enum.map(Provision.manifest().permissions, &elem(&1, 0))
+
+      assert {:error, {:extension_failed, message}} =
+               Extensions.install(site.id, "mishka_document")
+
+      for name <- ExtensionProvision.required(Provision.manifest()) do
+        assert message =~ name
+      end
+
+      refute Extensions.installed?(site.id, :mishka_document)
+      assert components(site) == []
+      assert pages(site) == []
+      assert snippets(site) == []
+      assert stored_permissions(names) == []
+    end
+
+    for {who, master?} <- [{"a master", true}, {"a site admin", false}] do
+      @master? master?
+
+      test "#{who} holding every name installs once the CMS is installed", %{site: site} do
+        Install.mark_installed!()
+
+        admin =
+          create_user_with_permissions!(["*"], site_id: if(@master?, do: nil, else: site.id))
+
+        assert {:ok, report} = Extensions.install(site.id, "mishka_document", %{}, admin)
+
+        assert report.pages != []
+        assert length(components(site)) == length(Provision.component_names())
+        assert Extensions.installed?(site.id, :mishka_document)
+      end
+    end
+
+    for installed? <- [false, true] do
+      @installed? installed?
+
+      test "an actor holding none of what it writes is refused and nothing is written, #{if installed?, do: "after", else: "before"} the CMS is installed",
+           %{site: site} do
+        if @installed?, do: Install.mark_installed!()
+        weak = create_user_with_permissions!(["admin:dashboard:document"], site_id: site.id)
+
+        assert {:error, {:extension_failed, message}} =
+                 Extensions.install(site.id, "mishka_document", %{}, weak)
+
+        assert message =~ "needs these permissions"
+        assert message =~ "admin:dashboard:runtime:component"
+        refute Extensions.installed?(site.id, :mishka_document)
+        assert components(site) == []
+        assert pages(site) == []
+      end
+    end
+
+    test "the install wizard sets the documentation up with nobody behind the request, and the same request is refused after it",
+         %{site: site} do
+      assert {:ok, %{site: first}} =
+               Bootstrap.run(%{
+                 email: "owner-#{System.unique_integer([:positive])}@example.com",
+                 password: "Password123!",
+                 site_name: "Docs wizard",
+                 host: "wizard-#{System.unique_integer([:positive])}.example.com",
+                 extensions: ["mishka_document"]
+               })
+
+      on_exit(fn -> SiteState.delete(first.id) end)
+
+      assert Install.installed?()
+      assert Extensions.installed?(first.id, :mishka_document)
+      assert length(components(first)) == length(Provision.component_names())
+      assert Provision.page_paths() -- Enum.map(pages(first), & &1.path) == []
+
+      assert {:error, {:extension_failed, _message}} =
+               Extensions.install(site.id, "mishka_document")
+
+      refute Extensions.installed?(site.id, :mishka_document)
+      assert components(site) == []
     end
   end
 

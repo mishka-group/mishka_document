@@ -124,10 +124,17 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceFollowerTest do
 
         assert response.status == 201
         body = Jason.decode!(response.resp_body)
-        assert body["data"]["attributes"]["followed_at"] != nil
+
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["followed_at"])
+
         assert body["data"]["attributes"]["notification_enabled"] == true
-        assert body["data"]["attributes"]["inserted_at"] != nil
-        assert body["data"]["attributes"]["updated_at"] != nil
+
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["inserted_at"])
+
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(body["data"]["attributes"]["updated_at"])
       end
 
       test "user can follow with notifications disabled", %{site: site, user1: user1} do
@@ -672,7 +679,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceFollowerTest do
         body2 = Jason.decode!(list_response2.resp_body)
 
         # Draft workspaces should be filtered out from my_following
-        assert length(body2["data"]) == 0
+        assert body2["data"] == []
       end
 
       test "user can see multiple follows with only active workspaces visible", %{
@@ -746,7 +753,9 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceFollowerTest do
         assert length(body["data"]) == 1
 
         follow = hd(body["data"])
-        assert follow["attributes"]["followed_at"] != nil
+
+        assert {:ok, %DateTime{}, _offset} =
+                 DateTime.from_iso8601(follow["attributes"]["followed_at"])
       end
     end
 
@@ -785,7 +794,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceFollowerTest do
         assert follow["relationships"]["workspace"]["data"]["type"] == "workspace"
 
         # Verify included workspace data is present
-        assert body["included"] != nil
+        assert [_ | _] = body["included"]
         included_workspaces = Enum.filter(body["included"], &(&1["type"] == "workspace"))
         assert length(included_workspaces) == 1
 
@@ -829,7 +838,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceFollowerTest do
         assert body["data"]["relationships"]["workspace"]["data"]["id"] == workspace.id
 
         # Verify included workspace data
-        assert body["included"] != nil
+        assert [_ | _] = body["included"]
         included_workspaces = Enum.filter(body["included"], &(&1["type"] == "workspace"))
         assert length(included_workspaces) == 1
 
@@ -870,7 +879,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceFollowerTest do
         assert length(body["data"]) == 3
 
         # Verify we have 3 included workspaces
-        assert body["included"] != nil
+        assert [_ | _] = body["included"]
         included_workspaces = Enum.filter(body["included"], &(&1["type"] == "workspace"))
         assert length(included_workspaces) == 3
 
@@ -907,7 +916,7 @@ defmodule MishkaDocumentWeb.Api.Json.WorkspaceFollowerTest do
         assert follow["attributes"]["workspace_id"] == workspace.id
 
         # Without include parameter, included section should be nil or empty
-        assert body["included"] == nil || body["included"] == []
+        assert body["included"] in [nil, []]
       end
     end
   end

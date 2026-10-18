@@ -786,7 +786,7 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
       holding = fn text -> Enum.find_index(groups, &String.contains?(&1, text)) end
       site = holding.(~s(id="search-select-#{form}-site_id"))
 
-      assert site
+      assert is_integer(site)
       assert site == holding.(~s(id="search-select-#{form}-section_id"))
       assert site < holding.("SEO Tags")
     end

@@ -19,7 +19,7 @@ defmodule MishkaDocument.Test.IssueCommentTest do
 
       test "uses UUID v7 for primary keys" do
         comment = create_issue_comment!()
-        assert is_binary(comment.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(comment.id)
         assert String.length(comment.id) == 36
       end
 
@@ -413,7 +413,7 @@ defmodule MishkaDocument.Test.IssueCommentTest do
             authorize?: false
           )
 
-        assert archived_comment.archived_at != nil
+        assert %DateTime{} = archived_comment.archived_at
       end
 
       test "prevents archiving already archived comment" do
@@ -449,7 +449,7 @@ defmodule MishkaDocument.Test.IssueCommentTest do
           |> Ash.Changeset.for_destroy(:master_destroy, %{}, authorize?: false)
           |> Ash.destroy!(return_destroyed?: true)
 
-        assert destroyed_comment.archived_at != nil
+        assert %DateTime{} = destroyed_comment.archived_at
       end
     end
 
@@ -490,7 +490,7 @@ defmodule MishkaDocument.Test.IssueCommentTest do
           )
 
         assert archived_comment.id == comment.id
-        assert archived_comment.archived_at != nil
+        assert %DateTime{} = archived_comment.archived_at
       end
 
       test "master_get_archived retrieves archived comment from any tenant" do
@@ -508,7 +508,7 @@ defmodule MishkaDocument.Test.IssueCommentTest do
           Ash.get!(IssueComment, comment.id, action: :master_get_archived, authorize?: false)
 
         assert archived_comment.id == comment.id
-        assert archived_comment.archived_at != nil
+        assert %DateTime{} = archived_comment.archived_at
       end
 
       test "master_archived returns all archived comments system-wide" do
@@ -870,12 +870,12 @@ defmodule MishkaDocument.Test.IssueCommentTest do
     describe "timestamps" do
       test "sets inserted_at on creation" do
         comment = create_issue_comment!()
-        assert comment.inserted_at != nil
+        assert %DateTime{} = comment.inserted_at
       end
 
       test "sets updated_at on creation" do
         comment = create_issue_comment!()
-        assert comment.updated_at != nil
+        assert %DateTime{} = comment.updated_at
       end
 
       test "updates updated_at on modification" do

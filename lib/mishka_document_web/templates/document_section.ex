@@ -46,8 +46,8 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
   import MishkaCmsCore.CoreComponents, only: [show_form_modal: 2]
 
   alias MishkaCmsCore.Localized
-  alias MishkaDocument.{Address, ContentText}
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
+  alias MishkaDocument.{Address, ContentText}
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
   alias Phoenix.LiveView.AsyncResult
 
@@ -271,6 +271,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
             </span>
             <span
               :for={crumb <- @crumbs}
+              data-role="sec-crumb"
               class="rounded-md bg-[#f4f3ee] px-2 py-[3px] text-[10.5px] font-bold text-[#8a877f]"
             >
               {crumb}
@@ -287,7 +288,11 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
             >
               v{@version}
             </span>
-            <span :if={@versions_count > 1} class="text-[10.5px] font-semibold text-[#a8a5a0]">
+            <span
+              :if={@versions_count > 1}
+              data-role="sec-versions"
+              class="text-[10.5px] font-semibold text-[#a8a5a0]"
+            >
               ({dgettext("mishka_gervaz", "%{count} versions", count: @versions_count)})
             </span>
           </div>
@@ -351,8 +356,8 @@ defmodule MishkaDocumentWeb.Templates.DocumentSection do
               {dgettext("mishka_gervaz", "%{count} words", count: @words)}
             </span>
             <span class="text-[11px] font-semibold text-[#a8a5a0]">{@date}</span>
-            <span class="text-[11px] font-semibold text-[#a8a5a0]">
-              {dgettext("mishka_gervaz", "%{count} contributors", count: @contributors)}
+            <span data-role="sec-contributors" class="text-[11px] font-semibold text-[#a8a5a0]">
+              {dngettext("mishka_gervaz", "1 contributor", "%{count} contributors", @contributors)}
             </span>
             <span
               :if={@pending > 0}

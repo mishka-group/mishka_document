@@ -9,6 +9,8 @@ defmodule MishkaDocument.Resources.Helpers.AdvisoryLockKeyGenerator do
   This is needed for master admin actions that bypass multi-tenancy (nil tenant).
   For non-nil tenants, delegates to the default AshEvents implementation.
   """
+  alias AshEvents.AdvisoryLockKeyGenerator.Default, as: DefaultKeyGenerator
+
   use AshEvents.AdvisoryLockKeyGenerator
 
   @impl true
@@ -20,7 +22,7 @@ defmodule MishkaDocument.Resources.Helpers.AdvisoryLockKeyGenerator do
 
       # For all other cases, use the default AshEvents implementation
       _ ->
-        AshEvents.AdvisoryLockKeyGenerator.Default.generate_key!(changeset, default_integer)
+        DefaultKeyGenerator.generate_key!(changeset, default_integer)
     end
   end
 end

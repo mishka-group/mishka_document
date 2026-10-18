@@ -19,7 +19,7 @@ defmodule MishkaDocument.Test.WorkspaceFollowerTest do
 
       test "uses UUID v7 for primary keys" do
         follow = create_workspace_follower!()
-        assert is_binary(follow.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(follow.id)
         assert String.length(follow.id) == 36
       end
 
@@ -50,7 +50,7 @@ defmodule MishkaDocument.Test.WorkspaceFollowerTest do
         assert follow.workspace_id == workspace.id
         assert follow.follower_user_id == user.id
         assert follow.notification_enabled == true
-        assert follow.followed_at != nil
+        assert %DateTime{} = follow.followed_at
       end
 
       test "defaults notification_enabled to true" do
@@ -460,14 +460,36 @@ defmodule MishkaDocument.Test.WorkspaceFollowerTest do
     end
 
     describe "authorization policies" do
-      test "by_workspace lists a workspace's followers for a system read" do
+      setup do
         workspace = create_workspace!()
-        user = create_user!()
+        site_id = workspace.site_id
+        follower = create_user!(site_id: site_id)
+        stranger = create_user!(site_id: site_id)
 
-        _follow =
-          create_workspace_follower!(workspace_id: workspace.id, follower_user_id: user.id)
+        follow =
+          create_workspace_follower!(workspace_id: workspace.id, follower_user_id: follower.id)
 
-        # Should work without actor (authorize?: false to bypass policies)
+        {:ok,
+         workspace: workspace,
+         follower: follower,
+         stranger: stranger,
+         follow: follow,
+         admin:
+           create_user_with_permissions!(["admin:dashboard:document:workspace"], site_id: site_id),
+         other_admin:
+           create_user_with_permissions!(["admin:dashboard:document:workspace"],
+             site_id: create_site!().id
+           )}
+      end
+
+      defp follows_read_by(actor, tenant) do
+        WorkspaceFollower
+        |> Ash.Query.for_read(:read, %{}, actor: actor, tenant: tenant)
+        |> Ash.read!()
+        |> Enum.map(& &1.id)
+      end
+
+      test "by_workspace lists a workspace's followers for a system read", %{workspace: workspace} do
         result =
           WorkspaceFollower
           |> Ash.Query.for_read(:by_workspace, %{workspace_id: workspace.id}, authorize?: false)
@@ -476,76 +498,110 @@ defmodule MishkaDocument.Test.WorkspaceFollowerTest do
         assert length(result.results) == 1
       end
 
-      test "read action requires user to be the follower" do
-        user = create_user!()
-        _other_user = create_user!()
-
-        follow = create_workspace_follower!(follower_user_id: user.id)
-
-        # Without authorization, we can see all follows
-        result =
-          WorkspaceFollower
-          |> Ash.Query.for_read(:read, %{}, authorize?: false)
-          |> Ash.read!()
-
-        assert length(result) >= 1
-        assert follow.id in Enum.map(result, & &1.id)
-
-        # With authorization and wrong actor, the policy filter would exclude it
-        # But since this is a test without proper actor setup, we skip authorization
+      test "a follower reads their own follow, and a stranger reads none", %{
+        follow: follow,
+        follower: follower,
+        stranger: stranger,
+        workspace: workspace
+      } do
+        assert follows_read_by(follower, workspace.site_id) == [follow.id]
+        assert follows_read_by(stranger, workspace.site_id) == []
       end
 
-      test "create action with authorization checks follower_user_id matches actor" do
-        user = create_user!()
-        workspace = create_workspace!()
-
-        # For testing, we use authorize?: false
-        # In production, the policy would enforce this
-        {:ok, _follow} =
+      test "by_workspace shows a stranger no follower, and a follower only their own", %{
+        follow: follow,
+        follower: follower,
+        stranger: stranger,
+        workspace: workspace
+      } do
+        ids = fn actor ->
           WorkspaceFollower
-          |> Ash.Changeset.for_create(
-            :create,
-            %{workspace_id: workspace.id},
-            actor: user,
-            authorize?: false
+          |> Ash.Query.for_read(:by_workspace, %{workspace_id: workspace.id},
+            actor: actor,
+            tenant: workspace.site_id
           )
-          |> Ash.create()
+          |> Ash.read!()
+          |> Map.fetch!(:results)
+          |> Enum.map(& &1.id)
+        end
 
-        # Policy ensures users can only create follows for themselves
-        # Testing this requires proper actor context which is complex in unit tests
+        assert ids.(follower) == [follow.id]
+        assert ids.(stranger) == []
       end
 
-      test "update action with authorization checks ownership" do
-        user = create_user!()
+      test "the area of the workspace reads the follows of its own site and no other", %{
+        follow: follow,
+        admin: admin,
+        other_admin: other_admin,
+        workspace: workspace
+      } do
+        assert follow.id in follows_read_by(admin, workspace.site_id)
+        refute follow.id in follows_read_by(other_admin, other_admin.site_id)
+      end
 
-        follow = create_workspace_follower!(follower_user_id: user.id)
+      test "create takes the follow for the actor and no one else", %{
+        stranger: stranger,
+        workspace: workspace
+      } do
+        assert {:ok, created} =
+                 WorkspaceFollower
+                 |> Ash.Changeset.for_create(:create, %{workspace_id: workspace.id},
+                   actor: stranger,
+                   tenant: workspace.site_id
+                 )
+                 |> Ash.create()
 
-        # Without authorization, update works
-        {:ok, _updated} =
+        assert created.follower_user_id == stranger.id
+
+        assert {:error, %Ash.Error.Forbidden{}} =
+                 WorkspaceFollower
+                 |> Ash.Changeset.for_create(:create, %{workspace_id: workspace.id},
+                   tenant: workspace.site_id
+                 )
+                 |> Ash.create()
+      end
+
+      test "only the follower or the workspace area toggles notifications", %{
+        follow: follow,
+        follower: follower,
+        stranger: stranger,
+        admin: admin,
+        workspace: workspace
+      } do
+        toggle = fn actor, enabled ->
           follow
-          |> Ash.Changeset.for_update(
-            :toggle_notifications,
-            %{notification_enabled: false},
-            authorize?: false
+          |> Ash.Changeset.for_update(:toggle_notifications, %{notification_enabled: enabled},
+            actor: actor,
+            tenant: workspace.site_id
           )
           |> Ash.update()
+        end
 
-        # With proper actor context, only the follower can update
-        # Policy enforces: follower_user_id == ^actor(:id)
+        assert {:error, %Ash.Error.Forbidden{}} = toggle.(stranger, false)
+
+        assert {:ok, %{notification_enabled: false}} = toggle.(follower, false)
+        assert {:ok, %{notification_enabled: true}} = toggle.(admin, true)
       end
 
-      test "destroy action with authorization checks ownership" do
-        user = create_user!()
+      test "only the follower or the workspace area unfollows", %{
+        follow: follow,
+        follower: follower,
+        stranger: stranger,
+        other_admin: other_admin,
+        workspace: workspace
+      } do
+        unfollow = fn actor, tenant ->
+          follow
+          |> Ash.Changeset.for_destroy(:unfollow, %{}, actor: actor, tenant: tenant)
+          |> Ash.destroy()
+        end
 
-        follow = create_workspace_follower!(follower_user_id: user.id)
+        assert {:error, %Ash.Error.Forbidden{}} = unfollow.(stranger, workspace.site_id)
+        assert {:error, %Ash.Error.Forbidden{}} = unfollow.(other_admin, other_admin.site_id)
+        assert {:ok, _} = Ash.get(WorkspaceFollower, follow.id, authorize?: false)
 
-        # Without authorization, destroy works
-        follow
-        |> Ash.Changeset.for_destroy(:unfollow, %{}, authorize?: false)
-        |> Ash.destroy!()
-
-        # With proper actor context, only the follower can destroy
-        # Policy enforces: follower_user_id == ^actor(:id)
+        assert :ok = unfollow.(follower, workspace.site_id)
+        assert {:error, _gone} = Ash.get(WorkspaceFollower, follow.id, authorize?: false)
       end
     end
 
@@ -709,8 +765,7 @@ defmodule MishkaDocument.Test.WorkspaceFollowerTest do
         follow = create_workspace_follower!()
 
         # followed_at should be set
-        assert follow.followed_at != nil
-
+        assert %DateTime{} = follow.followed_at
         # Attempting to manually set followed_at should not change it
         original_time = follow.followed_at
 

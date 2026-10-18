@@ -695,7 +695,7 @@ defmodule MishkaDocumentWeb.Api.Json.NoteTest do
             authorize?: false
           )
 
-        refute is_nil(archived_note.archived_at)
+        assert %DateTime{} = archived_note.archived_at
       end
 
       test "tenant admin CANNOT archive note from other site", %{
@@ -1029,8 +1029,7 @@ defmodule MishkaDocumentWeb.Api.Json.NoteTest do
             authorize?: false
           )
 
-        refute is_nil(archived_note.archived_at)
-
+        assert %DateTime{} = archived_note.archived_at
         # Cleanup
         MishkaCmsCore.Runtime.States.SiteState.delete(site2.id)
       end
@@ -1565,7 +1564,7 @@ defmodule MishkaDocumentWeb.Api.Json.NoteTest do
         archived_note =
           Ash.get!(MishkaDocument.Note, note.id, action: :master_get_archived, authorize?: false)
 
-        refute is_nil(archived_note.archived_at)
+        assert %DateTime{} = archived_note.archived_at
       end
     end
 
@@ -2270,11 +2269,21 @@ defmodule MishkaDocumentWeb.Api.Json.NoteTest do
         assert body["data"]["attributes"]["approved_note_draft_count"] == 1
       end
 
-      test "public users CANNOT access draft count fields (get null)", %{site: _site, note: _note} do
-        # Public endpoint doesn't exist for notes, but if it did, these should be null
-        # For now, just verify the fields would be restricted
-        # We'll skip this test since there's no public note endpoint
-        assert true
+      test "public users CANNOT access draft count fields", %{site: site, note: note} do
+        fields =
+          "fields[note]=pending_note_draft_content_review_count,pending_note_draft_technical_review_count,approved_note_draft_count"
+
+        for {path, headers} <- [
+              {@tenant_path, [{"x-site-id", site.id}]},
+              {@master_path, [{"x-no-tenant", "true"}]}
+            ] do
+          response =
+            make_api_request("#{path}/#{note.id}?#{fields}", %{}, method: :get, headers: headers)
+
+          assert response.status in [401, 403]
+          refute response.resp_body =~ "draft_content_review_count"
+          refute response.resp_body =~ "approved_note_draft_count"
+        end
       end
 
       test "draft counts are accurate with multiple drafts", %{

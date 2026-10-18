@@ -101,6 +101,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     # this is the moment `update_many/1` puts those assigns back on the socket and `update/2` runs
     # over them again, on top of whatever the reader has done to the block since it mounted.
     def handle_info({:params, params}, socket) do
+      # credo:disable-for-lines:3 Jump.CredoChecks.AvoidSocketAssignsInTest
       blocks =
         Enum.map(socket.assigns.blocks, fn block ->
           Map.put(block, "attrs", Map.put(block["attrs"], :params, params))
@@ -112,6 +113,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     # AND THE SAME FOR A SETTING RATHER THAN A URL, which is what an author changing one in the
     # Inspector does to the block under it.
     def handle_info({:attrs, id, attrs}, socket) do
+      # credo:disable-for-lines:3 Jump.CredoChecks.AvoidSocketAssignsInTest
       blocks =
         Enum.map(socket.assigns.blocks, fn block ->
           (block["id"] == id && Map.put(block, "attrs", Map.merge(block["attrs"], attrs))) ||
@@ -418,8 +420,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
   # A DOCUMENT WITH AN ADDRESS OF ITS OWN is read there by every block a page at that address holds,
   # and nowhere else: its slug under /docs names nothing. Every link written to it or to a page of it
-  # is under that address — never /docs/<slug> — with no ?lang=, since the address is one edition's. A page's address holds the pages it is filed
-  # under (`MishkaDocument.Address`).
+  # is under that address — never /docs/<slug> — with no ?lang=, since the address is one edition's.
+  # A page's address holds the pages it is filed under (`MishkaDocument.Address`).
   describe "a document with an address of its own" do
     test "is read at it, and every link to a page of it is under it", %{site: site} do
       addressed!(site)
@@ -856,8 +858,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       node |> LazyHTML.query(selector) |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
     end
 
-    test "draws the example on the page, and an empty holder its preview is built in when it opens",
-         %{site: site} do
+    defp tip_example!(site) do
       {page, body} =
         example_page_of!(
           site,
@@ -869,6 +870,12 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert [example] = Enum.to_list(LazyHTML.query(body, ~s([data-role="doc-example"])))
       assert [id] = LazyHTML.attribute(example, "id")
+      {page, body, example, id}
+    end
+
+    test "draws the example on the page", %{site: site} do
+      {_page, body, example, id} = tip_example!(site)
+
       assert id =~ ~r/\Aone-body-\d+\z/
       assert LazyHTML.attribute(example, "data-frame-theme") == ["dark"]
       assert LazyHTML.attribute(example, "data-frame-device") == ["desktop"]
@@ -893,6 +900,10 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert body
              |> LazyHTML.query(~s|[data-role="doc-section-body"] > p:not([data-role])|)
              |> LazyHTML.text() == "Before."
+    end
+
+    test "draws an empty holder its preview is built in when it opens", %{site: site} do
+      {page, body, example, id} = tip_example!(site)
 
       # The preview: a dialog the open button names, which the hook builds the first time it opens
       # in an element LiveView leaves to the browser.
@@ -4323,7 +4334,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       test_pid = self()
 
       # The task that waits has subscribed once it asks for itself.
-      assert_receive {:page_extras_asker, asker} when asker not in [view_pid, test_pid], @async
+      assert_receive {:page_extras_asker, asker} when asker not in [view_pid, test_pid]
 
       waiting = LazyHTML.from_fragment(render(view))
 

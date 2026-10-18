@@ -18,7 +18,7 @@ defmodule MishkaDocument.Test.IssueTest do
 
       test "uses UUID v7 for primary keys" do
         issue = create_issue!()
-        assert is_binary(issue.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(issue.id)
         assert String.length(issue.id) == 36
       end
 
@@ -631,7 +631,7 @@ defmodule MishkaDocument.Test.IssueTest do
             authorize?: false
           )
 
-        assert archived_issue.archived_at != nil
+        assert %DateTime{} = archived_issue.archived_at
       end
 
       test "prevents archiving already archived issue" do
@@ -661,7 +661,7 @@ defmodule MishkaDocument.Test.IssueTest do
           |> Ash.Changeset.for_destroy(:master_destroy, %{}, authorize?: false)
           |> Ash.destroy!(return_destroyed?: true)
 
-        assert destroyed_issue.archived_at != nil
+        assert %DateTime{} = destroyed_issue.archived_at
       end
     end
 
@@ -699,7 +699,7 @@ defmodule MishkaDocument.Test.IssueTest do
           )
 
         assert archived_issue.id == issue.id
-        assert archived_issue.archived_at != nil
+        assert %DateTime{} = archived_issue.archived_at
       end
 
       test "master_get_archived retrieves archived issue from any tenant" do
@@ -714,7 +714,7 @@ defmodule MishkaDocument.Test.IssueTest do
           Ash.get!(Issue, issue.id, action: :master_get_archived, authorize?: false)
 
         assert archived_issue.id == issue.id
-        assert archived_issue.archived_at != nil
+        assert %DateTime{} = archived_issue.archived_at
       end
 
       test "master_archived returns all archived issues system-wide" do
@@ -904,12 +904,12 @@ defmodule MishkaDocument.Test.IssueTest do
     describe "timestamps" do
       test "sets inserted_at on creation" do
         issue = create_issue!()
-        assert issue.inserted_at != nil
+        assert %DateTime{} = issue.inserted_at
       end
 
       test "sets updated_at on creation" do
         issue = create_issue!()
-        assert issue.updated_at != nil
+        assert %DateTime{} = issue.updated_at
       end
 
       test "updates updated_at on modification" do

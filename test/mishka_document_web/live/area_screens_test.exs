@@ -318,26 +318,54 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
   end
 
   describe "Home's activity feed" do
-    # The feed's scope is fixed when the page mounts; it is the page's own state, not drawn.
-    defp feed_scope(conn, names, site) do
-      {:ok, view, _html} = live(log_in(conn, tenant(names, site)), "/admin/dashboard/document")
-      resources = :sys.get_state(view.pid).socket.assigns.activity_feed.resources
-      close(view)
-      MapSet.new(resources)
+    # The feed follows the areas the admin holds: what happened to a workspace is the workspace
+    # area's, what happened to an issue the section area's.
+    setup %{site: site} do
+      create_issue!(site_id: site.id, title: "Feed Issue")
+      create_workspace!(site_id: site.id, name: "Feed Workspace", skip_version: true)
+      :ok
     end
 
-    test "follows the areas the admin holds", %{conn: conn, site: site} do
-      workspace_side = MapSet.new([MishkaDocument.Workspace, MishkaDocument.WorkspaceVersion])
+    defp feed(conn, names, site) do
+      {:ok, view, _html} = live(log_in(conn, tenant(names, site)), "/admin/dashboard/document")
+      view |> element("#document-activity-toggle") |> render_click()
 
-      assert feed_scope(conn, [@workspace], site) == workspace_side
+      panel =
+        view
+        |> render_async(5_000)
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#document-activity-panel")
+        |> LazyHTML.text()
 
-      section_scope = feed_scope(conn, [@section], site)
-      assert MishkaDocument.Issue in section_scope
-      assert MishkaDocument.Section in section_scope
-      assert MapSet.disjoint?(section_scope, workspace_side)
+      close(view)
+      panel
+    end
 
-      assert feed_scope(conn, [@workspace, @section], site) ==
-               MapSet.union(workspace_side, section_scope)
+    test "shows a workspace admin what happened to workspaces, and none of the issues", %{
+      conn: conn,
+      site: site
+    } do
+      html = feed(conn, [@workspace], site)
+
+      assert html =~ "Feed Workspace"
+      refute html =~ "Feed Issue"
+    end
+
+    test "shows a section admin what happened to issues, and none of the workspaces", %{
+      conn: conn,
+      site: site
+    } do
+      html = feed(conn, [@section], site)
+
+      assert html =~ "Feed Issue"
+      refute html =~ "Feed Workspace"
+    end
+
+    test "shows an admin of both areas both", %{conn: conn, site: site} do
+      html = feed(conn, [@workspace, @section], site)
+
+      assert html =~ "Feed Workspace"
+      assert html =~ "Feed Issue"
     end
   end
 

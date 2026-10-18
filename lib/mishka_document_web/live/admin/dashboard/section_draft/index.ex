@@ -3,12 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
+  @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User
-  alias MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index, as: SectionIndex
+  alias MishkaDocument.Resources.Helpers.Labels
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
+  alias Phoenix.HTML.Safe
 
   @impl true
   def mount(params, _session, socket) do
@@ -18,16 +21,28 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
       socket
       |> assign(:page_title, gettext("Section Drafts"))
       |> assign(:url_state, nil)
-      |> assign(:return_to, params["return_to"])
-      |> subscribe_to_pubsub(current_user)
+      |> assign(:return_to, checked(params)["return_to"])
+      |> subscribe_when_connected(current_user)
 
     {:ok, socket}
   end
 
+  # `return_to` is a version's id; anything else is dropped before the table keeps it in the URL.
+  defp checked(params) do
+    case Ecto.UUID.cast(params["return_to"]) do
+      {:ok, version_id} -> Map.put(params, "return_to", version_id)
+      :error -> Map.delete(params, "return_to")
+    end
+  end
+
   @impl true
   def handle_params(params, uri, socket) do
-    url_state = UrlSync.decode(params, uri, MishkaDocument.SectionDraft)
+    url_state = UrlSync.decode(checked(params), uri, MishkaDocument.SectionDraft)
     {:noreply, assign(socket, :url_state, url_state)}
+  end
+
+  defp subscribe_when_connected(socket, user) do
+    if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
   end
 
   defp subscribe_to_pubsub(socket, %User{site_id: nil}) do
@@ -175,37 +190,19 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
   end
 
   defp render_expanded_content(%{section_draft: sd}) do
-    wv =
-      cond do
-        !match?(%Ash.NotLoaded{}, sd.master_workspace_version) -> sd.master_workspace_version
-        !match?(%Ash.NotLoaded{}, sd.workspace_version) -> sd.workspace_version
-        true -> nil
-      end
-
+    wv = Labels.first_loaded(sd, [:master_workspace_version, :workspace_version])
     wv_name = if wv, do: wv.version_name, else: gettext("Unknown")
 
-    source =
-      cond do
-        !match?(%Ash.NotLoaded{}, sd.master_source_section) -> sd.master_source_section
-        !match?(%Ash.NotLoaded{}, sd.source_section) -> sd.source_section
-        true -> nil
-      end
-
+    source = Labels.first_loaded(sd, [:master_source_section, :source_section])
     source_title = if source, do: source.title, else: "-"
 
-    parent =
-      cond do
-        !match?(%Ash.NotLoaded{}, sd.master_parent_section) -> sd.master_parent_section
-        !match?(%Ash.NotLoaded{}, sd.parent_section) -> sd.parent_section
-        true -> nil
-      end
-
+    parent = Labels.first_loaded(sd, [:master_parent_section, :parent_section])
     parent_title = if parent, do: parent.title, else: "-"
 
     creator =
       if sd.created_by_user && !match?(%Ash.NotLoaded{}, sd.created_by_user),
         do: sd.created_by_user.email,
-        else: MishkaCmsCore.Accounts.Helper.label(:unknown)
+        else: Helper.label(:unknown)
 
     assigns = %{
       sd: sd,
@@ -236,7 +233,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
         </div>
         <div>
           <span class="font-semibold text-gray-500">{gettext("Increment Type:")}</span>
-          <p class="text-gray-900">{SectionIndex.increment_label(@sd.version_increment_type)}</p>
+          <p class="text-gray-900">{Labels.increment_label(@sd.version_increment_type)}</p>
         </div>
         <div>
           <span class="font-semibold text-gray-500">{gettext("Order:")}</span>
@@ -306,7 +303,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
       </div>
     </div>
     """
-    |> Phoenix.HTML.Safe.to_iodata()
+    |> Safe.to_iodata()
     |> IO.iodata_to_binary()
   end
 end

@@ -39,6 +39,8 @@ defmodule MishkaDocument.SiteReferencesTest do
     WorkspaceVersionLineage
   }
 
+  alias MishkaGervaz.Resource.Info.Form
+
   @moduletag :unit
   @moduletag :capture_log
 
@@ -644,8 +646,6 @@ defmodule MishkaDocument.SiteReferencesTest do
   end
 
   describe "the admin form pickers" do
-    alias MishkaGervaz.Resource.Info.Form
-
     defp site_owned?(resource),
       do:
         resource != MishkaCmsCore.Runtime.Site and

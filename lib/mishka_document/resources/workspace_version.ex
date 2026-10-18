@@ -18,6 +18,8 @@ defmodule MishkaDocument.WorkspaceVersion do
   Multi-tenant isolation ensures versions are properly segregated between sites through
   their parent workspace relationship.
   """
+  alias MishkaCmsCore.Accounts.Checks.AccessPermissions
+
   use Ash.Resource,
     otp_app: :mishka_document,
     domain: MishkaDocument,
@@ -1069,7 +1071,7 @@ defmodule MishkaDocument.WorkspaceVersion do
     policy always() do
       access_type :strict
 
-      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+      authorize_if {AccessPermissions,
                     permissions: [
                       "admin:dashboard:document:workspace",
                       "admin:api:document:workspace"
@@ -1077,7 +1079,7 @@ defmodule MishkaDocument.WorkspaceVersion do
 
       forbid_if context_equals([:shared, :admin_surface], :api)
 
-      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+      authorize_if {AccessPermissions,
                     permissions: [
                       "admin:dashboard:document:section",
                       "admin:api:document:section"
@@ -1087,7 +1089,7 @@ defmodule MishkaDocument.WorkspaceVersion do
     policy action_type([:create, :update, :destroy]) do
       access_type :strict
 
-      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+      authorize_if {AccessPermissions,
                     permissions: [
                       "admin:dashboard:document:workspace",
                       "admin:api:document:workspace"
@@ -1099,7 +1101,7 @@ defmodule MishkaDocument.WorkspaceVersion do
     policy action([:clone, :master_clone, :detach, :master_detach]) do
       access_type :strict
 
-      authorize_if {MishkaCmsCore.Accounts.Checks.AccessPermissions,
+      authorize_if {AccessPermissions,
                     permissions: [
                       "admin:dashboard:document:section",
                       "admin:api:document:section"
@@ -1330,7 +1332,7 @@ defmodule MishkaDocument.WorkspaceVersion do
   def clone_allowed?(actor) do
     Enum.all?(
       ["admin:dashboard:document:workspace", "admin:dashboard:document:section"],
-      &MishkaCmsCore.Accounts.Checks.AccessPermissions.match?(actor, %{}, permissions: [&1])
+      &AccessPermissions.match?(actor, %{}, permissions: [&1])
     )
   end
 

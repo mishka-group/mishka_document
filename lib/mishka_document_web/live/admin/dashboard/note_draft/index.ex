@@ -3,12 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
+  @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User
-  alias MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index, as: SectionIndex
+  alias MishkaDocument.Resources.Helpers.Labels
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
+  alias Phoenix.HTML.Safe
 
   @impl true
   def mount(params, _session, socket) do
@@ -18,16 +21,28 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
       socket
       |> assign(:page_title, gettext("Note Drafts"))
       |> assign(:url_state, nil)
-      |> assign(:return_to, params["return_to"])
-      |> subscribe_to_pubsub(current_user)
+      |> assign(:return_to, checked(params)["return_to"])
+      |> subscribe_when_connected(current_user)
 
     {:ok, socket}
   end
 
+  # `return_to` is a version's id; anything else is dropped before the table keeps it in the URL.
+  defp checked(params) do
+    case Ecto.UUID.cast(params["return_to"]) do
+      {:ok, version_id} -> Map.put(params, "return_to", version_id)
+      :error -> Map.delete(params, "return_to")
+    end
+  end
+
   @impl true
   def handle_params(params, uri, socket) do
-    url_state = UrlSync.decode(params, uri, MishkaDocument.NoteDraft)
+    url_state = UrlSync.decode(checked(params), uri, MishkaDocument.NoteDraft)
     {:noreply, assign(socket, :url_state, url_state)}
+  end
+
+  defp subscribe_when_connected(socket, user) do
+    if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
   end
 
   defp subscribe_to_pubsub(socket, %User{site_id: nil}) do
@@ -172,46 +187,22 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
   end
 
   defp render_expanded_content(%{note_draft: nd}) do
-    wv =
-      cond do
-        !match?(%Ash.NotLoaded{}, nd.master_workspace_version) -> nd.master_workspace_version
-        !match?(%Ash.NotLoaded{}, nd.workspace_version) -> nd.workspace_version
-        true -> nil
-      end
-
+    wv = Labels.first_loaded(nd, [:master_workspace_version, :workspace_version])
     wv_name = if wv, do: wv.version_name, else: gettext("Unknown")
 
-    section =
-      cond do
-        !match?(%Ash.NotLoaded{}, nd.master_section) -> nd.master_section
-        !match?(%Ash.NotLoaded{}, nd.section) -> nd.section
-        true -> nil
-      end
-
+    section = Labels.first_loaded(nd, [:master_section, :section])
     section_title = if section, do: section.title, else: gettext("None")
 
-    section_draft =
-      cond do
-        !match?(%Ash.NotLoaded{}, nd.master_section_draft) -> nd.master_section_draft
-        !match?(%Ash.NotLoaded{}, nd.section_draft) -> nd.section_draft
-        true -> nil
-      end
-
+    section_draft = Labels.first_loaded(nd, [:master_section_draft, :section_draft])
     section_draft_title = if section_draft, do: section_draft.title, else: gettext("None")
 
-    source_note =
-      cond do
-        !match?(%Ash.NotLoaded{}, nd.master_source_note) -> nd.master_source_note
-        !match?(%Ash.NotLoaded{}, nd.source_note) -> nd.source_note
-        true -> nil
-      end
-
+    source_note = Labels.first_loaded(nd, [:master_source_note, :source_note])
     source_note_title = if source_note, do: source_note.title, else: "-"
 
     creator =
       if nd.created_by_user && !match?(%Ash.NotLoaded{}, nd.created_by_user),
         do: nd.created_by_user.email,
-        else: MishkaCmsCore.Accounts.Helper.label(:unknown)
+        else: Helper.label(:unknown)
 
     assigns = %{
       nd: nd,
@@ -235,7 +226,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
         </div>
         <div>
           <span class="font-semibold text-gray-500">{gettext("Increment Type:")}</span>
-          <p class="text-gray-900">{SectionIndex.increment_label(@nd.version_increment_type)}</p>
+          <p class="text-gray-900">{Labels.increment_label(@nd.version_increment_type)}</p>
         </div>
         <div>
           <span class="font-semibold text-gray-500">{gettext("Order:")}</span>
@@ -323,7 +314,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
       </div>
     </div>
     """
-    |> Phoenix.HTML.Safe.to_iodata()
+    |> Safe.to_iodata()
     |> IO.iodata_to_binary()
   end
 end

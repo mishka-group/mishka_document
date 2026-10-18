@@ -102,25 +102,27 @@ defmodule MishkaDocument.ConnCase do
   # `page[limit]=2` and `included_page[posts][limit]=1` arrive as flat keys; the router wants
   # `%{"page" => %{"limit" => "2"}}`. Two levels is as deep as the API's own routes go.
   defp parse_json_api_params(params) when is_map(params) do
-    Enum.reduce(params, %{}, fn {key, value}, acc ->
-      cond do
-        match = Regex.run(~r/^(\w+)\[(\w+)\]\[(\w+)\]$/, key) ->
-          [_, parent, child1, child2] = match
-
-          Map.update(acc, parent, %{child1 => %{child2 => value}}, fn existing ->
-            Map.update(existing, child1, %{child2 => value}, &Map.put(&1, child2, value))
-          end)
-
-        match = Regex.run(~r/^(\w+)\[(\w+)\]$/, key) ->
-          [_, parent, child] = match
-
-          Map.update(acc, parent, %{child => value}, &Map.put(&1, child, value))
-
-        true ->
-          Map.put(acc, key, value)
-      end
-    end)
+    Enum.reduce(params, %{}, fn {key, value}, acc -> put_json_api_param(acc, key, value) end)
   end
 
   defp parse_json_api_params(_params), do: %{}
+
+  defp put_json_api_param(acc, key, value) do
+    cond do
+      match = Regex.run(~r/^(\w+)\[(\w+)\]\[(\w+)\]$/, key) ->
+        [_, parent, child1, child2] = match
+
+        Map.update(acc, parent, %{child1 => %{child2 => value}}, fn existing ->
+          Map.update(existing, child1, %{child2 => value}, &Map.put(&1, child2, value))
+        end)
+
+      match = Regex.run(~r/^(\w+)\[(\w+)\]$/, key) ->
+        [_, parent, child] = match
+
+        Map.update(acc, parent, %{child => value}, &Map.put(&1, child, value))
+
+      true ->
+        Map.put(acc, key, value)
+    end
+  end
 end

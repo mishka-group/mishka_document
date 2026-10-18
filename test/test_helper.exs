@@ -41,6 +41,9 @@ children = [
   # `MishkaDocument.Plugins.SitemapUrlsTest` reads what this extension adds to a sitemap
   # the way core's build reads it, and the build keeps the sitemap it makes there.
   MishkaCmsCore.Runtime.States.AssetsState,
+  # WHAT THE INSTALL WIZARD'S RUN WRITES AS IT COMPILES THE NEW SITE: `Bootstrap.run/1`, which
+  # `MishkaDocument.ProvisionTest` drives, saves each layout it compiles here.
+  MishkaCmsCore.Runtime.States.WebRunTimeMetaDataState,
   # THIS EXTENSION SHIPS COMPONENTS NOW, and a component is only a row until something compiles it.
   # `MishkaDocument.LiveComponentsRenderTest` renders the five out of the database for real — the
   # same lazy compile a visitor's first request triggers — and that needs the gate, the registry
@@ -65,5 +68,5 @@ children = [
     name: MishkaDocument.TestSupervisor
   )
 
-ExUnit.start()
+ExUnit.start(assert_receive_timeout: 5_000, exclude: [:benchmark])
 Ecto.Adapters.SQL.Sandbox.mode(MishkaDocument.Repo, :manual)

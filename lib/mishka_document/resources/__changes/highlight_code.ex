@@ -38,6 +38,8 @@ defmodule MishkaDocument.Resources.Changes.HighlightCode do
         change MishkaDocument.Resources.Changes.HighlightCode
       end
   """
+  alias Makeup.Token.Utils, as: TokenUtils
+
   use Ash.Resource.Change
 
   @supervisor MishkaDocument.HighlightSupervisor
@@ -169,7 +171,7 @@ defmodule MishkaDocument.Resources.Changes.HighlightCode do
   # it opens the block, and tokens of one class in a row share a span. That also leaves a block
   # with about a third of the spans it would carry otherwise.
   defp segment({type, _meta, value}, segments) do
-    class = Makeup.Token.Utils.css_class_for_token_type(type)
+    class = TokenUtils.css_class_for_token_type(type)
     # A token's value is a string, a single character or a list of either, as the lexer made it.
     text = value |> List.wrap() |> IO.chardata_to_string()
 

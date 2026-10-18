@@ -134,6 +134,8 @@ defmodule MishkaDocument.Provision do
   from `@page.language`, which a preview does assign.
   """
 
+  require Ash.Query
+
   alias MishkaCmsCore.Runtime.ExtensionProvision
   alias MishkaDocument.Kit
 
@@ -288,8 +290,6 @@ defmodule MishkaDocument.Provision do
   # THE PATHS OF THE SITE THAT A PAGE ALREADY ANSWERS, as the system: whether a page is there decides
   # what is asked of the writer, and has to be known whether or not they may read pages.
   defp held_paths(site_id, paths) do
-    require Ash.Query
-
     MishkaCmsCore.Runtime.Page
     |> Ash.Query.for_read(:master_read, %{}, authorize?: false)
     |> Ash.Query.filter(site_id == ^site_id and path in ^paths)

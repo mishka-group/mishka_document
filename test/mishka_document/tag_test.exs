@@ -18,7 +18,7 @@ defmodule MishkaDocument.Test.TagTest do
 
       test "uses UUID v7 for primary keys" do
         tag = create_document_tag!()
-        assert is_binary(tag.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(tag.id)
         assert String.length(tag.id) == 36
       end
 
@@ -543,7 +543,7 @@ defmodule MishkaDocument.Test.TagTest do
           )
 
         # master_sections returns a paginated result (Ash.Page.Offset)
-        assert length(tag_with_sections.master_sections.results) > 0
+        assert [_ | _] = tag_with_sections.master_sections.results
         section_ids = Enum.map(tag_with_sections.master_sections.results, & &1.id)
         assert section.id in section_ids
 
@@ -609,9 +609,9 @@ defmodule MishkaDocument.Test.TagTest do
 
         # The relationship is maintained through the SectionTag join table
         # When either tag or section is deleted, only the join record is removed
-        assert tag.id != nil
-        assert section1.id != nil
-        assert section2.id != nil
+        assert {:ok, _uuid} = Ecto.UUID.cast(tag.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(section1.id)
+        assert {:ok, _uuid} = Ecto.UUID.cast(section2.id)
       end
     end
 
@@ -701,12 +701,12 @@ defmodule MishkaDocument.Test.TagTest do
     describe "timestamps" do
       test "sets inserted_at on creation" do
         tag = create_document_tag!()
-        assert tag.inserted_at != nil
+        assert %DateTime{} = tag.inserted_at
       end
 
       test "sets updated_at on creation" do
         tag = create_document_tag!()
-        assert tag.updated_at != nil
+        assert %DateTime{} = tag.updated_at
       end
 
       test "updates updated_at on modification" do

@@ -7,34 +7,35 @@ defmodule MishkaDocument.Resources.Changes.EnsureSingleLatestVersion do
   Ensures only one version is marked as latest per workspace.
 
   When `is_latest_for_version` is set to true, automatically unmarks
-  all other versions in the same workspace.
+  all other versions in the same workspace, as whoever made the change.
   """
   use Ash.Resource.Change
 
   require Ash.Query
 
   @impl true
-  def change(changeset, _opts, _context) do
+  def change(changeset, _opts, context) do
     Ash.Changeset.after_action(changeset, fn _changeset, result ->
-      if result.is_latest_for_version do
-        MishkaDocument.WorkspaceVersion
-        |> Ash.Query.filter(
-          workspace_id == ^result.workspace_id and
-            is_latest_for_version == true and
-            id != ^result.id
-        )
-        |> Ash.read!(tenant: result.site_id, authorize?: false)
-        |> Enum.each(fn version ->
-          version
-          |> Ash.Changeset.for_update(:update, %{is_latest_for_version: false},
-            tenant: result.site_id,
-            authorize?: false
-          )
-          |> Ash.update!()
-        end)
-      end
+      if result.is_latest_for_version, do: unmark_others(result, context)
 
       {:ok, result}
+    end)
+  end
+
+  defp unmark_others(result, context) do
+    opts = Ash.Scope.to_opts(context, tenant: result.site_id)
+
+    MishkaDocument.WorkspaceVersion
+    |> Ash.Query.filter(
+      workspace_id == ^result.workspace_id and
+        is_latest_for_version == true and
+        id != ^result.id
+    )
+    |> Ash.read!(opts)
+    |> Enum.each(fn version ->
+      version
+      |> Ash.Changeset.for_update(:update, %{is_latest_for_version: false}, opts)
+      |> Ash.update!()
     end)
   end
 end

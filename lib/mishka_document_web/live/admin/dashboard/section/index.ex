@@ -3,10 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
+  @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
-  alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
+  alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCore.Localized
   alias MishkaDocumentWeb.AdminActions
   alias MishkaDocumentWeb.Templates.DocumentCard
@@ -794,47 +795,42 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
     current_user = socket.assigns.current_user
 
     MishkaGervaz.Messages.start_async(socket, :load_workspace, fn ->
-      version = load_workspace_version(current_user, workspace_version_id)
-
-      if version do
-        workspace = load_workspace(current_user, version.workspace_id)
-
-        if workspace do
-          loads =
-            case current_user do
-              %User{site_id: nil} ->
-                [
-                  :site,
-                  :health_metrics,
-                  :maintainers_info,
-                  master_versions:
-                    Ash.Query.sort(MishkaDocument.WorkspaceVersion, inserted_at: :desc)
-                ]
-
-              _ ->
-                [
-                  :site,
-                  :health_metrics,
-                  :maintainers_info,
-                  tenant_versions:
-                    Ash.Query.sort(MishkaDocument.WorkspaceVersion, inserted_at: :desc)
-                ]
-            end
-
-          loaded_workspace =
-            Ash.load!(workspace, loads,
-              actor: current_user,
-              tenant: workspace.site_id
-            )
-
-          {loaded_workspace, version}
-        else
-          {nil, version}
-        end
-      else
-        {nil, nil}
+      case load_workspace_version(current_user, workspace_version_id) do
+        nil -> {nil, nil}
+        version -> {loaded_workspace(current_user, version), version}
       end
     end)
+  end
+
+  defp loaded_workspace(current_user, version) do
+    case MishkaDocument.Workspace.for_viewer(current_user, version.workspace_id) do
+      nil ->
+        nil
+
+      workspace ->
+        Ash.load!(workspace, workspace_loads(current_user),
+          actor: current_user,
+          tenant: workspace.site_id
+        )
+    end
+  end
+
+  defp workspace_loads(%User{site_id: nil}) do
+    [
+      :site,
+      :health_metrics,
+      :maintainers_info,
+      master_versions: Ash.Query.sort(MishkaDocument.WorkspaceVersion, inserted_at: :desc)
+    ]
+  end
+
+  defp workspace_loads(_user) do
+    [
+      :site,
+      :health_metrics,
+      :maintainers_info,
+      tenant_versions: Ash.Query.sort(MishkaDocument.WorkspaceVersion, inserted_at: :desc)
+    ]
   end
 
   # THE PAGE THE SELECTED VERSION DRAWS AT ITS DOCUMENT'S OWN ADDRESS, for the Site Information panel,
@@ -900,26 +896,6 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       version -> {:ok, version.id}
     end
   end
-
-  defp load_workspace(%User{site_id: nil} = user, workspace_id) do
-    case Ash.get(MishkaDocument.Workspace, workspace_id, action: :master_get, actor: user) do
-      {:ok, workspace} -> workspace
-      _ -> nil
-    end
-  end
-
-  defp load_workspace(%User{site_id: site_id} = user, workspace_id) when is_binary(site_id) do
-    case Ash.get(MishkaDocument.Workspace, workspace_id,
-           action: :read,
-           actor: user,
-           tenant: site_id
-         ) do
-      {:ok, workspace} -> workspace
-      _ -> nil
-    end
-  end
-
-  defp load_workspace(_, _), do: nil
 
   defp load_activity_logs_async(socket, workspace_id, version_ids) do
     current_user = socket.assigns.current_user
@@ -1042,32 +1018,21 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
     expanded = socket.assigns.expanded_section_notes
 
     if Map.has_key?(expanded, section_id) do
-      notes = Map.get(expanded, section_id, [])
-      updated_notes = Enum.map(notes, fn n -> if n.id == note.id, do: note, else: n end)
+      updated_notes = expanded |> Map.get(section_id, []) |> Enum.map(&replace_note(&1, note))
       assign(socket, :expanded_section_notes, Map.put(expanded, section_id, updated_notes))
     else
       socket
     end
   end
 
+  defp replace_note(%{id: id}, %{id: id} = note), do: note
+  defp replace_note(other, _note), do: other
+
   defp maybe_update_section_activity_logs(socket, event) do
-    metadata = event.metadata || %{}
-    section_activity_logs = socket.assigns.section_activity_logs
-    expanded_section_id = socket.assigns.expanded_section_id
+    section_id = event_section_id(event)
 
-    section_id =
-      cond do
-        event.resource in ["Elixir.MishkaDocument.Section", MishkaDocument.Section] ->
-          to_string(event.record_id)
-
-        is_map(metadata) && (metadata["section_id"] || metadata[:section_id]) ->
-          to_string(metadata["section_id"] || metadata[:section_id])
-
-        true ->
-          nil
-      end
-
-    if section_id && section_id == expanded_section_id do
+    if section_id && section_id == socket.assigns.expanded_section_id do
+      section_activity_logs = socket.assigns.section_activity_logs
       current_logs = Map.get(section_activity_logs, section_id, [])
       updated_logs = with_event(current_logs, event, @section_activity_logs_limit)
 
@@ -1078,6 +1043,21 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       socket
     end
   end
+
+  # The section an event is about: the record itself when it is a section, else the `section_id`
+  # its metadata names (a note's, a draft's).
+  defp event_section_id(%{resource: resource, record_id: record_id})
+       when resource in ["Elixir.MishkaDocument.Section", MishkaDocument.Section],
+       do: to_string(record_id)
+
+  defp event_section_id(%{metadata: metadata}) when is_map(metadata) do
+    case Map.new(metadata, fn {key, value} -> {to_string(key), value} end) do
+      %{"section_id" => id} when id not in [nil, false] -> to_string(id)
+      _no_section -> nil
+    end
+  end
+
+  defp event_section_id(_event), do: nil
 
   # The newest `limit` of `events` and `event`, each once. A broadcast can arrive twice, and after
   # newer events are already listed.
@@ -1212,34 +1192,18 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   def version_status_label(:archived), do: dgettext("mishka_gervaz", "Archived")
   def version_status_label(status), do: to_string(status)
 
-  @doc "The words a draft's version increment type reads, in the viewer's language."
-  @spec increment_label(atom()) :: String.t()
-  def increment_label(:major), do: gettext("major")
-  def increment_label(:minor), do: gettext("minor")
-  def increment_label(:patch), do: gettext("patch")
-  def increment_label(:prerelease), do: gettext("prerelease")
-  def increment_label(:none), do: gettext("none")
-  def increment_label(type), do: to_string(type)
-
   def get_event_title(event) do
-    cond do
-      event.data && is_map(event.data) && event.data["title"] ->
-        event.data["title"]
-
-      event.data && is_map(event.data) && event.data["name"] ->
-        event.data["name"]
-
-      event.data && is_map(event.data) && event.data["version_number"] ->
-        "v#{event.data["version_number"]}"
-
-      event.metadata && is_map(event.metadata) && event.metadata["title"] ->
-        event.metadata["title"]
-
-      event.metadata && is_map(event.metadata) && event.metadata["name"] ->
-        event.metadata["name"]
-
-      true ->
-        gettext("%{resource} Record", resource: format_resource(event.resource))
-    end
+    event_title(event.data, ["title", "name"]) ||
+      version_title(event.data) ||
+      event_title(event.metadata, ["title", "name"]) ||
+      gettext("%{resource} Record", resource: format_resource(event.resource))
   end
+
+  defp event_title(map, keys) when is_map(map), do: Enum.find_value(keys, &Map.get(map, &1))
+  defp event_title(_not_a_map, _keys), do: nil
+
+  defp version_title(%{"version_number" => number}) when number not in [nil, false],
+    do: "v#{number}"
+
+  defp version_title(_data), do: nil
 end

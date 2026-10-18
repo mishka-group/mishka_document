@@ -5,10 +5,9 @@
 defmodule MishkaDocument.Dashboard.Widgets.OpenIssues do
   @moduledoc """
   Dashboard widget (a `dashboard:widgets` plugin): open documentation issues — an open-count stat
-  plus the latest few, each with its issue-type badge, read through the `Issue` `:master_read`
-  (tenancy-bypassing) action filtered to `status == :open`. A master sees every site's issues; a
-  tenant admin only its own site's. Offered to holders of `admin:dashboard:document:section`, which
-  is the only gate on what it reads.
+  plus the latest few, each with its issue-type badge, filtered to `status == :open` and read as the
+  viewer through `MishkaDocument.Dashboard.Scope`: a master sees every site's issues, a site's admin
+  only their own site's, and a viewer without `admin:dashboard:document:section` none.
 
   How many issues the list holds is the viewer's own setting — the card's gear in customize mode, or
   Settings → Documents → Dashboard widgets, both writing the same per-user row
@@ -21,6 +20,7 @@ defmodule MishkaDocument.Dashboard.Widgets.OpenIssues do
   require Ash.Query
 
   alias MishkaCmsCore.Dashboard.Widget
+  alias MishkaDocument.Dashboard.Scope
   alias MishkaDocument.Issue
 
   @count %{
@@ -57,23 +57,22 @@ defmodule MishkaDocument.Dashboard.Widgets.OpenIssues do
   end
 
   @doc """
-  Loads this widget's data off the dashboard render (in a Task), scoped to the viewer and sized by
+  Loads this widget's data off the dashboard render (in a Task), read as the viewer and sized by
   their own "Issues to list" setting. Called as `load/1` (a direct call, no dashboard) it uses the
   declared default.
   """
   def load(user, config \\ %{}) do
     open =
       Issue
-      |> Ash.Query.for_read(:master_read, %{}, authorize?: false)
-      |> scope_filter(Widget.scope(user))
+      |> Scope.query(user)
       |> Ash.Query.filter(status == :open)
 
-    %{results: latest} =
+    latest =
       open
       |> Ash.Query.sort(inserted_at: :desc)
-      |> Ash.read!(page: [limit: Map.get(config, @count.key, @count.default)], authorize?: false)
+      |> Scope.list(Map.get(config, @count.key, @count.default))
 
-    %{count: Ash.count!(open, authorize?: false), latest: latest}
+    %{count: Scope.count(open), latest: latest}
   end
 
   def render(assigns) do
@@ -111,9 +110,6 @@ defmodule MishkaDocument.Dashboard.Widgets.OpenIssues do
     <Widget.card_footer link={@widget.link} label={gettext("View all")} border={false} />
     """
   end
-
-  defp scope_filter(query, nil), do: query
-  defp scope_filter(query, site_id), do: Ash.Query.filter(query, site_id == ^site_id)
 
   defp issue_type_label(:typo), do: gettext("Typo")
   defp issue_type_label(:broken_link), do: gettext("Broken link")

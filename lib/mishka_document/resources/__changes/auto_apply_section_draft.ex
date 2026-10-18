@@ -12,6 +12,11 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
 
   A draft of an existing page writes only the fields it changes (its `changed_fields`, kept by
   `MishkaDocument.Resources.Changes.StartFromSource`); a draft of a new page writes all of itself.
+
+  The page is written, and the draft marked applied, as whoever approved the draft, in the draft's
+  site, so the resources' own policies answer for the approval too. The page is looked up by id
+  without the approver's read policies, since a lookup of a row the draft names must find it
+  whatever the approver may list.
   """
   use Ash.Resource.Change
 
@@ -45,15 +50,15 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
 
   # What the draft changes, and nothing else: a page field it leaves as the page has it is never
   # written over (`MishkaDocument.Resources.Changes.StartFromSource`).
-  defp update_existing_section(draft, tenant, _context) do
+  defp update_existing_section(draft, tenant, context) do
     case Ash.get(MishkaDocument.Section, draft.source_section_id,
            tenant: tenant,
            authorize?: false
          ) do
       {:ok, section} ->
-        write(section, Map.take(draft, changes(draft)), tenant)
+        write(section, Map.take(draft, changes(draft)), tenant, context)
 
-        {:ok, mark_draft_applied(draft, tenant)}
+        {:ok, mark_draft_applied(draft, tenant, context)}
 
       {:error, _} = error ->
         error
@@ -63,15 +68,15 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
   defp changes(draft),
     do: Enum.filter(MishkaDocument.SectionDraft.page_fields(), &(&1 in draft.changed_fields))
 
-  defp write(_record, changes, _tenant) when map_size(changes) == 0, do: :unchanged
+  defp write(_record, changes, _tenant, _context) when map_size(changes) == 0, do: :unchanged
 
-  defp write(record, changes, tenant) do
+  defp write(record, changes, tenant, context) do
     record
-    |> Ash.Changeset.for_update(:update, changes, tenant: tenant, authorize?: false)
+    |> Ash.Changeset.for_update(:update, changes, Ash.Scope.to_opts(context, tenant: tenant))
     |> Ash.update!()
   end
 
-  defp create_new_section(draft, tenant, _context) do
+  defp create_new_section(draft, tenant, context) do
     # Build base params
     base_params = %{
       workspace_version_id: draft.workspace_version_id,
@@ -103,13 +108,12 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
          |> Ash.Changeset.for_create(
            :create,
            params,
-           tenant: tenant,
-           authorize?: false
+           Ash.Scope.to_opts(context, tenant: tenant)
          )
          |> Ash.create() do
       {:ok, _new_section} ->
         # Mark draft as applied and return the updated draft
-        updated_draft = mark_draft_applied(draft, tenant)
+        updated_draft = mark_draft_applied(draft, tenant, context)
 
         {:ok, updated_draft}
 
@@ -118,13 +122,12 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
     end
   end
 
-  defp mark_draft_applied(draft, tenant) do
+  defp mark_draft_applied(draft, tenant, context) do
     draft
     |> Ash.Changeset.for_update(
       :mark_applied,
       %{applied_at: DateTime.utc_now()},
-      tenant: tenant,
-      authorize?: false
+      Ash.Scope.to_opts(context, tenant: tenant)
     )
     |> Ash.update!()
   end

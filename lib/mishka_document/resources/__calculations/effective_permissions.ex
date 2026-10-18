@@ -81,14 +81,14 @@ defmodule MishkaDocument.Resources.Calculations.EffectivePermissions do
 
   # Its own permissions when it names any, else those of the nearest one above it that does: `tree`
   # is `{parent_id, permissions}` by id, and leaving it, or meeting an id twice, ends the walk.
-  defp inherited(own, parent_id, tree, seen \\ MapSet.new())
+  defp inherited(own, parent_id, tree, seen \\ [])
 
   defp inherited([_ | _] = own, _parent_id, _tree, _seen), do: own
 
   defp inherited(_none, parent_id, tree, seen) do
-    with false <- MapSet.member?(seen, parent_id),
+    with false <- parent_id in seen,
          {:ok, {grandparent_id, permissions}} <- Map.fetch(tree, parent_id) do
-      inherited(permissions, grandparent_id, tree, MapSet.put(seen, parent_id))
+      inherited(permissions, grandparent_id, tree, [parent_id | seen])
     else
       _top -> []
     end

@@ -6,12 +6,12 @@ defmodule MishkaDocument.Dashboard.Widgets.RecentDocuments do
   @moduledoc """
   Dashboard widget (a `dashboard:widgets` plugin): the most recently updated workspaces, each with its
   status badge, one-line description, maintainer, section count, latest version and language — read
-  through the `Workspace` `:master_read` (tenancy-bypassing) action. A master sees every site's
-  workspaces; a tenant admin only its own site's. Author, section count and latest version come from
-  the resource's own `:maintainers_info`, `:health_metrics` calculations and its versions, all loaded
-  on the same read: `:master_versions` for a master, `:tenant_versions` for a tenant admin. Offered
-  to holders of `admin:dashboard:document:section`, who read workspaces to reach their sections;
-  that area is the only gate on what it reads.
+  as the viewer through `MishkaDocument.Dashboard.Scope`: a master sees every site's workspaces, a
+  site's admin only their own site's, and a viewer without a document area none. Author, section
+  count and latest version come from the resource's own `:maintainers_info`, `:health_metrics`
+  calculations and its versions, all loaded on the same read: `:master_versions` for a master,
+  `:tenant_versions` for a site's admin. Offered to holders of `admin:dashboard:document:section`,
+  who read workspaces to reach their sections.
 
   How many workspaces the list holds is the viewer's own setting — the card's gear in customize
   mode, or Settings → Documents → Dashboard widgets, both writing the same per-user row
@@ -22,9 +22,9 @@ defmodule MishkaDocument.Dashboard.Widgets.RecentDocuments do
   use MishkaInstaller.Event.Hook, event: "dashboard:widgets", initial: %{priority: 92}
   use Gettext, backend: MishkaCmsCore.Gettext
   import Phoenix.Component
-  require Ash.Query
 
   alias MishkaCmsCore.Dashboard.Widget
+  alias MishkaDocument.Dashboard.Scope
   alias MishkaDocument.{Workspace, WorkspaceVersion}
 
   @count %{
@@ -61,35 +61,33 @@ defmodule MishkaDocument.Dashboard.Widgets.RecentDocuments do
   end
 
   @doc """
-  Loads this widget's data off the dashboard render (in a Task), scoped to the viewer and sized by
+  Loads this widget's data off the dashboard render (in a Task), read as the viewer and sized by
   their own "Documents to show" setting. Called as `load/1` (a direct call, no dashboard) it uses
   the declared default.
   """
   def load(user, config \\ %{}) do
-    scope = Widget.scope(user)
-
-    %{results: workspaces} =
+    workspaces =
       Workspace
-      |> Ash.Query.for_read(:master_read, %{}, actor: user, tenant: scope, authorize?: false)
-      |> scope_filter(scope)
+      |> Scope.query(user)
       |> Ash.Query.sort(updated_at: :desc)
-      |> Ash.Query.load([:health_metrics, :maintainers_info, versions_load(scope, user)])
-      |> Ash.read!(page: [limit: Map.get(config, @count.key, @count.default)], authorize?: false)
+      |> Ash.Query.load([:health_metrics, :maintainers_info, versions_load(user)])
+      |> Scope.list(Map.get(config, @count.key, @count.default))
 
     %{workspaces: workspaces}
   end
 
-  defp versions_load(nil, user), do: {:master_versions, latest_version(:read_any, nil, user)}
+  defp versions_load(user) do
+    {action, opts} = Scope.read_for(user, :read_any)
 
-  defp versions_load(site_id, user),
-    do: {:tenant_versions, latest_version(:read, site_id, user)}
-
-  defp latest_version(action, tenant, user) do
-    WorkspaceVersion
-    |> Ash.Query.for_read(action, %{}, actor: user, tenant: tenant, authorize?: false)
-    |> Ash.Query.sort(inserted_at: :desc)
-    |> Ash.Query.limit(1)
+    {versions_relationship(Widget.scope(user)),
+     WorkspaceVersion
+     |> Ash.Query.for_read(action, %{}, opts)
+     |> Ash.Query.sort(inserted_at: :desc)
+     |> Ash.Query.limit(1)}
   end
+
+  defp versions_relationship(nil), do: :master_versions
+  defp versions_relationship(_site_id), do: :tenant_versions
 
   def render(assigns) do
     ~H"""
@@ -154,9 +152,6 @@ defmodule MishkaDocument.Dashboard.Widgets.RecentDocuments do
     <Widget.card_footer link={@widget.link} label={gettext("View all")} />
     """
   end
-
-  defp scope_filter(query, nil), do: query
-  defp scope_filter(query, site_id), do: Ash.Query.filter(query, site_id == ^site_id)
 
   defp author_name(%{maintainers_info: %{"maintainers" => [%{"name" => name} | _]}})
        when is_binary(name),

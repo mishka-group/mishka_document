@@ -102,6 +102,26 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     refute has_element?(view, "#document-activity-skeleton")
   end
 
+  # THE CSP HAS NO `style-src-attr`, so a `style` attribute on a card draws nothing: the grid is
+  # isolated by a class and the completion bar is drawn in SVG, wide as the workspace is done.
+  test "the workspace cards carry no style attribute, and draw their completion in SVG", %{
+    conn: conn
+  } do
+    create_workspace!(site_id: master_site().id, name: "Styled Handbook")
+
+    conn = log_in(conn, create_admin("docstyle@example.com"))
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document")
+    render_async(view, 5_000)
+
+    page = view |> render() |> LazyHTML.from_fragment()
+    grid = LazyHTML.query(page, ~s([data-role="wsgrid"]))
+
+    assert Enum.count(grid) == 1
+    assert Enum.count(LazyHTML.query(page, ~s(div.isolate [data-role="wsgrid"]))) == 1
+    refute Enum.empty?(LazyHTML.query(grid, ~s([data-role="completion-bar"] rect[width])))
+    assert Enum.empty?(LazyHTML.query(grid, "[style]"))
+  end
+
   # Restore and Permanent Delete run `:master_unarchive` and `:master_permanent_destroy`, an update
   # and a destroy, on the issue they read first — neither is a generic action to run as one.
   test "a master restores one archived issue and permanently deletes another from the issues panel",
@@ -130,6 +150,37 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
 
     refute has_element?(view, "#issues-#{deleted.id}")
     assert {:error, _gone} = Ash.get(Issue, deleted.id, action: :master_get, authorize?: false)
+  end
+
+  # THE FILTER'S VALUE COMES FROM THE BROWSER: only the two the buttons send are taken, and any
+  # other string leaves the panel as it was instead of becoming an atom or raising.
+  test "the issues panel's archive filter takes only active or archived from the browser", %{
+    conn: conn
+  } do
+    archived = archived_issue!(master_site())
+
+    conn = log_in(conn, create_admin("docfilter@example.com"))
+    {:ok, view, _html} = live(conn, "/admin/dashboard/document")
+
+    view |> element("#toggle-issues-btn") |> render_click()
+    view |> element(~s(#issues-panel button[phx-value-status="archived"])) |> render_click()
+    render_async(view, 5_000)
+    assert has_element?(view, "#issues-#{archived.id}")
+
+    for value <- ["nil", "false", "no_such_atom_zq9x", "", nil, %{"a" => "1"}, 7] do
+      render_hook(view, "toggle_issues_archive_filter", %{"status" => value})
+      render_async(view, 5_000)
+
+      assert Process.alive?(view.pid)
+      assert has_element?(view, "#issues-#{archived.id}")
+    end
+
+    render_hook(view, "toggle_issues_archive_filter", %{})
+    assert Process.alive?(view.pid)
+
+    view |> element(~s(#issues-panel button[phx-value-status="active"])) |> render_click()
+    render_async(view, 5_000)
+    refute has_element?(view, "#issues-#{archived.id}")
   end
 
   # A workspace's activity names who did each thing by their account's address. The page is an admin
@@ -367,6 +418,84 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     assert has_element?(view, "#document-stat-contributors")
     assert has_element?(view, "#document-stat-last-updated")
     refute has_element?(view, "#document-stat-completion")
+  end
+
+  # A PAGE'S FIRST RENDER IS A PLAIN REQUEST that no socket ever follows up in the same process, so a
+  # subscription made there is a topic left on a process that nothing will unsubscribe from. Only the
+  # connected LiveView holds the page's topics.
+  describe "the admin pages subscribe to their resource's topics only once connected" do
+    for {prefix, label} <- [
+          {"workspace", "document dashboard"},
+          {"issue", "issues"},
+          {"note_draft", "note drafts"},
+          {"section_draft", "section drafts"},
+          {"tag", "tags"},
+          {"workspace_version", "workspace versions"}
+        ] do
+      test "#{label}: the first render holds none, the connected view holds them", %{conn: conn} do
+        site = master_site()
+        workspace = create_workspace!(site_id: site.id)
+
+        path =
+          case unquote(prefix) do
+            "workspace" -> "/admin/dashboard/document"
+            "issue" -> "/admin/dashboard/document/issues"
+            "note_draft" -> "/admin/dashboard/document/note-drafts"
+            "section_draft" -> "/admin/dashboard/document/section-drafts"
+            "tag" -> "/admin/dashboard/document/tags"
+            "workspace_version" -> "/admin/dashboard/document/workspace-version/#{workspace.id}"
+          end
+
+        conn = log_in(conn, create_admin("pubsub-#{unquote(prefix)}@example.com"))
+        topic? = &String.starts_with?(&1, unquote(prefix) <> ":")
+
+        assert conn |> get(path) |> html_response(200)
+        refute Enum.any?(Registry.keys(MishkaCmsCore.PubSub, self()), topic?)
+
+        {:ok, view, _html} = live(conn, path)
+        assert Enum.any?(Registry.keys(MishkaCmsCore.PubSub, view.pid), topic?)
+      end
+    end
+  end
+
+  # THE DRAFT PAGES' BACK LINK is built from the `return_to` the section screens send, which is a
+  # version's id. Anything else in the query is not a place to go back to.
+  describe "the draft pages' back link" do
+    for {page, id} <- [
+          {"note-drafts", "note-drafts-back"},
+          {"section-drafts", "section-drafts-back"}
+        ] do
+      test "#{page}: goes back to the version it came from, and to the dashboard otherwise", %{
+        conn: conn
+      } do
+        conn = log_in(conn, create_admin("back-#{unquote(page)}@example.com"))
+        page_path = "/admin/dashboard/document/#{unquote(page)}"
+        link = "##{unquote(id)}"
+        version_id = Ecto.UUID.generate()
+
+        {:ok, view, _html} = live(conn, page_path <> "?return_to=#{version_id}")
+
+        assert has_element?(
+                 view,
+                 link <> ~s([href="/admin/dashboard/document/sections/#{version_id}"])
+               )
+
+        for query <- [
+              "?return_to=..%2F..%2Fruntime%2Fpages",
+              "?return_to=..",
+              "?return_to=#{version_id}%2F..%2Fx",
+              "?return_to[a]=1",
+              "?return_to[]=1",
+              "?return_to=",
+              ""
+            ] do
+          {:ok, view, _html} = live(conn, page_path <> query)
+
+          assert has_element?(view, link <> ~s([href="/admin/dashboard/document"]))
+          refute has_element?(view, link <> ~s([href*="sections"]))
+        end
+      end
+    end
   end
 
   defp figure(view, id) do

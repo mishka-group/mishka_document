@@ -81,6 +81,7 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
 
   require Ash.Query
 
+  alias Ash.Error.Changes.InvalidAttribute
   alias MishkaDocument.{Note, Section, SectionTag, Tag, WorkspaceVersion, WorkspaceVersionLineage}
   alias MishkaDocument.Resources.Helpers.VersionClones
   alias MishkaInstaller.Event.Hook
@@ -387,15 +388,15 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
     |> Enum.chunk_every(@note_pages)
     |> in_batches(fn ids ->
       with {:ok, rows} <- read_in(Note, :section_id, ids, @note_fields, opts) do
-        rows
-        |> Enum.map(fn row ->
-          row
-          |> Map.take(@copied_note_fields)
-          |> Map.put(:section_id, Map.fetch!(plan.copies, row.section_id))
-        end)
-        |> write(Note, :copy, opts)
+        rows |> Enum.map(&copied_note(&1, plan)) |> write(Note, :copy, opts)
       end
     end)
+  end
+
+  defp copied_note(row, plan) do
+    row
+    |> Map.take(@copied_note_fields)
+    |> Map.put(:section_id, Map.fetch!(plan.copies, row.section_id))
   end
 
   # The tags on the copied pages that are still in use: an archived tag stays on the source only.
@@ -477,7 +478,7 @@ defmodule MishkaDocument.Resources.Changes.CloneVersion do
   defp invalid(refusal, otherwise) do
     case Keyword.fetch(refusal, :message) do
       {:ok, message} when is_binary(message) ->
-        Ash.Error.Changes.InvalidAttribute.exception(
+        InvalidAttribute.exception(
           field: Keyword.get(refusal, :field),
           message: message
         )

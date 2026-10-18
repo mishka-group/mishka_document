@@ -3,6 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocument do
+  @moduledoc """
+  The documentation extension's Ash domain: its resources (workspaces and their versions, the
+  sections and notes of a version, their drafts, tags, issues and the event log) and the JSON:API
+  routes the admin API serves them under, `/v1/master/admin/mishka-document/...` for a master and
+  `/v1/tenant/admin/mishka-document/...` for a site's admin.
+  """
   use Ash.Domain,
     otp_app: :mishka_document,
     validate_config_inclusion?: false,

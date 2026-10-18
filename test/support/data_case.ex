@@ -44,6 +44,39 @@ defmodule MishkaDocument.DataCase do
   end
 
   @doc """
+  Runs `fun` and returns `{result, statements}`: what it returned, and the SQL of every statement
+  the repo ran meanwhile, in the order they ran.
+
+      {_page, statements} = with_queries(fn -> Ash.read!(Section, tenant: site.id) end)
+  """
+  @spec with_queries((-> result)) :: {result, [String.t()]} when result: var
+  def with_queries(fun) do
+    owner = self()
+    handler = {__MODULE__, make_ref()}
+    event = @repo.config() |> Keyword.fetch!(:telemetry_prefix) |> Kernel.++([:query])
+
+    :telemetry.attach(handler, event, &__MODULE__.forward_query/4, owner)
+
+    try do
+      {fun.(), drain_queries([])}
+    after
+      :telemetry.detach(handler)
+    end
+  end
+
+  @doc false
+  def forward_query(_event, _measurements, %{query: query}, owner),
+    do: send(owner, {:query, query})
+
+  defp drain_queries(acc) do
+    receive do
+      {:query, query} -> drain_queries([query | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
+  @doc """
   Turns changeset errors into a map of field to messages.
 
       assert %{password: ["password is too short"]} = errors_on(changeset)

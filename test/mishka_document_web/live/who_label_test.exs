@@ -374,7 +374,7 @@ defmodule MishkaDocumentWeb.Test.WhoLabelTest do
     Process.list()
     |> Enum.filter(&announcing_for_this_test?/1)
     |> Enum.map(&Process.monitor/1)
-    |> Enum.each(fn ref -> assert_receive {:DOWN, ^ref, :process, _pid, _reason}, @await end)
+    |> Enum.each(fn ref -> assert_receive {:DOWN, ^ref, :process, _pid, _reason} end)
   end
 
   defp announcing_for_this_test?(pid) do

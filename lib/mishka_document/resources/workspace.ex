@@ -40,7 +40,9 @@ defmodule MishkaDocument.Workspace do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
-  alias MishkaCmsCore.Localized
+  alias Ecto.Adapters.SQL
+  alias MishkaCmsCore.Runtime.Helpers
+  alias MishkaDocument.Resources.Helpers.Labels
 
   @admin_fields [
     :name,
@@ -326,7 +328,7 @@ defmodule MishkaDocument.Workspace do
               },
               %{
                 icon: "hero-share",
-                value: counted(record.versions_count),
+                value: Labels.counted(record.versions_count),
                 label: dgettext("mishka_gervaz", "Versions")
               },
               %{
@@ -419,7 +421,7 @@ defmodule MishkaDocument.Workspace do
 
             assigns = %{
               site: (state.master_user? && site_name) || nil,
-              date: inserted_on(record.inserted_at)
+              date: Labels.inserted_on(record.inserted_at)
             }
 
             ~H"""
@@ -814,7 +816,7 @@ defmodule MishkaDocument.Workspace do
           required true
 
           options fn ->
-            case Ecto.Adapters.SQL.query(
+            case SQL.query(
                    @repo,
                    "SELECT DISTINCT language FROM mishka_document_workspaces WHERE language IS NOT NULL ORDER BY language"
                  ) do
@@ -1008,7 +1010,7 @@ defmodule MishkaDocument.Workspace do
       hooks do
         # While a workspace is added, its slug follows the name until the author types one.
         on_validate fn params, state ->
-          MishkaCmsCore.Runtime.Helpers.follow_slug(params, state, :name)
+          Helpers.follow_slug(params, state, :name)
         end
 
         on_cancel fn state -> state end
@@ -1098,7 +1100,7 @@ defmodule MishkaDocument.Workspace do
                 field: :language_group_id, resource: MishkaDocument.Workspace}
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
       # Add metadata for event tracking
@@ -1126,7 +1128,7 @@ defmodule MishkaDocument.Workspace do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      change MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId
+      change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
 
       # Add metadata for event tracking
@@ -1950,7 +1952,7 @@ defmodule MishkaDocument.Workspace do
 
           {:ok, workspace_id_bin} = Ecto.UUID.dump(record.id)
           {:ok, site_id_bin} = Ecto.UUID.dump(record.site_id)
-          result = Ecto.Adapters.SQL.query(@repo, sql, [workspace_id_bin, site_id_bin])
+          result = SQL.query(@repo, sql, [workspace_id_bin, site_id_bin])
 
           case result do
             {:ok,
@@ -2093,28 +2095,36 @@ defmodule MishkaDocument.Workspace do
     end
   end
 
-  # A `requires`-selected aggregate or calculation arrives as a truthy `%Ash.NotLoaded{}` or
-  # `%Ash.ForbiddenField{}` when the viewer's field policy hides it, so `|| 0` lets the struct
-  # through. Matching on the integer is what actually guards the cell.
-  @spec counted(term()) :: non_neg_integer()
-  defp counted(value) when is_integer(value) and value >= 0, do: value
-  defp counted(_unloaded), do: 0
+  @doc """
+  The workspace `id` as `user` may read it, or `nil` when there is none or `user` may not read it.
+
+  A master (a user whose `site_id` is nil) reads it through `:master_get`; a user of a site through
+  `:read` under that site.
+  """
+  @spec for_viewer(map() | nil, Ash.UUID.t()) :: struct() | nil
+  def for_viewer(%{site_id: nil} = user, id), do: fetch(id, action: :master_get, actor: user)
+
+  def for_viewer(%{site_id: site_id} = user, id) when is_binary(site_id),
+    do: fetch(id, action: :read, actor: user, tenant: site_id)
+
+  def for_viewer(_user, _id), do: nil
+
+  defp fetch(id, opts) do
+    case Ash.get(__MODULE__, id, opts) do
+      {:ok, workspace} -> workspace
+      _not_readable -> nil
+    end
+  end
 
   # `health_metrics` is field-policy gated, so a viewer who cannot see it gets a struct rather than
   # the map — reading a figure off it has to survive that.
   @spec metric(term(), atom()) :: non_neg_integer()
   defp metric(metrics, key) when is_map(metrics) and not is_struct(metrics),
-    do: counted(Map.get(metrics, key))
+    do: Labels.counted(Map.get(metrics, key))
 
   defp metric(_unloaded, _key), do: 0
 
   @spec maintainer_count(term()) :: non_neg_integer()
   defp maintainer_count(%{"count" => count}) when is_integer(count) and count >= 0, do: count
   defp maintainer_count(_unavailable), do: 0
-
-  @spec inserted_on(term()) :: String.t()
-  defp inserted_on(at) when is_struct(at, DateTime) or is_struct(at, NaiveDateTime),
-    do: Localized.date(at, :yMMMd)
-
-  defp inserted_on(_missing), do: "—"
 end

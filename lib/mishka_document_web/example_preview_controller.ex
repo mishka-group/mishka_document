@@ -36,6 +36,7 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
 
   import Plug.Conn
 
+  alias AshAuthentication.Phoenix.LiveSession
   alias MishkaCmsCore.ErrorsExceptions.NotFoundError
   alias MishkaCmsCore.Runtime.CspNonce
   alias MishkaCmsWeb.Runtime.Plugs.SecurityHeaders
@@ -43,8 +44,6 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
   @kinds ~w(section note)
 
   @kept ~w(img-src media-src font-src frame-src style-src style-src-elem style-src-attr)
-
-  @host ~r/\A[A-Za-z0-9.\-]+(?::\d{1,5})?\z|\A\[[0-9A-Fa-f:.]+\](?::\d{1,5})?\z/
 
   def show(conn, %{"kind" => kind, "id" => id, "index" => index}) do
     with true <- kind in @kinds,
@@ -65,7 +64,7 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
   # The session `MishkaCmsWeb.RuntimeLive` is handed, with the example's source and the nonce.
   defp session(conn, source) do
     conn
-    |> AshAuthentication.Phoenix.LiveSession.generate_session(nil, [])
+    |> LiveSession.generate_session(nil, [])
     |> Map.merge(CspNonce.session(conn))
     |> Map.put("source", source)
   end
@@ -117,14 +116,30 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
   defp inline_style,
     do: (SecurityHeaders.inline_style_allowed?() && ["'unsafe-inline'"]) || []
 
-  # The LiveView socket of the host the browser asked, as its `Host` header names it.
+  # The LiveView socket of the host the browser asked, as its `Host` header names it. The header is
+  # read with `URI.parse/1`, and only a host name or an address and a port number are written out.
   defp socket_sources(conn) do
-    case get_req_header(conn, "host") do
-      [host | _rest] ->
-        if Regex.match?(@host, host), do: ["ws://" <> host, "wss://" <> host], else: []
-
-      [] ->
-        []
+    with [header | _rest] <- get_req_header(conn, "host"),
+         %URI{host: host, port: port} when is_binary(host) <- URI.parse("//" <> header),
+         true <- host_name?(host) and port_number?(port) do
+      for scheme <- ~w(ws wss), do: URI.to_string(%URI{scheme: scheme, host: host, port: port})
+    else
+      _unusable -> []
     end
   end
+
+  defp host_name?(host) do
+    match?({:ok, _address}, :inet.parse_address(String.to_charlist(host))) or
+      (byte_size(host) <= 253 and host |> String.split(".") |> Enum.all?(&label?/1))
+  end
+
+  defp label?(label) do
+    byte_size(label) in 1..63 and
+      label
+      |> String.to_charlist()
+      |> Enum.all?(&(&1 in ?a..?z or &1 in ?A..?Z or &1 in ?0..?9 or &1 == ?-))
+  end
+
+  defp port_number?(nil), do: true
+  defp port_number?(port), do: port in 1..65_535
 end

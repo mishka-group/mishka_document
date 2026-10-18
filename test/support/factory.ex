@@ -262,23 +262,7 @@ defmodule MishkaDocument.Test.Factory do
       |> generate()
     else
       # Extract site_id from one of the provided versions
-      version_for_site =
-        cond do
-          new_version_id ->
-            Ash.get!(MishkaDocument.WorkspaceVersion, new_version_id,
-              action: :master_get,
-              authorize?: false
-            )
-
-          source_version_id ->
-            Ash.get!(MishkaDocument.WorkspaceVersion, source_version_id,
-              action: :master_get,
-              authorize?: false
-            )
-
-          true ->
-            nil
-        end
+      version_for_site = provided_version!(new_version_id || source_version_id)
 
       site_id = site_id || version_for_site.site_id
       tenant = site_id
@@ -304,6 +288,13 @@ defmodule MishkaDocument.Test.Factory do
       |> workspace_version_lineage(tenant)
       |> generate()
     end
+  end
+
+  defp provided_version!(version_id) do
+    Ash.get!(MishkaDocument.WorkspaceVersion, version_id,
+      action: :master_get,
+      authorize?: false
+    )
   end
 
   # Section factory
@@ -546,30 +537,30 @@ defmodule MishkaDocument.Test.Factory do
 
     # If neither section_id nor workspace_version_id provided, create both
     {section_id, workspace_version_id} =
-      if is_nil(section_id) && is_nil(workspace_version_id) do
-        section = create_section!(site_id: site_id)
-        {section.id, section.workspace_version_id}
-      else
+      cond do
+        is_nil(section_id) && is_nil(workspace_version_id) ->
+          section = create_section!(site_id: site_id)
+          {section.id, section.workspace_version_id}
+
         # If only workspace_version_id provided, create a section in that version
-        if is_nil(section_id) && workspace_version_id do
+        is_nil(section_id) ->
           section =
             create_section!(site_id: site_id, workspace_version_id: workspace_version_id)
 
           {section.id, workspace_version_id}
-        else
-          # section_id provided, get workspace_version_id if needed
-          if section_id && is_nil(workspace_version_id) do
-            section =
-              Ash.get!(MishkaDocument.Section, section_id,
-                action: :master_get,
-                authorize?: false
-              )
 
-            {section_id, section.workspace_version_id}
-          else
-            {section_id, workspace_version_id}
-          end
-        end
+        # section_id provided, get workspace_version_id if needed
+        is_nil(workspace_version_id) ->
+          section =
+            Ash.get!(MishkaDocument.Section, section_id,
+              action: :master_get,
+              authorize?: false
+            )
+
+          {section_id, section.workspace_version_id}
+
+        true ->
+          {section_id, workspace_version_id}
       end
 
     tenant = site_id

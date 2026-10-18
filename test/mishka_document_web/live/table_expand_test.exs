@@ -138,7 +138,7 @@ defmodule MishkaDocumentWeb.Test.TableExpandTest do
     render_async(view, @await)
 
     ref = :erlang.trace_delivered(view.pid)
-    assert_receive {:trace_delivered, _pid, ^ref}, @await
+    assert_receive {:trace_delivered, _pid, ^ref}
     :erlang.trace(view.pid, false, [:receive])
 
     messages = received(record.id, [])

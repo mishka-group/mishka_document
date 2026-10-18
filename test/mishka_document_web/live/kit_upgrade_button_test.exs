@@ -23,11 +23,12 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
   import MishkaDocument.Test.Factory
 
   alias MishkaCmsCore.Accounts.{Permission, User, UserPermission}
+  alias MishkaCmsCore.Install.Extensions
   alias MishkaCmsCore.Runtime.Component
   alias MishkaCmsCore.Runtime.Handlers.UiKitUpgrade
   alias MishkaCmsCore.Runtime.Page
-  alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaCmsCore.Runtime.PageDraft
+  alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaDocument.Plugins.ShareCardTargets
   alias MishkaDocument.Provision
@@ -427,6 +428,46 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
 
       assert has_element?(view, "#document-provision-badge")
       refute has_element?(view, "#document-kit-upgrade-open")
+
+      close(view)
+    end
+
+    # THE PRESS CARRIES THE SIGNED-IN ADMIN TO THE INSTALLER, so the installed CMS answers it. The
+    # same install asked with nobody behind it is the install wizard's own, which an installed CMS
+    # no longer answers: it is refused like an actor holding nothing, and writes nothing.
+    test "is set up by the first-run button, and the same install with nobody behind it is refused",
+         %{conn: conn, site: site} do
+      other = create_site!(name: "wizardlessdocs", host: "wizardlessdocs.test", active: true)
+
+      {:ok, view, _html} = live(conn, "/admin/dashboard/document")
+
+      html = view |> form("#document-provision-form", %{"site_id" => site.id}) |> render_submit()
+
+      assert html =~ "Added"
+      assert length(components(site)) == @components
+      assert Extensions.installed?(site.id, :mishka_document)
+
+      assert {:error, {:extension_failed, message}} =
+               Extensions.install(other.id, "mishka_document")
+
+      assert message =~ "needs these permissions"
+      assert components(other) == []
+
+      close(view)
+    end
+
+    test "is set up by a site admin pressing it, for their own site whatever the event asks for",
+         %{conn: conn, site: site} do
+      other = create_site!(name: "otherdocs", host: "otherdocs.test", active: true)
+      tenant = create_user_with_permissions!(["*"], site_id: site.id)
+
+      {:ok, view, _html} = live(log_in(conn, tenant, false), "/admin/dashboard/document")
+
+      html = render_submit(view, "extension_install", %{"site_id" => other.id})
+
+      assert html =~ "Added"
+      assert length(components(site)) == @components
+      assert components(other) == []
 
       close(view)
     end

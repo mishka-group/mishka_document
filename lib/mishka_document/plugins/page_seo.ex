@@ -135,8 +135,8 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   alias MishkaCmsCore.Runtime.{Languages, PageEditions, Seo}
   alias MishkaCmsCore.Settings
-  alias MishkaInstaller.Event.Hook
   alias MishkaDocument.{Address, ContentText, Provision, Section, Workspace, WorkspaceVersion}
+  alias MishkaInstaller.Event.Hook
 
   @workspace_fields [
     :id,

@@ -24,6 +24,7 @@ defmodule MishkaDocument.Resources.Calculations.WorkspaceMaintainers do
   """
   use Ash.Resource.Calculation
 
+  alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Accounts.Helper
 
   @repo Application.compile_env!(:mishka_cms_core, :repo)
@@ -56,6 +57,9 @@ defmodule MishkaDocument.Resources.Calculations.WorkspaceMaintainers do
     }
   end
 
+  # The one interpolation in the query is `site_sql`: one of two fixed strings. Every value goes in
+  # through `$1` and `$2`.
+  # sobelow_skip ["SQL.Query"]
   defp get_maintainers_for_workspace(workspace_id, site_id) do
     # Convert UUIDs to binary for PostgreSQL
     {:ok, workspace_uuid} = Ecto.UUID.dump(workspace_id)
@@ -107,7 +111,7 @@ defmodule MishkaDocument.Resources.Calculations.WorkspaceMaintainers do
     LIMIT 100
     """
 
-    case Ecto.Adapters.SQL.query(@repo, sql, params) do
+    case SQL.query(@repo, sql, params) do
       {:ok, %{rows: rows}} ->
         maintainers =
           Enum.map(rows, fn [user_id, email, user_site_id] ->

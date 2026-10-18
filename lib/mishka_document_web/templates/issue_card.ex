@@ -45,6 +45,7 @@ defmodule MishkaDocumentWeb.Templates.IssueCard do
 
   import MishkaGervaz.Helpers, only: [dynamic_component: 1]
 
+  alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Localized
   alias MishkaCmsCoreWeb.Templates.CardChrome, as: Shared
   alias MishkaGervaz.Table.Templates.Shared, as: Gervaz
@@ -529,7 +530,7 @@ defmodule MishkaDocumentWeb.Templates.IssueCard do
   """
   @spec reporter(map()) :: String.t()
   def reporter(issue) do
-    MishkaCmsCore.Accounts.Helper.who(
+    Helper.who(
       Map.get(issue, :reporter),
       Map.get(issue, :reporter_master?) == true,
       :unknown

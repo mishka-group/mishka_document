@@ -750,6 +750,8 @@ defmodule MishkaDocument.KitTest do
                MishkaCmsCore.Runtime.Compilers.TailwindCompiler.verify_css(sheet["content"], nil)
     end
 
+    defp doc_example_hook, do: Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-example"))
+
     # AN EXAMPLE'S TOOLBAR IS ANSWERED IN THE BROWSER, by the hook `doc-example` mounts on its own
     # root under the name `example_hook/0` asks the same rule for. It moves the choice onto the root,
     # the buttons and the example's stage through the hook's JS commands, which a LiveView patch
@@ -758,7 +760,7 @@ defmodule MishkaDocument.KitTest do
     # the frame's page, and sizes the frame through its `width` and `height` attributes and scales it
     # through CSSOM properties — never a style attribute, which a site's CSP may refuse.
     test "ships the hook doc-example mounts for the toolbar over its example" do
-      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-example"))
+      hook = doc_example_hook()
       content = hook["content"]
 
       assert hook["format"] == "js"
@@ -772,6 +774,10 @@ defmodule MishkaDocument.KitTest do
       assert content =~ "if (!this.preview) this.build();"
       assert content =~ ~s|const HOLDER = '[data-role="doc-example-preview-holder"]';|
       assert content =~ "holder.append("
+    end
+
+    test "opens the preview as a dialog and hands its frame the page only then" do
+      content = doc_example_hook()["content"]
 
       assert content =~
                ~s|frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");|
@@ -790,6 +796,12 @@ defmodule MishkaDocument.KitTest do
       refute content =~ "data-stylesheet"
       refute content =~ "data-document"
       refute content =~ "<script"
+    end
+
+    test "dresses the frame's page and sizes it through attributes, never a style attribute" do
+      hook = doc_example_hook()
+      content = hook["content"]
+
       assert content =~ ~s|root.setAttribute("data-theme", theme)|
       assert content =~ ~s|root.setAttribute("dir", dir)|
       assert content =~ ~s|frame.setAttribute("width", String(width))|
@@ -845,6 +857,11 @@ defmodule MishkaDocument.KitTest do
       refute template =~ "allow-popups"
       refute template =~ "preview_note"
       refute template =~ ~r/\sstyle=/
+    end
+
+    test "draws the example's preview with no helper or attribute of its own" do
+      example = Enum.find(components(), &(&1["name"] == "doc-example"))
+      template = example["template"]
 
       refute Enum.any?(example["helpers"], &(&1["code"] =~ "Phoenix.HTML.Safe.to_iodata"))
       refute Enum.any?(example["helpers"], &(&1["name"] == "stylesheet_href"))
@@ -939,11 +956,10 @@ defmodule MishkaDocument.KitTest do
         assert "mount" in names,
                "#{component["name"]} has no mount/1, so it starts with no state"
 
-        assert component["template"] =~ "phx-target={@myself}" or
-                 component["template"] =~ "target={@myself}" or
-                 component["template"] =~ "patch=" or
-                 component["template"] =~ "navigate=" or
-                 component["template"] =~ "href=",
+        assert Enum.any?(
+                 ["phx-target={@myself}", "target={@myself}", "patch=", "navigate=", "href="],
+                 &(component["template"] =~ &1)
+               ),
                "#{component["name"]} neither answers its own events nor links anywhere"
       end
     end
@@ -977,8 +993,8 @@ defmodule MishkaDocument.KitTest do
         assert found.site_id == site.id
         assert found.template != "", "#{name} arrived with no markup"
 
-        assert found.helpers != [] or name in @functions,
-               "#{name} arrived with no code"
+        if name not in @functions,
+          do: assert([_ | _] = found.helpers, "#{name} arrived with no code")
       end
     end
 

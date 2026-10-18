@@ -14,12 +14,12 @@ defmodule MishkaDocument.Plugins.ShareCardTargets do
   (`MishkaCmsCoreWeb.Live.Admin.Components.ExtensionInstallerPanel.doctor_modal/1`) and its row on
   the SEO settings. Registered in `MishkaDocument.Application`.
   """
-  use MishkaInstaller.Event.Hook,
-    event: MishkaCmsCore.Runtime.ShareCard.targets_event(),
-    initial: %{priority: 60}
-
   alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaDocument.ShareCards
+
+  use MishkaInstaller.Event.Hook,
+    event: ShareCard.targets_event(),
+    initial: %{priority: 60}
 
   @producer "mishka_document"
 

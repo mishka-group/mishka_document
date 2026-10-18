@@ -13,16 +13,24 @@ defmodule MishkaDocument.MasterIdentityTest do
 
   require Ash.Query
 
+  alias MishkaDocument.Resources.Helpers.SiteNames
+
   alias MishkaDocument.{
+    EventLog,
     Issue,
     IssueComment,
     Note,
     NoteDraft,
     Section,
+    SectionBookmark,
     SectionDraft,
+    SectionTag,
+    SectionView,
     Tag,
     Workspace,
-    WorkspaceVersion
+    WorkspaceFollower,
+    WorkspaceVersion,
+    WorkspaceVersionLineage
   }
 
   defp star(site), do: create_user_with_permissions!(["*"], site_id: site.id)
@@ -341,9 +349,6 @@ defmodule MishkaDocument.MasterIdentityTest do
   end
 
   describe "the event log's own site scoping" do
-    alias MishkaDocument.EventLog
-    alias MishkaDocument.Resources.Helpers.SiteNames
-
     setup do
       site = create_site!()
       section = create_section!(site_id: site.id)
@@ -480,8 +485,6 @@ defmodule MishkaDocument.MasterIdentityTest do
   end
 
   describe "the event log's reads" do
-    alias MishkaDocument.EventLog
-
     setup do
       site_a = create_site!()
       site_b = create_site!()
@@ -586,8 +589,6 @@ defmodule MishkaDocument.MasterIdentityTest do
   end
 
   describe "a site user's writes that name another site's record" do
-    alias MishkaDocument.{SectionTag, SectionView, WorkspaceVersionLineage}
-
     setup do
       a = site_graph(create_site!())
       b = site_graph(create_site!())
@@ -927,8 +928,6 @@ defmodule MishkaDocument.MasterIdentityTest do
   end
 
   describe "join, follow, bookmark and view rows" do
-    alias MishkaDocument.{SectionBookmark, SectionTag, SectionView, WorkspaceFollower}
-
     setup do
       site_a = create_site!()
       site_b = create_site!()
@@ -1048,8 +1047,6 @@ defmodule MishkaDocument.MasterIdentityTest do
   end
 
   describe "a section view" do
-    alias MishkaDocument.SectionView
-
     setup do
       site = create_site!()
       %{site: site, section: create_section!(site_id: site.id)}

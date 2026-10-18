@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
+  @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
@@ -64,7 +65,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
         pages: &MishkaDocument.Provision.sample_pages/2,
         draft_label: gettext("Documentation sample page")
       )
-      |> subscribe_to_pubsub(current_user)
+      |> subscribe_when_connected(current_user)
       |> load_counts_async()
       |> then(
         &ActivityFeed.setup(&1, resources: feed_resources(&1), feed_id: "document-activity")
@@ -86,6 +87,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   # pins the answer once an admin has said, so this follows what they said rather than re-deciding.
   defp gate(socket),
     do: assign(socket, :showing_installer?, ExtensionInstallerPanel.showing_installer?(socket))
+
+  defp subscribe_when_connected(socket, user) do
+    if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
+  end
 
   defp subscribe_to_pubsub(socket, %User{site_id: nil}) do
     Phoenix.PubSub.subscribe(MishkaCmsCore.PubSub, "workspace:created")
@@ -159,16 +164,13 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
     {:noreply, close_issues_panel(socket)}
   end
 
-  def handle_event("toggle_issues_archive_filter", %{"status" => status}, socket) do
-    new_status = String.to_existing_atom(status)
+  def handle_event("toggle_issues_archive_filter", %{"status" => "active"}, socket),
+    do: {:noreply, filter_issues(socket, :active)}
 
-    {:noreply,
-     socket
-     |> assign(:issues_archive_status, new_status)
-     |> assign(:issues_page, 1)
-     |> load_issues_async(page: 1, reset: true)
-     |> load_counts_async()}
-  end
+  def handle_event("toggle_issues_archive_filter", %{"status" => "archived"}, socket),
+    do: {:noreply, filter_issues(socket, :archived)}
+
+  def handle_event("toggle_issues_archive_filter", _params, socket), do: {:noreply, socket}
 
   def handle_event("unarchive_issue", %{"id" => id}, socket) do
     case unarchive_issue(socket.assigns.current_user, id) do
@@ -631,6 +633,14 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   # so its rows are only good while it is open. Dropping them on close makes the next open refetch
   # instead of showing a list that quietly stopped tracking; `issues_loaded?` goes with them, so that
   # open gets its skeleton back.
+  defp filter_issues(socket, status) do
+    socket
+    |> assign(:issues_archive_status, status)
+    |> assign(:issues_page, 1)
+    |> load_issues_async(page: 1, reset: true)
+    |> load_counts_async()
+  end
+
   defp close_issues_panel(%{assigns: %{show_issues: false}} = socket), do: socket
 
   defp close_issues_panel(socket) do

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule MishkaDocumentWeb.AshJsonApiRouter do
+  @moduledoc false
   use AshJsonApi.Router,
     domains: [],
     open_api: "/open_api"
