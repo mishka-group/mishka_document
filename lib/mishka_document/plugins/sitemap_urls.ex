@@ -36,13 +36,22 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   document whose robots meta says `noindex` or `none` lists neither its front page nor a page of it
   that holds no robots meta of its own; a page whose own robots meta says so is left out alone. The
   front page of such a document with an address of its own, which core lists as a page of the site,
-  is taken out of `urls`.
+  is taken out of `urls`, as is that of one locked to permissions, not active, in another language,
+  or not there at all: an address is listed only while a document a visitor may open and a search
+  engine may index stands at it.
 
   THE SAME ROWS THE PAGES DRAW. `doc-section` finds a document among the active ones, shows the
   version an editor marked latest among the published ones — the newest published one when none
-  is — and that version's approved pages. This reads exactly those, so a draft document, a
-  document with no published version, a page still in review and the pages of an older version
-  (`?v=`) are never listed.
+  is — and that version's approved pages. This reads exactly those, so a draft document, a page
+  still in review and the pages of an older version (`?v=`) are never listed. A document with no
+  published version still draws its front page, which its head lets a search engine index, so that
+  is listed, dated by the document's `updated_at`, and no page of it.
+
+  DATED BY WHEN THE PAGE LAST CHANGED. A page's `lastmod` is its `last_modified_at`
+  (`MishkaDocument.Resources.Calculations.LastModified`): the newest of its own `updated_at`, the
+  `updated_at` of its approved notes and the time a note of it was archived. A document's front
+  page is dated by the newest of the document's `updated_at` and those of its pages. The notes are
+  read in the same query as the pages, so a batch of pages is one read.
 
   READ WHEN THE BUILD READS IT. The addresses are appended as a stream, and nothing is read until
   the build reads it: the documents a hundred at a time, the version each of them shows in one read
@@ -128,19 +137,41 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
     )
   end
 
-  # The front pages of the documents at these addresses that may not be listed, each at the address
-  # the site's URL mode gives its language.
+  # The front pages core lists as pages of the site, at the addresses documents give themselves,
+  # while no document a visitor may open and a search engine may index stands at them: the document
+  # is locked, marked noindex, not active, in another language, or there is none. Each at the
+  # address the site's URL mode gives its language. The documents are read as a visitor who is not
+  # signed in, so a locked one is among the ones not found.
   defp unlisted_fronts(_site_id, []), do: MapSet.new()
 
   defp unlisted_fronts(site_id, addresses) do
-    Workspace
-    |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
-    |> Ash.Query.filter(path in ^addresses)
-    |> Ash.Query.select([:path, :language, :permissions, :seo_tags])
-    |> Ash.read!(actor: nil, tenant: site_id, page: false)
-    |> Enum.reject(&PageEditions.listed?/1)
-    |> MapSet.new(&Languages.url(&1.path, %{Languages.capture() => &1.language}, site_id))
+    open =
+      Workspace
+      |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
+      |> Ash.Query.filter(path in ^addresses)
+      |> Ash.Query.select([:path, :language, :permissions, :seo_tags])
+      |> Ash.read!(actor: nil, tenant: site_id, page: false)
+      |> Enum.filter(&PageEditions.listed?/1)
+      |> MapSet.new(&{&1.path, &1.language})
+
+    for address <- addresses,
+        language <- front_languages(address, site_id),
+        not open?(open, address, language),
+        url = Languages.url(address, captured(language), site_id),
+        is_binary(url),
+        into: MapSet.new(),
+        do: url
   end
+
+  defp captured(nil), do: %{}
+  defp captured(language), do: %{Languages.capture() => language}
+
+  # An address holding `:lang` is one front page per language of the site; any other is one.
+  defp front_languages(address, site_id),
+    do: if(Languages.captures?(address), do: Languages.site(site_id), else: [nil])
+
+  defp open?(open, address, nil), do: Enum.any?(open, &match?({^address, _language}, &1))
+  defp open?(open, address, language), do: MapSet.member?(open, {address, language})
 
   defp document_urls(site_id, languages, served) do
     site_id
@@ -151,7 +182,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
 
   # A batch of documents: every page of the version each shows, then each one's front page, which
   # draws the document's contents and so changes with any of its pages. A document with no version
-  # to show lists nothing.
+  # to show lists its front page alone.
   defp batch_urls(site_id, workspaces, served) do
     current = current_versions(site_id, workspaces)
 
@@ -161,6 +192,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
           into: %{},
           do: {version_id, workspace}
 
+    bare = Enum.reject(workspaces, &Map.has_key?(current, &1.id))
     paths = tree_paths(site_id, Map.keys(shown))
 
     site_id
@@ -183,12 +215,16 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
          Map.update!(
            changed,
            section.workspace_version_id,
-           &Enum.max([&1, section.updated_at], DateTime)
+           &Enum.max([&1, section.last_modified_at], DateTime)
          )}
       end,
       fn changed ->
+        fronts =
+          Enum.map(shown, fn {version_id, workspace} -> {workspace, changed[version_id]} end) ++
+            Enum.map(bare, &{&1, &1.updated_at})
+
         {for(
-           {version_id, workspace} <- shown,
+           {workspace, lastmod} <- fronts,
            not own_address?(workspace),
            url <-
              address(
@@ -197,7 +233,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
                :workspace,
                workspace.language,
                front(workspace),
-               changed[version_id],
+               lastmod,
                PageEditions.listed?(workspace)
              ),
            do: url
@@ -230,7 +266,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       served,
       workspace,
       segments,
-      section.updated_at,
+      section.last_modified_at,
       PageEditions.listed?(%{section | permissions: section.effective_permissions}, workspace)
     )
   end
@@ -337,12 +373,11 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       :front_page,
       :group_heading,
       :group_page,
-      :updated_at,
       :workspace_version_id,
       :permissions,
       :seo_tags
     ])
-    |> Ash.Query.load(:effective_permissions)
+    |> Ash.Query.load([:effective_permissions, :last_modified_at])
     |> SitemapCompiler.stream_rows(actor: nil, tenant: site_id)
   end
 end

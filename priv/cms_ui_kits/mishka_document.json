@@ -1,7 +1,7 @@
 {
   "$schema": "mishka.ui_kit.bundle.v3",
   "name": "mishka_document",
-  "version": "2.28.0",
+  "version": "2.29.0",
   "components": [
     {
       "name": "doc-workspace-list",
@@ -476,7 +476,7 @@
         {
           "name": "pages_of",
           "args": "versions, visitor",
-          "code": "# HOW MANY PAGES EACH VERSION HOLDS FOR THIS VISITOR, and when the latest of them changed. A group\n# with no page of its own is only a heading, so it is not counted.\nrequire Ash.Query\n\ncase Enum.map(versions, & &1.id) do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([:workspace_version_id, :group_heading, :group_page, :updated_at])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.reject(&(&1.group_heading == true and &1.group_page != true))\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Map.new(fn {version_id, pages} ->\n      {version_id, %{count: length(pages), updated_at: newest(Enum.map(pages, & &1.updated_at))}}\n    end)\nend\n"
+          "code": "# HOW MANY PAGES EACH VERSION HOLDS FOR THIS VISITOR, and when the latest of them changed. A group\n# with no page of its own is only a heading, so it is not counted.\nrequire Ash.Query\n\ncase Enum.map(versions, & &1.id) do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([:workspace_version_id, :group_heading, :group_page])\n    |> Ash.Query.load(:last_modified_at)\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.reject(&(&1.group_heading == true and &1.group_page != true))\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Map.new(fn {version_id, pages} ->\n      {version_id,\n       %{count: length(pages), updated_at: newest(Enum.map(pages, & &1.last_modified_at))}}\n    end)\nend\n"
         },
         {
           "name": "languages_of",
@@ -930,7 +930,7 @@
         {
           "name": "section_body",
           "args": "id, visitor",
-          "code": "# THE ONE PAGE'S OWN TEXT, read separately so that a document of thirty pages does not run the\n# `rendered_content` plugin seam thirty times to draw one of them.\nrequire Ash.Query\n\nMishkaDocument.Section\n|> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n|> Ash.Query.filter(id == ^id)\n|> Ash.Query.load([:rendered_content])\n|> Ash.read(tenant: site_id(), page: [limit: 1])\n|> first_row()\n"
+          "code": "# THE ONE PAGE'S OWN TEXT, read separately so that a document of thirty pages does not run the\n# `rendered_content` plugin seam thirty times to draw one of them.\nrequire Ash.Query\n\nMishkaDocument.Section\n|> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n|> Ash.Query.filter(id == ^id)\n|> Ash.Query.load([:rendered_content, :last_modified_at])\n|> Ash.read(tenant: site_id(), page: [limit: 1])\n|> first_row()\n"
         },
         {
           "name": "notes_of",
@@ -1125,7 +1125,7 @@
         {
           "name": "updated_at",
           "args": "document, section",
-          "code": "# WHEN WHAT THIS ADDRESS SHOWS LAST CHANGED, to the second, the date its head gives as its\n# `dateModified`: a page's own, and the document's at the document's own address, where its\n# version's front page is drawn. `nil` when neither is known.\nat =\n  case section do\n    %{front_page: false, updated_at: changed} -> changed\n    _front_page_or_none -> document && document.updated_at\n  end\n\ncase at do\n  %DateTime{} -> DateTime.truncate(at, :second)\n  _unknown -> nil\nend\n"
+          "code": "# WHEN WHAT THIS ADDRESS SHOWS LAST CHANGED, to the second, the date its head gives as its\n# `dateModified`: a page's own — the newest of the page, its notes and the archiving of one — and\n# the document's at the document's own address, where its version's front page is drawn. `nil` when\n# neither is known.\nat =\n  case section do\n    %{front_page: false, last_modified_at: changed} -> changed\n    _front_page_or_none -> document && document.updated_at\n  end\n\ncase at do\n  %DateTime{} -> DateTime.truncate(at, :second)\n  _unknown -> nil\nend\n"
         },
         {
           "name": "asked_page",

@@ -2650,9 +2650,25 @@ defmodule MishkaDocument.Section do
       public? true
       description "Returns word count of the section content"
     end
+
+    calculate :last_modified_at,
+              :utc_datetime_usec,
+              MishkaDocument.Resources.Calculations.LastModified do
+      description "Newest of the section's updated_at, its shown notes' updated_at and the time a note was archived"
+    end
   end
 
   aggregates do
+    max :latest_note_change_at, :notes, :updated_at do
+      description "Newest updated_at of the section's approved notes"
+    end
+
+    max :latest_note_archived_at, :notes, :archived_at do
+      read_action :archived
+      authorize? false
+      description "Latest time a note of the section was archived"
+    end
+
     count :pending_section_draft_content_review_count, :section_drafts do
       public? true
       authorize? false

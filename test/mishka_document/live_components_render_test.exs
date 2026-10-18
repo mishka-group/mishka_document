@@ -2224,6 +2224,66 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert date == "Updated " <> MishkaCmsCore.Localized.date(~U[2026-03-04 05:06:07Z])
     end
 
+    test "is the change of a note the page shows, after the page's own", %{site: site} do
+      %{pages: pages} = manual!(site)
+      page = Enum.find(pages, &(&1.slug == "installation"))
+      Ash.Seed.update!(page, %{updated_at: ~U[2026-03-04 05:06:07.891234Z]})
+
+      site
+      |> note!(page, [])
+      |> Ash.Seed.update!(%{updated_at: ~U[2026-05-06 07:08:09.123456Z]})
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert %{datetime: ["2026-05-06T07:08:09Z"], version: ["v1.0.0"]} = updated(view)
+    end
+
+    test "is the time a note of the page was archived", %{site: site} do
+      %{pages: pages} = manual!(site)
+      page = Enum.find(pages, &(&1.slug == "installation"))
+      Ash.Seed.update!(page, %{updated_at: ~U[2026-03-04 05:06:07.891234Z]})
+
+      site
+      |> note!(page, [])
+      |> Ash.Seed.update!(%{updated_at: ~U[2026-04-01 00:00:00.000000Z]})
+      |> archive_note_at!(~U[2026-06-07 08:09:10.000000Z])
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert %{datetime: ["2026-06-07T08:09:10Z"]} = updated(view)
+      assert text_of(view, ~s([data-role="doc-section-note"])) == []
+    end
+
+    test "is the page's own while its notes are older or not shown", %{site: site} do
+      %{pages: pages} = manual!(site)
+      page = Enum.find(pages, &(&1.slug == "installation"))
+      Ash.Seed.update!(page, %{updated_at: ~U[2026-03-04 05:06:07.891234Z]})
+
+      site
+      |> note!(page, [])
+      |> Ash.Seed.update!(%{updated_at: ~U[2026-01-01 00:00:00.000000Z]})
+
+      site
+      |> note!(page, content_review_status: :pending)
+      |> Ash.Seed.update!(%{updated_at: ~U[2026-08-01 00:00:00.000000Z]})
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert %{datetime: ["2026-03-04T05:06:07Z"]} = updated(view)
+    end
+
     test "is the document's change on its front page", %{site: site} do
       %{document: document, front: front} = fronted!(site, path: "/mishka/docs")
       Ash.Seed.update!(document, %{updated_at: ~U[2026-02-01 00:00:00Z]})
@@ -2899,6 +2959,29 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
                |> List.flatten()
 
       assert {:ok, ^newest, 0} = DateTime.from_iso8601(datetime)
+    end
+
+    test "dates a document by the newest change of its pages' notes", %{site: site} do
+      %{document: document, pages: pages} = manual!(site)
+      Ash.Seed.update!(document, %{updated_at: ~U[2026-02-01 00:00:00.000000Z]})
+
+      for page <- pages,
+          do: Ash.Seed.update!(page, %{updated_at: ~U[2026-03-01 00:00:00.000000Z]})
+
+      site
+      |> note!(hd(pages), [])
+      |> Ash.Seed.update!(%{updated_at: ~U[2026-07-08 09:10:11.000000Z]})
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, show_details: true})
+
+      assert [datetime] =
+               view
+               |> drawn(~s([data-role="doc-list-updated"] time))
+               |> Enum.map(&LazyHTML.attribute(&1, "datetime"))
+               |> List.flatten()
+
+      assert {:ok, ~U[2026-07-08 09:10:11.000000Z], 0} = DateTime.from_iso8601(datetime)
     end
 
     test "counts the pages of the version a reader lands on, as the visitor may read them", %{

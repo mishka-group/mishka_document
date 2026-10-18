@@ -6,7 +6,9 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
   @moduledoc """
   What the documentation adds to a site's `/sitemap.xml`: each active document's front page and the
   approved pages of the version a reader is shown, at the addresses the site's own document pages
-  answer, in the document's language.
+  answer, in the document's language. What is listed is what the head of its page lets a search
+  engine index: the last describe holds each kind to the robots meta `MishkaDocument.Plugins.PageSeo`
+  and core's head write for it.
 
   The pages are the ones `MishkaDocument.Provision.ensure!/1` writes, handed over the way
   `MishkaCmsCore.Runtime.Compilers.SitemapCompiler` hands them — the site's indexable pages holding a
@@ -24,10 +26,10 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
 
   alias MishkaCmsCore.Helpers
   alias MishkaCmsCore.Runtime.Compilers.SitemapCompiler
-  alias MishkaCmsCore.Runtime.{Languages, PageEditions}
+  alias MishkaCmsCore.Runtime.{Languages, PageEditions, Seo}
   alias MishkaCmsCore.Runtime.States.{AssetsState, SettingsState, SiteState}
   alias MishkaCmsCore.Settings
-  alias MishkaDocument.Plugins.SitemapUrls
+  alias MishkaDocument.Plugins.{PageSeo, SitemapUrls}
   alias MishkaDocument.Provision
   alias MishkaDocument.Workspace
   alias MishkaInstaller.Event.EventHandler
@@ -38,6 +40,7 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
   @january ~U[2026-01-01 00:00:00Z]
   @february ~U[2026-02-01 00:00:00Z]
   @march ~U[2026-03-01 00:00:00Z]
+  @april ~U[2026-04-01 00:00:00Z]
 
   setup %{mode: mode} do
     name = "sitemapdocs#{System.unique_integer([:positive])}"
@@ -215,13 +218,30 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
     # ITS FRONT PAGE IS ONE CORE LISTS, as a page of the site at a fixed path: a document whose
     # robots meta keeps it out of an index takes that address out of what core lists.
     test "takes its front page out of core's addresses while it may not be listed", %{site: site} do
-      for {slug, tags} <- [{"product", [robots_meta("noindex, follow")]}, {"tool", []}] do
-        document = document!(site, slug: slug, path: "/#{slug}/docs", seo_tags: tags)
+      for {slug, attrs} <- [
+            {"product", [seo_tags: [robots_meta("noindex, follow")]]},
+            {"tool", []},
+            {"members", [permissions: ["members:read"]]},
+            {"shelved", [status: :draft]}
+          ] do
+        document = document!(site, [slug: slug, path: "/#{slug}/docs"] ++ attrs)
         version = version!(site, document, is_latest_for_version: true)
         page!(site, version, "#{slug}-start", front_page: true)
       end
 
-      core = for path <- ~w(/about /product/docs /tool/docs), do: %{path: path, lastmod: nil}
+      core =
+        for path <- ~w(/about /product/docs /tool/docs /members/docs /shelved/docs),
+            do: %{path: path, lastmod: nil}
+
+      assert paths(listed(site, nil, core)) == ["/about", "/tool/docs"]
+    end
+
+    test "takes it out while no document stands at the address", %{site: site} do
+      document = document!(site, slug: "tool", path: "/tool/docs")
+      version!(site, document, is_latest_for_version: true)
+      create_page!(site_id: site.id, path: "/nobody/docs/*section", active: true, permissions: [])
+
+      core = for path <- ~w(/about /tool/docs /nobody/docs), do: %{path: path, lastmod: nil}
 
       assert paths(listed(site, nil, core)) == ["/about", "/tool/docs"]
     end
@@ -312,11 +332,11 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
     end
   end
 
-  describe "what is never listed" do
-    test "a document that is not active, or has no published version", %{site: site} do
-      published!(site, "drafted", status: :draft)
-      published!(site, "shelved", status: :archived)
-
+  # A DOCUMENT WITH NO PUBLISHED VERSION STILL DRAWS ITS FRONT PAGE, and the head of that page lets
+  # a search engine index it, so it is listed, dated by the document, with no page of it: the pages
+  # of a draft version are nobody's to read.
+  describe "a document with no published version" do
+    test "lists its front page alone, dated by the document", %{site: site, mode: mode} do
       unpublished = document!(site, slug: "unpublished")
 
       draft =
@@ -327,6 +347,119 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
         )
 
       page!(site, draft, "unpublished-intro")
+      bare = document!(site, slug: "bare")
+
+      assert site |> listed() |> Map.new(&{&1.path, &1.lastmod}) == %{
+               english(mode, "/docs/unpublished") => stored_at(site, unpublished),
+               english(mode, "/docs/bare") => stored_at(site, bare)
+             }
+    end
+
+    test "is not listed while it is locked, noindex or in a language its page does not answer",
+         %{site: site} do
+      document!(site, slug: "members", permissions: ["members:read"])
+      document!(site, slug: "hidden", seo_tags: [robots_meta("noindex")])
+      document!(site, slug: "anleitung", language: "de")
+
+      assert listed(site) == []
+    end
+
+    defp stored_at(site, document),
+      do: Ash.get!(Workspace, document.id, tenant: site.id, authorize?: false).updated_at
+  end
+
+  # A PAGE IS DATED BY WHEN IT LAST CHANGED: its own time, its approved notes' and the time one of
+  # them was archived. Nothing is written to the page when a note changes, and a document's front
+  # page takes the newest of its pages'.
+  describe "a page's date" do
+    setup %{site: site, mode: mode} do
+      document = document!(site, slug: "guide")
+      Ash.Seed.update!(document, %{updated_at: @january})
+      version = version!(site, document, is_latest_for_version: true)
+      page = Ash.Seed.update!(page!(site, version, "install"), %{updated_at: @february})
+
+      {:ok,
+       page: page,
+       version: version,
+       front: english(mode, "/docs/guide"),
+       address: english(mode, "/docs/guide/install")}
+    end
+
+    defp lastmods(site),
+      do: site |> listed() |> Map.new(&{&1.path, DateTime.truncate(&1.lastmod, :second)})
+
+    test "is its own while it has no notes", ctx do
+      assert lastmods(ctx.site) == %{ctx.front => @february, ctx.address => @february}
+    end
+
+    test "moves to a note edited after it, and its document's front page with it", ctx do
+      create_shown_note!(ctx.page, @january)
+      create_shown_note!(ctx.page, @march)
+
+      assert lastmods(ctx.site) == %{ctx.front => @march, ctx.address => @march}
+
+      stored =
+        Ash.get!(MishkaDocument.Section, ctx.page.id, tenant: ctx.site.id, authorize?: false)
+
+      assert DateTime.truncate(stored.updated_at, :second) == @february
+    end
+
+    test "moves to the time one of its notes was archived", ctx do
+      ctx.page |> create_shown_note!(@january) |> archive_note_at!(@april)
+
+      assert lastmods(ctx.site) == %{ctx.front => @april, ctx.address => @april}
+    end
+
+    test "stays its own while it is newer than its notes", ctx do
+      create_shown_note!(ctx.page, @january)
+
+      assert lastmods(ctx.site) == %{ctx.front => @february, ctx.address => @february}
+    end
+
+    test "does not move for a note its page does not show", ctx do
+      create_shown_note!(ctx.page, @march, content_review_status: :pending)
+      create_shown_note!(ctx.page, @april, technical_review_status: :rejected)
+
+      assert lastmods(ctx.site) == %{ctx.front => @february, ctx.address => @february}
+    end
+
+    test "moves only the page whose note changed", ctx do
+      other = Ash.Seed.update!(page!(ctx.site, ctx.version, "steps"), %{updated_at: @february})
+      create_shown_note!(other, @march)
+
+      assert lastmods(ctx.site) == %{
+               ctx.front => @march,
+               ctx.address => @february,
+               String.replace(ctx.address, "install", "steps") => @march
+             }
+    end
+
+    test "is read with the pages, never with a read of its own", ctx do
+      {bare, bare_reads} = reads_while(fn -> listed(ctx.site) end)
+
+      for slug <- ["beta", "gamma"] do
+        version = version!(ctx.site, document!(ctx.site, slug: slug), [])
+        create_shown_note!(page!(ctx.site, version, "#{slug}-intro"), @march)
+      end
+
+      create_shown_note!(ctx.page, @march)
+      {noted, noted_reads} = reads_while(fn -> listed(ctx.site) end)
+
+      assert length(bare) == 2
+      assert length(noted) == 6
+      assert page_reads(noted_reads) == page_reads(bare_reads)
+
+      assert Enum.all?(noted_reads, fn query ->
+               not (query =~ ~s("mishka_document_notes")) or
+                 query =~ ~s("mishka_document_sections")
+             end)
+    end
+  end
+
+  describe "what is never listed" do
+    test "a document that is not active", %{site: site} do
+      published!(site, "drafted", status: :draft)
+      published!(site, "shelved", status: :archived)
 
       assert listed(site) == []
     end
@@ -498,6 +631,142 @@ defmodule MishkaDocument.Plugins.SitemapUrlsTest do
       changed = Enum.max([stored.updated_at | Enum.map(pages, & &1.updated_at)], DateTime)
 
       assert Enum.find(urls, &(&1.path == english(mode, "/docs/guide"))).lastmod == changed
+    end
+  end
+
+  # EACH KIND'S LISTING IS HELD TO THE HEAD ITS PAGE WRITES. A document's front page and a page of it
+  # are listed exactly when the robots meta `MishkaDocument.Plugins.PageSeo` and core's head give them
+  # lets a search engine index them and they open with no permission — a locked page is one a crawler
+  # is sent away from, whatever it says.
+  describe "what is listed is what the head lets a search engine index" do
+    @host "docs.example.com"
+
+    defp base, do: Seo.base(@host)
+
+    # The head core builds for the `kind` page that `params` name, as `MishkaCmsWeb.RuntimeLive`
+    # builds it: whether its robots meta says index, and what it opens with.
+    defp head_of(site, kind, params) do
+      path = Provision.item_paths()[kind]
+
+      given =
+        Seo.given(
+          %{
+            title: "Document page",
+            path: path,
+            language: "en",
+            seo: %{description: nil, schema: []}
+          },
+          site_id: site.id,
+          url: base() <> Languages.url(path, params, site.id),
+          params: params,
+          record: Map.fetch!(%{workspace: "docs:document", section: "docs:page"}, kind)
+        )
+
+      {:reply, :halt, answered} = PageSeo.call(given)
+      head = answered |> Seo.accept(given) |> Seo.head(base: base())
+
+      directives =
+        for {"meta", attrs} <- head.tags,
+            {"name", "robots"} in attrs,
+            {"content", content} <- attrs,
+            directive <- String.split(content, [",", " "], trim: true),
+            do: directive
+
+      %{
+        indexed?: directives != [] and directives -- ["noindex", "none"] == directives,
+        permissions: head.permissions,
+        shown?: not is_nil(head.title)
+      }
+    end
+
+    # Every `{kind, params, address}` against the sitemap: listed when and only when its page is
+    # shown, says index and opens with no permission; and at least one of each in the set, so that
+    # neither side is vacuous.
+    defp assert_listed_as_indexed(site, rows) do
+      listed = MapSet.new(paths(listed(site)))
+
+      verdicts =
+        for {kind, params, address} <- rows do
+          head = head_of(site, kind, params)
+          says = head.shown? and head.indexed? and head.permissions == []
+
+          assert MapSet.member?(listed, address) == says,
+                 "#{address} is #{if says, do: "indexable", else: "not indexable"} but " <>
+                   "#{if MapSet.member?(listed, address), do: "listed", else: "not listed"}"
+
+          says
+        end
+
+      assert true in verdicts and false in verdicts
+    end
+
+    defp front(slug, mode),
+      do: {:workspace, %{"lang" => "en", "workspace" => slug}, english(mode, "/docs/#{slug}")}
+
+    defp inner(slug, page_path, mode) do
+      {:section, %{"lang" => "en", "workspace" => slug, "section" => page_path},
+       english(mode, "/docs/#{slug}/#{page_path}")}
+    end
+
+    test "a document's front page, with a published version and without", %{
+      site: site,
+      mode: mode
+    } do
+      overrides = [
+        {"open", []},
+        {"indexed", [seo_tags: [robots_meta("index, follow")]]},
+        {"noindex", [seo_tags: [robots_meta("noindex, follow")]]},
+        {"none", [seo_tags: [robots_meta("none")]]},
+        {"locked", [permissions: ["members:read"]]}
+      ]
+
+      for {slug, attrs} <- overrides do
+        version!(site, document!(site, [slug: slug] ++ attrs), [])
+        document!(site, [slug: "bare-#{slug}"] ++ attrs)
+      end
+
+      rows =
+        for {slug, _attrs} <- overrides,
+            slug <- [slug, "bare-#{slug}"],
+            do: front(slug, mode)
+
+      assert_listed_as_indexed(site, rows)
+    end
+
+    test "a page of a document: its own robots meta, else its document's, and its locks", %{
+      site: site,
+      mode: mode
+    } do
+      open = version!(site, document!(site, slug: "open"), [])
+
+      hidden =
+        version!(site, document!(site, slug: "hidden", seo_tags: [robots_meta("noindex")]), [])
+
+      locked = version!(site, document!(site, slug: "locked", permissions: ["members:read"]), [])
+
+      page!(site, open, "plain")
+      page!(site, open, "noindex", seo_tags: [robots_meta("noindex, follow")])
+      page!(site, open, "none", seo_tags: [robots_meta("none")])
+      page!(site, open, "indexed", seo_tags: [robots_meta("index, follow")])
+      page!(site, open, "private", permissions: ["members:read"])
+      parent = page!(site, open, "parent", permissions: ["members:read"])
+      page!(site, open, "child", parent_section_id: parent.id)
+
+      page!(site, hidden, "inherits")
+      page!(site, hidden, "own", seo_tags: [robots_meta("index, follow")])
+      page!(site, locked, "inside")
+
+      assert_listed_as_indexed(site, [
+        inner("open", "plain", mode),
+        inner("open", "noindex", mode),
+        inner("open", "none", mode),
+        inner("open", "indexed", mode),
+        inner("open", "private", mode),
+        inner("open", "parent/child", mode),
+        inner("hidden", "inherits", mode),
+        inner("hidden", "own", mode),
+        inner("locked", "inside", mode)
+      ])
     end
   end
 

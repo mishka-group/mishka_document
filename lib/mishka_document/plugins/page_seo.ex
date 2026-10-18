@@ -55,8 +55,10 @@ defmodule MishkaDocument.Plugins.PageSeo do
       under it, so the head names the one address a reader and a crawler are sent to; else the
       address asked;
     * `vars` — `doc.title`, `doc.description`, `doc.url`, `doc.version`, `doc.group`,
-      `doc.published_at`, `doc.modified_at` (the front page or the page of it this address shows),
-      and `workspace.name`, `workspace.description`, `workspace.url` (the document);
+      `doc.published_at`, `doc.modified_at` (the front page or the page of it this address shows;
+      a page's, like its `TechArticle`'s `dateModified`, is when it last changed —
+      `MishkaDocument.Resources.Calculations.LastModified`), and `workspace.name`,
+      `workspace.description`, `workspace.url` (the document);
     * `card` — what its share card (`MishkaCmsCore.Runtime.ShareCard`) shows besides the title and
       description: "Documentation" above a document's front page, the document's name above one of
       its pages — `Guide · Navigation` under a group — and the version, on the front page the one
@@ -170,8 +172,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
     :seo_tags,
     :schema,
     :permissions,
-    :inserted_at,
-    :updated_at
+    :inserted_at
   ]
 
   # How much of a page's text its description takes.
@@ -235,7 +236,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
         description: summary(section.content),
         version: version.version_number,
         published: version.published_at || section.inserted_at,
-        modified: section.updated_at,
+        modified: section.last_modified_at,
         seo_tags: page_tags(section.seo_tags, workspace.seo_tags),
         schema: section.schema,
         permissions: section.effective_permissions
@@ -337,7 +338,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
     |> Ash.Query.filter(id == ^id)
     |> Ash.Query.select(@section_fields)
-    |> Ash.Query.load(:effective_permissions)
+    |> Ash.Query.load([:effective_permissions, :last_modified_at])
     |> Ash.read(tenant: site_id, authorize?: false, page: [limit: 1])
     |> case do
       {:ok, %{results: [section | _rest]}} -> section

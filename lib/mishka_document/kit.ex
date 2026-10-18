@@ -152,8 +152,9 @@ defmodule MishkaDocument.Kit do
 
   Under a page's title `doc-section` says when it last changed and the version being read,
   `Updated Oct 14, 2026 · v1.2.0` (`doc-section-updated`, the date in a `<time datetime>`, the
-  version in `doc-section-updated-version`): the page's own change, and its document's at the
-  document's own address, the date its head gives as its `dateModified`
+  version in `doc-section-updated-version`): when the page last changed — the newest of the page,
+  its notes and the archiving of one (`MishkaDocument.Resources.Calculations.LastModified`) — and
+  its document's at the document's own address, the date its head gives as its `dateModified`
   (`MishkaDocument.Plugins.PageSeo`). `updated_text` is what it says before the version, and
   `show_updated=false` draws none.
 
@@ -333,8 +334,9 @@ defmodule MishkaDocument.Kit do
   `doc-workspace-list` with `show_details` also says, for each document, the version a reader lands
   on — the one marked latest, else the newest published — how many of its pages the visitor may
   read there, a group with no page of its own left out, every language it is published in, and when
-  it last changed: the latest of the document, that version and those pages. Two more reads for the
-  whole page of documents, both as the visitor. `doc-workspace-card` draws them as
+  it last changed: the latest of the document, that version and those pages, a page by when it last
+  changed as above. Two more reads for the whole page of documents, both as the visitor.
+  `doc-workspace-card` draws them as
   `doc-list-meta`, holding `doc-list-version`, `doc-list-pages`, `doc-list-language-codes` (only
   where no language chips are drawn) and `doc-list-updated`; a card an author named in `card` is
   handed them as `details`, a map of `version`, `pages`, `languages` and `updated_at`, which it
