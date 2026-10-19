@@ -4728,6 +4728,33 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert shown_tab(view) == ["documentation"]
     end
 
+    # A PATCH TO ANOTHER PAGE asks the plugin about that page alone, and its tabs are the page's: the
+    # text opens, whatever tab the page before had open.
+    test "asks the plugin for the page a patch moves to, and opens that page's own text", %{
+      site: site
+    } do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"tab" => "props"})
+      assert shown_tab(view) == ["props"]
+      flush_asks()
+
+      send(view.pid, {:params, %{"section" => "menu"}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Menu"]
+      assert shown_tab(view) == ["documentation"]
+      assert_received {:page_extras_asked, %{page: %{slug: "menu"}}}
+      refute_received {:page_extras_asked, _again}
+
+      assert tab_addresses(view) == [
+               "/mishka/docs/menu",
+               "/mishka/docs/menu?tab=props",
+               "/mishka/docs/menu?tab=cli",
+               "/mishka/docs/menu?tab=pending"
+             ]
+    end
+
     # THE ADDRESS BAR FOLLOWS A PRESS in the browser, by the `doc-tabs` hook, from the address each
     # tab carries.
     test "draws its tab bar for the hook that keeps the address bar in step", %{site: site} do
@@ -5906,6 +5933,349 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert marked == ["Installation"],
              "the block was not redrawn, so the line above asserts nothing about what survived"
+    end
+  end
+
+  # A PATCH TO ANOTHER PAGE OF THE DOCUMENT is the page's LiveView running `handle_params/3` for the
+  # new address, which hands every block the URL's keys again — `{:params, …}` here, the same
+  # `update/2` over the same socket. The blocks hold what they read of the document, so only the page
+  # is read for it, and the links to the pages of the document patch once the view has joined.
+  describe "a patch to another page of the document" do
+    defp docs_block(name, path, section, extra \\ %{}) do
+      attrs = Map.merge(%{path: path, lang_param: "", params: %{"section" => section}}, extra)
+      block(name, attrs)
+    end
+
+    # WHAT A PATCH ASKED THE DATABASE FOR, once the blocks are mounted and have read their first page.
+    defp asked_on_patch(site, blocks, params) do
+      {view, _first_paint} = mount_raw(site, blocks)
+      render_async(view, @async)
+
+      queries_while(fn ->
+        send(view.pid, {:params, params})
+        render_async(view, @async)
+      end)
+    end
+
+    defp current_entries(view),
+      do: text_of(view, ~s([data-role="doc-sidebar-link"][aria-current="page"]))
+
+    test "moves the contents to the page and reads nothing for them", %{site: site} do
+      grouped!(site)
+
+      blocks = [docs_block("doc-sidebar", "/mishka/docs", "breadcrumb")]
+      {:ok, view, _html} = mount_blocks(site, blocks)
+
+      assert text_of(view, ~s([data-role="doc-sidebar-item"][data-active="true"])) == [
+               "Breadcrumb"
+             ]
+
+      assert asked_on_patch(site, blocks, %{"section" => "menu"}) == []
+
+      send(view.pid, {:params, %{"section" => "menu"}})
+
+      assert text_of(view, ~s([data-role="doc-sidebar-item"][data-active="true"])) == ["Menu"]
+      assert current_entries(view) == ["Menu"]
+
+      assert text_of(view, ~s([data-role="doc-sidebar-link"])) ==
+               ["Getting started", "Breadcrumb", "Menu", "Upgrading"]
+    end
+
+    test "keeps the filter the reader typed", %{site: site} do
+      grouped!(site)
+
+      {:ok, view, _html} =
+        mount_blocks(site, [
+          docs_block("doc-sidebar", "/mishka/docs", "getting-started", %{show_filter: true})
+        ])
+
+      view |> form(~s(#doc-sidebar form), %{"q" => "e"}) |> render_change()
+      narrowed = text_of(view, ~s([data-role="doc-sidebar-link"]))
+      assert narrowed != ["Getting started", "Breadcrumb", "Menu", "Upgrading"]
+
+      send(view.pid, {:params, %{"section" => "menu"}})
+
+      assert text_of(view, ~s([data-role="doc-sidebar-link"])) == narrowed
+      assert current_entries(view) == ["Menu"]
+    end
+
+    test "reads the page and its notes for doc-section, and not the document again", %{site: site} do
+      grouped!(site)
+
+      note!(site, document_page(site, "menu"),
+        title: "A note",
+        order_position: 0,
+        content: "<p>Noted.</p>"
+      )
+
+      blocks = [docs_block("doc-section", "/mishka/docs", "breadcrumb")]
+      asked = asked_on_patch(site, blocks, %{"section" => "menu"})
+
+      assert reads_of(asked, "mishka_document_workspaces") == 0
+      assert reads_of(asked, "mishka_document_workspace_versions") == 0
+
+      assert reads_of(asked, "mishka_document_sections") == 1,
+             "the page alone, not its version's list"
+
+      {:ok, view, _html} = mount_blocks(site, blocks)
+      send(view.pid, {:params, %{"section" => "menu"}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Menu"]
+      assert text_of(view, ~s([data-role="doc-note-title"])) == ["A note"]
+      assert text_of(view, ~s([data-role="doc-section-prev"])) |> Enum.join(" ") =~ "Breadcrumb"
+      assert text_of(view, ~s([data-role="doc-section-next"])) |> Enum.join(" ") =~ "Upgrading"
+    end
+
+    test "finds a page published since doc-section read the document, by reading it again", %{
+      site: site
+    } do
+      %{version: version} = grouped!(site)
+      {:ok, view, _html} = mount_blocks(site, [docs_block("doc-section", "/mishka/docs", "menu")])
+
+      page!(site, version, title: "Later", slug: "later", order_position: 9)
+      send(view.pid, {:params, %{"section" => "later"}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Later"]
+      refute has_element?(view, "#runtime-not-found")
+    end
+
+    test "reads the page's text for doc-toc, and keeps its entries drawn meanwhile", %{site: site} do
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Long one",
+        slug: "long-one",
+        order_position: 4,
+        content: "<h2>Why</h2><p>Because.</p><h2>How</h2><p>Like this.</p>"
+      )
+
+      attrs = %{workspace: "mishka-cms", heading: "On this page", min_entries: 1}
+      blocks = [block("doc-toc", Map.put(attrs, :params, %{"section" => "installation"}))]
+
+      asked = asked_on_patch(site, blocks, %{"section" => "long-one"})
+
+      assert reads_of(asked, "mishka_document_workspaces") == 0
+      assert reads_of(asked, "mishka_document_workspace_versions") == 0
+      assert reads_of(asked, "mishka_document_sections") == 1, "the page's text alone"
+
+      {:ok, view, _html} = mount_blocks(site, blocks)
+      assert text_of(view, ~s([data-role="doc-toc-link"])) == ["Installation"]
+
+      send(view.pid, {:params, %{"section" => "long-one"}})
+      refute has_element?(view, ~s([data-role="doc-toc-loading"])), "the entries were taken away"
+      assert text_of(view, ~s([data-role="doc-toc-link"])) == ["Why", "How"]
+    end
+
+    test "makes the switch for the page from what doc-switcher read", %{site: site} do
+      document = document!(site, name: "Two", slug: "two", path: "/two/docs")
+      latest = version!(site, document, version_number: "2.0.0", is_latest_for_version: true)
+
+      older =
+        version!(site, document, version_number: "1.0.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+      intro = page!(site, latest, title: "Intro", slug: "intro", order_position: 0)
+      page!(site, latest, title: "New thing", slug: "new-thing", order_position: 1)
+
+      page!(site, older,
+        title: "Intro (old)",
+        slug: "intro-old",
+        order_position: 0,
+        section_lineage_id: intro.section_lineage_id
+      )
+
+      blocks = [docs_block("doc-switcher", "/two/docs", "intro", %{show: "version"})]
+      {:ok, view, _html} = mount_blocks(site, blocks)
+
+      assert hrefs(view, ~s([data-role="doc-switcher-version"])) ==
+               ["/two/docs/intro", "/two/docs/intro-old?v=1.0.0"]
+
+      assert asked_on_patch(site, blocks, %{"section" => "new-thing"}) == []
+
+      send(view.pid, {:params, %{"section" => "new-thing"}})
+
+      assert hrefs(view, ~s([data-role="doc-switcher-version"])) ==
+               ["/two/docs/new-thing", "/two/docs?v=1.0.0"],
+             "a version with no such page leads to the document's front page"
+    end
+
+    test "reads between the four blocks of a page the page's text and no more", %{site: site} do
+      grouped!(site)
+
+      blocks =
+        for name <- ~w(doc-sidebar doc-section doc-toc doc-switcher),
+            do: docs_block(name, "/mishka/docs", "breadcrumb")
+
+      asked = asked_on_patch(site, blocks, %{"section" => "menu"})
+
+      assert reads_of(asked, "mishka_document_workspaces") == 0
+      assert reads_of(asked, "mishka_document_workspace_versions") == 0
+      assert reads_of(asked, "mishka_document_sections") == 2, "doc-section's page and doc-toc's"
+
+      {:ok, view, _html} = mount_blocks(site, blocks)
+      send(view.pid, {:params, %{"section" => "menu"}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Menu"]
+      assert current_entries(view) == ["Menu"]
+    end
+  end
+
+  describe "the links of a page of the document" do
+    defp link_kinds(view, selector) do
+      view
+      |> drawn(selector)
+      |> Enum.map(
+        &{&1 |> LazyHTML.attribute("href") |> List.first(),
+         &1 |> LazyHTML.attribute("data-phx-link") |> List.first()}
+      )
+    end
+
+    defp kinds_in(html) do
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("a[data-phx-link]")
+      |> Enum.flat_map(&LazyHTML.attribute(&1, "data-phx-link"))
+      |> Enum.uniq()
+    end
+
+    test "patch to its pages, and navigate to its front page, once the view has joined", %{
+      site: site
+    } do
+      fronted!(site, path: "/fronted/docs")
+
+      blocks = [
+        docs_block("doc-sidebar", "/fronted/docs", "install"),
+        docs_block("doc-section", "/fronted/docs", "install")
+      ]
+
+      {:ok, view, _html} = mount_blocks(site, blocks)
+
+      assert link_kinds(view, ~s([data-role="doc-sidebar-link"])) == [
+               {"/fronted/docs", "redirect"},
+               {"/fronted/docs/install", "patch"},
+               {"/fronted/docs/upgrading", "patch"}
+             ]
+
+      assert link_kinds(view, ~s([data-role="doc-section-prev"])) == [
+               {"/fronted/docs", "redirect"}
+             ]
+
+      assert link_kinds(view, ~s([data-role="doc-section-next"])) ==
+               [{"/fronted/docs/upgrading", "patch"}]
+    end
+
+    test "navigate until the view has joined, which is how the HTTP response draws them", %{
+      site: site
+    } do
+      fronted!(site, path: "/fronted/docs")
+      attrs = %{path: "/fronted/docs", lang_param: "", params: %{"section" => "install"}}
+
+      for name <- ~w(doc-sidebar doc-section) do
+        assert name |> then(&cold(site, &1, attrs)) |> kinds_in() == ["redirect"],
+               "#{name} drew a patch before its view had joined"
+      end
+    end
+
+    test "navigate on a document's landing, and for a block pinned to a document", %{site: site} do
+      fronted!(site, path: nil)
+
+      {:ok, landing, _html} =
+        mount_blocks(site, [
+          block("doc-sidebar", %{doc_base: "/docs", params: %{"workspace" => "fronted"}}),
+          block("doc-section", %{doc_base: "/docs", params: %{"workspace" => "fronted"}})
+        ])
+
+      assert landing |> drawn("a[data-phx-link]") |> Enum.count() > 0
+      assert landing |> render() |> kinds_in() == ["redirect"]
+
+      pinned = %{workspace: "fronted", doc_base: "/docs", params: %{"section" => "install"}}
+
+      {:ok, view, _html} =
+        mount_blocks(site, [block("doc-sidebar", pinned), block("doc-section", pinned)])
+
+      assert view |> render() |> kinds_in() == ["redirect"]
+
+      read = %{doc_base: "/docs", params: %{"workspace" => "fronted", "section" => "install"}}
+
+      {:ok, from_url, _html} =
+        mount_blocks(site, [block("doc-sidebar", read), block("doc-section", read)])
+
+      assert from_url |> render() |> kinds_in() |> Enum.sort() == ["patch", "redirect"]
+    end
+
+    test "run the JS command the page gave doc-sidebar when one is pressed", %{site: site} do
+      fronted!(site, path: "/fronted/docs")
+      command = Phoenix.LiveView.JS.exec("phx-remove", to: "#drawer")
+      selector = ~s([data-role="doc-sidebar-link"])
+
+      {:ok, view, _html} =
+        mount_blocks(site, [
+          docs_block("doc-sidebar", "/fronted/docs", "install", %{link_click: command})
+        ])
+
+      clicks = view |> drawn(selector) |> Enum.flat_map(&LazyHTML.attribute(&1, "phx-click"))
+      assert length(clicks) == 3
+      assert Enum.all?(clicks, &(&1 =~ "phx-remove" and &1 =~ "#drawer"))
+
+      {:ok, plain, _html} =
+        mount_blocks(site, [docs_block("doc-sidebar", "/fronted/docs", "install")])
+
+      assert plain |> drawn(selector) |> Enum.flat_map(&LazyHTML.attribute(&1, "phx-click")) == []
+    end
+
+    test "name the page doc-section draws, for the hook that scrolls to its top", %{site: site} do
+      fronted!(site, path: "/fronted/docs")
+      install = document_page(site, "install")
+
+      {:ok, view, _html} =
+        mount_blocks(site, [docs_block("doc-section", "/fronted/docs", "install")])
+
+      article = drawn(view, ~s([data-role="doc-section-article"]))
+
+      assert LazyHTML.attribute(article, "data-page") == [install.id]
+      assert LazyHTML.attribute(article, "id") == ["doc-section-article"]
+      assert [hook] = LazyHTML.attribute(article, "phx-hook")
+      assert String.ends_with?(hook, "DocPageScroll")
+    end
+
+    test "patch in the text of a page to another page of the same document and no other", %{
+      site: site
+    } do
+      %{version: version} = fronted!(site, path: "/fronted/docs")
+
+      page!(site, version,
+        title: "Linked",
+        slug: "linked",
+        order_position: 5,
+        content:
+          ~s(<p><a href="/fronted/docs/upgrading">same</a> <a href="/fronted/docs">front</a> ) <>
+            ~s(<a href="/fronted/docs/upgrading?v=0.9.0">older</a> <a href="/elsewhere">other</a> ) <>
+            ~s(<a href="/fronted/docs/upgrading#top">fragment</a> <a href="/fronted/docs/linked#x">here</a></p>)
+      )
+
+      {:ok, view, _html} =
+        mount_blocks(site, [docs_block("doc-section", "/fronted/docs", "linked")])
+
+      assert link_kinds(view, ~s([data-role="doc-section-body"] a)) == [
+               {"/fronted/docs/upgrading", "patch"},
+               {"/fronted/docs", "redirect"},
+               {"/fronted/docs/upgrading?v=0.9.0", "redirect"},
+               {"/elsewhere", "redirect"},
+               {"/fronted/docs/upgrading#top", "patch"},
+               {"/fronted/docs/linked#x", nil}
+             ]
+
+      cold =
+        cold(site, "doc-section", %{
+          path: "/fronted/docs",
+          lang_param: "",
+          params: %{"section" => "linked"}
+        })
+
+      assert cold
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query(~s([data-role="doc-section-body"] a))
+             |> Enum.flat_map(&LazyHTML.attribute(&1, "data-phx-link"))
+             |> Enum.uniq() == ["redirect"]
     end
   end
 
