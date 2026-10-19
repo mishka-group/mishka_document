@@ -2682,14 +2682,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       end)
     end
 
-    defp permission_read?(sql), do: String.contains?(sql, ~s("permissions"::text[] IS NULL))
-
     defp reads_of(queries, table),
-      do:
-        Enum.count(
-          queries,
-          &(String.contains?(&1, ~s(FROM "#{table}")) and not permission_read?(&1))
-        )
+      do: Enum.count(queries, &String.contains?(&1, ~s(FROM "#{table}")))
 
     defp block(name, attrs), do: %{"name" => name, "id" => name, "attrs" => attrs}
 
