@@ -5,17 +5,30 @@
 defmodule MishkaDocument.MixProject do
   use Mix.Project
 
+  @version "0.0.1"
+  @source_url "https://github.com/mishka-group/mishka_document"
+
   def project do
     [
       app: :mishka_document,
-      version: "0.0.1",
-      elixir: "~> 1.18",
+      name: "Mishka Document",
+      version: @version,
+      elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       consolidate_protocols: Mix.env() != :dev,
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
+      description: description(),
       package: package(),
+      homepage_url: "https://mishka.tools/cms/extensions/documentation",
+      source_url: @source_url,
+      docs: [
+        main: "readme",
+        source_ref: "v#{@version}",
+        extras: ["README.md"],
+        source_url: @source_url
+      ],
       dialyzer: [plt_add_apps: [:ex_unit]]
     ]
   end
@@ -33,8 +46,20 @@ defmodule MishkaDocument.MixProject do
   defp package do
     [
       licenses: ["Apache-2.0"],
-      files: ~w(lib priv/cms_ui_kits .formatter.exs mix.exs LICENSE README*)
+      maintainers: ["Shahryar Tavakkoli"],
+      files: ~w(lib priv/cms_ui_kits .formatter.exs mix.exs LICENSE README*),
+      links: %{
+        "Mishka Document" => "https://mishka.tools/cms/extensions/documentation",
+        "Official document" => "https://mishka.tools/cms/extensions/documentation/docs",
+        "GitHub" => @source_url,
+        "Sponsor" => "https://github.com/sponsors/mishka-group",
+        "Contributors" => "#{@source_url}/graphs/contributors"
+      }
     ]
+  end
+
+  defp description do
+    "A versioned documentation engine for Mishka CMS: documents with several versions, nested pages and a two-stage review, built with Elixir and Phoenix LiveView."
   end
 
   # Run "mix help compile.app" to learn about applications.
