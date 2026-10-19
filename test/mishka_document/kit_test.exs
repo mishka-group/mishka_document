@@ -307,17 +307,18 @@ defmodule MishkaDocument.KitTest do
     # A TASK READS IN THE PAGE'S SITE AND LOCALE ONLY WHEN IT IS HANDED THEM. Phoenix's own
     # `start_async/3` and `assign_async/3` start one with neither, and `site_path/2` in it builds no
     # link at all; the host's `MishkaCms.AsyncLocaleTest` holds Elixir code to the same rule, and
-    # does not read this bundle.
+    # does not read this bundle. `stream_async/4` has no Gervaz twin, so what it runs is wrapped in
+    # `MishkaGervaz.Messages.in_caller_locale/1`, which is what the twins do.
     test "and every block that reads in the background starts its task through Gervaz" do
       started =
         for component <- components(),
             helper <- component["helpers"],
-            helper["code"] =~ ~r/\b(start|assign)_async\(/ do
+            helper["code"] =~ ~r/\b(start|assign|stream)_async\(/ do
           refute helper["code"] =~ ~r/Phoenix\.LiveView\.(start_async|assign_async)\(/,
                  "#{component["name"]}'s #{helper["name"]} starts a task through Phoenix's own " <>
                    "— use MishkaGervaz.Messages.start_async/4"
 
-          assert helper["code"] =~ "MishkaGervaz.Messages.start_async(",
+          assert helper["code"] =~ ~r/MishkaGervaz\.Messages\.(start_async|in_caller_locale)\(/,
                  "#{component["name"]}'s #{helper["name"]} starts a task some other way"
 
           component["name"]
