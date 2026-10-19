@@ -62,9 +62,11 @@ defmodule MishkaDocument.Application do
 
   # Names the components the site's documentation draws in its text, the icons it names and the
   # classes it writes, so its stylesheet carries them (a `runtime:compile:content_components`
-  # plugin).
+  # plugin), and tells a page whether its reader came by a live navigation (a
+  # `RuntimeLive.OnMount.AfterCompile` plugin).
   @runtime_plugins [
-    MishkaDocument.Plugins.ContentComponents
+    MishkaDocument.Plugins.ContentComponents,
+    MishkaDocument.Plugins.LiveVisit
   ]
 
   # Each code block of a page being written is lexed in a task of its own under this supervisor — see

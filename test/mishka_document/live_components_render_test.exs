@@ -19,6 +19,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   """
   use MishkaDocument.ConnCase, async: false
 
+  import ExUnit.CaptureLog, only: [capture_log: 1]
   import Phoenix.LiveViewTest
   import MishkaDocument.Test.Factory
   import Phoenix.Component, only: [sigil_H: 2]
@@ -3201,6 +3202,274 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(view, ~s([data-role="mine"])) == ["Mishka CMS at /docs/mishka-cms?lang=en"]
       assert text_of(view, ~s([data-role="doc-list-title"])) == [], "it drew both cards"
+    end
+  end
+
+  # A VISIT TO THE LIST IS ONE OF THREE: a GET (what a crawler is served), the connection that
+  # follows a GET, and a live navigation from another page. The first two draw the cards in step with
+  # the page; the third draws skeletons the size of the page and streams the cards in behind them,
+  # and so does every later read.
+  describe "doc-workspace-list's cards on each kind of visit" do
+    setup %{site: site} do
+      for {name, order} <- Enum.with_index(~w(A B C)) do
+        document!(site, name: name, slug: String.downcase(name), display_order: order)
+      end
+
+      :ok
+    end
+
+    defp list_block(attrs) do
+      [
+        %{
+          "name" => "doc-workspace-list",
+          "id" => "one",
+          "attrs" => Map.merge(%{per_page: 2}, attrs)
+        }
+      ]
+    end
+
+    # THE GET, rendered the way `live_isolated/3` renders it before it connects.
+    defp dead_render(site, blocks) do
+      Phoenix.ConnTest.build_conn()
+      |> Plug.Test.init_test_session(%{})
+      |> Phoenix.LiveView.Router.fetch_live_flash([])
+      |> put_in([Access.key(:private), :phoenix_endpoint], @endpoint)
+      |> Phoenix.LiveView.Controller.live_render(Host,
+        session: %{"blocks" => blocks, "site" => site.name, "site_id" => site.id}
+      )
+      |> Phoenix.ConnTest.html_response(200)
+    end
+
+    defp hrefs_in(html, role) do
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([data-role="#{role}"]))
+      |> Enum.flat_map(&LazyHTML.attribute(&1, "href"))
+    end
+
+    defp titles(html) do
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([data-role="doc-list-title"]))
+      |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
+    end
+
+    test "the GET holds the real cards, with their titles and links, and no skeleton", %{
+      site: site
+    } do
+      for attrs <- [%{}, %{live_visit: true}] do
+        html = dead_render(site, list_block(attrs))
+
+        assert titles(html) == ["A", "B"]
+        assert roles(html, "doc-list-item") == 2
+        assert roles(html, "doc-list-read") == 2
+        assert [a, b] = hrefs_in(html, "doc-list-read")
+        assert String.starts_with?(a, "/docs/a") and String.starts_with?(b, "/docs/b")
+        assert roles(html, "doc-list-skeleton") == 0
+        assert roles(html, "doc-list-loading") == 0
+      end
+    end
+
+    test "the connection after a GET draws the cards at once, and reads nothing in a task", %{
+      site: site
+    } do
+      {view, first_paint} = mount_raw(site, list_block(%{}))
+
+      assert titles(first_paint) == ["A", "B"]
+      assert roles(first_paint, "doc-list-skeleton") == 0
+      assert roles(first_paint, "doc-list-loading") == 0
+      assert titles(render_async(view, @async)) == ["A", "B"]
+    end
+
+    test "a live visit draws skeletons the size of the page, then the cards", %{site: site} do
+      {view, first_paint} = mount_raw(site, list_block(%{live_visit: true}))
+
+      assert roles(first_paint, "doc-list-skeleton") == 2
+      assert roles(first_paint, "doc-list-loading") == 1
+      assert roles(first_paint, "doc-list-item") == 0
+      assert titles(first_paint) == []
+
+      assert text_of(view, ~s([data-role="doc-list-position"])) == ["1 / 2"],
+             "the pager waited for the cards, though it needs only their count"
+
+      arrived = render_async(view, @async)
+
+      assert titles(arrived) == ["A", "B"]
+      assert roles(arrived, "doc-list-skeleton") == 0
+      assert roles(arrived, "doc-list-loading") == 0
+      assert has_element?(view, ~s(#one-items[phx-update="stream"]))
+    end
+
+    test "a skeleton is drawn for every card the page will hold, and no more", %{site: site} do
+      {_view, last} =
+        mount_raw(site, list_block(%{live_visit: true, params: %{"page" => "2"}}))
+
+      assert roles(last, "doc-list-skeleton") == 1, "the last page holds one document"
+
+      {_view, whole} = mount_raw(site, list_block(%{live_visit: true, per_page: 10}))
+
+      assert roles(whole, "doc-list-skeleton") == 3
+    end
+
+    test "a skeleton wears the lines its card will have", %{site: site} do
+      {_view, plain} = mount_raw(site, list_block(%{live_visit: true}))
+      {_view, full} = mount_raw(site, list_block(%{live_visit: true, show_details: true}))
+      {_view, bare} = mount_raw(site, list_block(%{live_visit: true, show_description: false}))
+
+      {_view, chips} =
+        mount_raw(site, list_block(%{live_visit: true, show_languages: true}))
+
+      lines = fn html ->
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s([data-role="doc-list-skeleton"]))
+        |> Enum.at(0)
+        |> LazyHTML.query(~s([class~="h-2.5"]))
+        |> Enum.count()
+      end
+
+      assert lines.(plain) == 2, "a description of two lines"
+      assert lines.(full) == 3, "and the line of facts under it"
+      assert lines.(bare) == 0, "and none when the card draws no description"
+
+      assert roles(chips, "doc-list-skeleton") == 2
+      assert chips =~ "uppercase", "the language chips were left out of the skeleton"
+    end
+
+    # A CARD OF THE AUTHOR'S OWN IS A SIZE THE BLOCK CANNOT KNOW, so its skeleton is theirs too.
+    test "draws the author's own skeleton for the author's own card", %{site: site} do
+      create_component!(
+        site_id: site.id,
+        name: "my-doc-skeleton",
+        template: ~s(<div data-role="mine-pending">pending</div>),
+        attrs: [],
+        active: true
+      )
+
+      {view, first_paint} =
+        mount_raw(
+          site,
+          list_block(%{live_visit: true, skeleton: "my-doc-skeleton", card: "my-doc-skeleton"})
+        )
+
+      assert roles(first_paint, "doc-list-skeleton") == 2
+      assert roles(first_paint, "mine-pending") == 2, "the skeletons were not the author's"
+      assert has_element?(view, ~s([data-role="doc-list-skeleton"] [data-role="mine-pending"]))
+      assert roles(first_paint, "doc-list-loading") == 1
+    end
+
+    # A STREAMED ROW IS DRAWN ONCE, so turning the page replaces the cards instead of patching them:
+    # the skeletons come back over the page the reader was on, and the next page's cards replace them.
+    test "turning the page puts the skeletons back, then the next page's cards", %{site: site} do
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{per_page: 2})
+
+      assert text_of(view, ~s([data-role="doc-list-title"])) == ["A", "B"]
+
+      turned = view |> element(~s(#one [data-role="doc-list-next"])) |> render_click()
+
+      assert roles(turned, "doc-list-skeleton") == 1
+      assert roles(turned, "doc-list-item") == 0
+      assert titles(turned) == []
+
+      assert titles(render_async(view, @async)) == ["C"]
+      assert text_of(view, ~s([data-role="doc-list-position"])) == ["2 / 2"]
+    end
+
+    test "and so does a page the address turned to, whichever way the list was first read", %{
+      site: site
+    } do
+      {view, _first_paint} = mount_raw(site, list_block(%{live_visit: true}))
+
+      assert titles(render_async(view, @async)) == ["A", "B"]
+
+      send(view.pid, {:params, %{"page" => "2"}})
+
+      assert titles(render_async(view, @async)) == ["C"]
+      assert roles(render(view), "doc-list-item") == 1
+    end
+
+    # A SKELETON THAT STAYS IS WORSE THAN NO LIST. Both ways a read in the background can end badly
+    # leave the block drawing its error and the way to ask again.
+    test "a read in the background that fails draws the error, never a skeleton that stays", %{
+      site: site
+    } do
+      kept = refuse!(site, "doc-workspace-list")
+
+      {view, first_paint} = mount_raw(site, list_block(%{live_visit: true}))
+
+      assert roles(first_paint, "doc-list-skeleton") == 2
+
+      failed = render_async(view, @async)
+
+      assert roles(failed, "doc-list-error") == 1
+      assert roles(failed, "doc-notice-retry") == 1
+      assert roles(failed, "doc-list-skeleton") == 0
+      assert roles(failed, "doc-list-loading") == 0
+
+      write_helpers!(site, "doc-workspace-list", kept)
+      recompile!(site, "doc-workspace-list")
+
+      asked_again = view |> element(~s(#one [data-role="doc-notice-retry"])) |> render_click()
+
+      assert roles(asked_again, "doc-list-skeleton") == 2,
+             "asking again does not put the skeletons back while it reads"
+
+      assert titles(render_async(view, @async)) == ["A", "B"]
+    end
+
+    test "a read in the background that dies draws the error too", %{site: site} do
+      helpers =
+        site
+        |> component_row("doc-workspace-list")
+        |> Map.fetch!(:helpers)
+        |> Enum.map(&helper_map/1)
+        |> Enum.map(fn
+          # Only a task has a caller: the GET, which reads in step, is answered with an error.
+          %{name: "fetch"} = helper ->
+            %{
+              helper
+              | args: "_asked",
+                code:
+                  "case Process.get(:\"$callers\") do\n  nil -> {:error, :refused}\n  _task -> exit(:kaput)\nend"
+            }
+
+          helper ->
+            helper
+        end)
+
+      write_helpers!(site, "doc-workspace-list", helpers)
+
+      capture_log(fn ->
+        {view, first_paint} = mount_raw(site, list_block(%{live_visit: true}))
+
+        assert roles(first_paint, "doc-list-skeleton") == 2
+
+        died = render_async(view, @async)
+
+        assert roles(died, "doc-list-error") == 1
+        assert roles(died, "doc-list-skeleton") == 0
+      end)
+    end
+
+    test "a list with nothing to show says so at once, behind no skeleton", %{site: site} do
+      {_view, first_paint} =
+        mount_raw(site, list_block(%{live_visit: true, featured_only: true}))
+
+      assert roles(first_paint, "doc-list-empty") == 1
+      assert roles(first_paint, "doc-list-skeleton") == 0
+    end
+
+    test "a live visit reads no more than any other: the count and the page, for each render", %{
+      site: site
+    } do
+      asked =
+        queries_while(fn ->
+          {view, _first_paint} = mount_raw(site, list_block(%{live_visit: true}))
+          render_async(view, @async)
+        end)
+
+      assert Enum.count(asked, &String.contains?(&1, "mishka_document_workspaces")) == 4,
+             "a load is the count and the page of rows, once for each render"
     end
   end
 
