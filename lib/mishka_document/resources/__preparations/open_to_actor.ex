@@ -50,7 +50,30 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   them.
 
   The statement holds `fragment`s because Ash has no function that tests the elements of an array
-  against patterns, and none that walks down a tree from the pages that name a lock.
+  against patterns, none that walks down a tree from the pages that name a lock, and no
+  relationship from a document to the site's pages.
+
+  WHAT ITS PAGE KEEPS CLOSED is left out as well, in the same statement: a record whose address is
+  answered by a page of the site (`MishkaCmsCore.Runtime.Page`) that the reader may not open is not
+  listed, and one asked for alone is not found. A page counts while it is active and not archived,
+  and answers the documentation's records by the kind its `extra` names under `"record"`:
+  `"docs:document"`, a document's front page, or `"docs:page"`, one page of a document.
+
+    * a document with an address of its own (`path`, `MishkaDocument.Address`) is answered at that
+      address — its front page by the page at `path` that shows `"docs:document"`, its other pages
+      by the page at `path/*section` that shows `"docs:page"`;
+    * a document with no address is answered by the pages of each kind that no document's address
+      claims (`/:lang/docs/:workspace`, `/:lang/docs/:workspace/*section`), and is closed by them
+      only when there is one and every one of them is closed;
+    * a document (`:workspace`), its versions (`:version`) and its clone records (`:lineage`, by
+      its new version's document) are closed with its front page;
+    * a version's front page (`:section`, `front_page`) is closed with its document's front page,
+      and any other page with the page its document's other pages are answered at.
+
+  A page that names no permission opens for anyone; any other opens for a reader holding a name
+  that covers one of its entries, by the same match a record's lock is asked with. The statement
+  is the same whether a page is locked or not, and nothing is read before it to decide. The
+  JSON:API and GraphQL keep to the same rule as the site's pages.
 
   ## Options
 
@@ -66,12 +89,26 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   alias MishkaDocument.WorkspaceVersion
 
   # Where the lock each kind opens with is read, for one asked for alone: the attribute naming the
-  # record that holds it, that record's resource (`nil` for the record's own) and its field.
+  # record that holds it, that record's resource (`nil` for the record's own), its field, and the
+  # kind whose pages answer that record.
   @locks %{
-    workspace: {:id, nil, :permissions},
-    version: {:id, nil, :effective_permissions},
-    lineage: {:new_version_id, WorkspaceVersion, :effective_permissions},
-    section: {:id, nil, :effective_permissions}
+    workspace: {:id, nil, :permissions, :workspace},
+    version: {:id, nil, :effective_permissions, :version},
+    lineage: {:new_version_id, WorkspaceVersion, :effective_permissions, :version},
+    section: {:id, nil, :effective_permissions, :section}
+  }
+
+  # The kinds of record the documentation's pages show (`MishkaDocument.Plugins.PageRecords`), each
+  # with what its page's path adds to a document's own address (`MishkaDocument.Address`).
+  @front_page {"docs:document", ""}
+  @other_page {"docs:page", "/*section"}
+
+  # Where the document a record belongs to is reached from the record.
+  @document %{
+    workspace: [],
+    version: [:workspace],
+    lineage: [:new_version, :workspace],
+    section: [:workspace_version, :workspace]
   }
 
   @impl true
@@ -129,7 +166,11 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   defp keep(query, kind, actor) do
     Ash.Query.before_action(query, fn
       %{tenant: site_id} = query when is_binary(site_id) ->
-        Ash.Query.filter(query, ^visible(kind, site_id, actor))
+        actor = AccessPermissions.with_permissions(actor)
+
+        query
+        |> Ash.Query.filter(^visible(kind, site_id, actor))
+        |> Ash.Query.filter(^served(kind, site_id, actor))
 
       query ->
         query
@@ -310,18 +351,98 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
     do: Regex.replace(~r/[!-\/:-@\[-\^`{-~]/, segment, fn character -> "\\" <> character end)
 
   # ---------------------------------------------------------------------------
+  # The pages that answer a record
+  # ---------------------------------------------------------------------------
+
+  # The records of `kind` whose page `actor` may open on the site `site_id`.
+  defp served(:section, site_id, actor) do
+    document = Map.fetch!(@document, :section)
+    front = closed_by(@front_page, document, site_id, actor)
+    other = closed_by(@other_page, document, site_id, actor)
+
+    Ash.Expr.expr((front_page == true and not (^front)) or (front_page == false and not (^other)))
+  end
+
+  defp served(kind, site_id, actor),
+    do: Ash.Expr.expr(not (^closed_by(@front_page, Map.fetch!(@document, kind), site_id, actor)))
+
+  # Whether the page of `record` that answers the document at `document` is closed to `actor`. A
+  # document with an address is answered by the serving page at that address plus `suffix`; one
+  # with none by the serving pages of `record` no document's address claims, closed only while
+  # there is one and every one of them is closed. A page is closed when it names permissions and
+  # the reader holds none of them, as `opens_by/2` asks of a record's lock. Written as a statement
+  # because a page is a row of core's `pages`, which no relationship of a document reaches.
+  defp closed_by({record, suffix}, document, site_id, actor) do
+    path = Ash.Expr.ref(document, :path)
+    {literals, patterns} = held(actor)
+
+    Ash.Expr.expr(
+      type(
+        fragment(
+          """
+          CASE WHEN ? IS NULL THEN COALESCE((
+            SELECT bool_and(
+                     pg.permissions IS NOT NULL AND pg.permissions <> '{}'
+                     AND NOT EXISTS (
+                       SELECT 1 FROM unnest(pg.permissions) AS held(name)
+                        WHERE held.name NOT LIKE 'admin:api:%'
+                          AND (held.name = ANY(?) OR held.name ~ ANY(?))
+                     ))
+              FROM pages pg
+             WHERE pg.site_id = ? AND pg.active AND pg.archived_at IS NULL
+               AND pg.extra->>'record' = ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM mishka_document_workspaces w
+                  WHERE w.site_id = pg.site_id AND w.path IS NOT NULL
+                    AND (pg.path = w.path OR pg.path = w.path || '/*section')
+               )
+          ), false)
+          ELSE EXISTS (
+            SELECT 1 FROM pages pg
+             WHERE pg.site_id = ? AND pg.active AND pg.archived_at IS NULL
+               AND pg.extra->>'record' = ? AND pg.path = ? || ?
+               AND pg.permissions IS NOT NULL AND pg.permissions <> '{}'
+               AND NOT EXISTS (
+                 SELECT 1 FROM unnest(pg.permissions) AS held(name)
+                  WHERE held.name NOT LIKE 'admin:api:%'
+                    AND (held.name = ANY(?) OR held.name ~ ANY(?))
+               )
+          ) END
+          """,
+          ^path,
+          type(^literals, {:array, :string}),
+          type(^patterns, {:array, :string}),
+          type(^site_id, :uuid),
+          type(^record, :string),
+          type(^site_id, :uuid),
+          type(^record, :string),
+          ^path,
+          type(^suffix, :string),
+          type(^literals, {:array, :string}),
+          type(^patterns, {:array, :string})
+        ),
+        :boolean
+      )
+    )
+  end
+
+  # ---------------------------------------------------------------------------
   # One asked for alone
   # ---------------------------------------------------------------------------
 
+  defp admit(_query, [], _kind, _actor), do: {:ok, []}
+
   defp admit(query, records, kind, actor) do
-    {key, resource, lock} = Map.fetch!(@locks, kind)
+    {key, resource, lock, answered_as} = Map.fetch!(@locks, kind)
+    actor = AccessPermissions.with_permissions(actor)
+    served = served(answered_as, query.tenant, actor)
     keys = Enum.map(records, &Map.get(&1, key))
-    locks = locks(resource || query.resource, lock, keys, query.tenant)
+    locks = locks(resource || query.resource, lock, keys, query.tenant, served)
 
     {:ok, Enum.filter(records, &opens?(locks, Map.get(&1, key), actor))}
   end
 
-  # A record whose lock is not found — its row gone — opens for no one.
+  # A record whose lock is not found — its row gone, or its page closed — opens for no one.
   defp opens?(locks, id, actor) do
     case Map.fetch(locks, id) do
       {:ok, required} -> opens?(required, actor)
@@ -329,13 +450,14 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
     end
   end
 
-  # The lock of each of these records, read as the system: a hook runs before the query's own
-  # loads, and the caller may have selected fields the lock needs away.
-  defp locks(_resource, _lock, [], _tenant), do: %{}
+  # The lock of each of these records whose page is open (`served`), read as the system: a hook runs
+  # before the query's own loads, and the caller may have selected fields the lock needs away.
+  defp locks(_resource, _lock, [], _tenant, _served), do: %{}
 
-  defp locks(resource, lock, ids, tenant) do
+  defp locks(resource, lock, ids, tenant, served) do
     resource
     |> Ash.Query.filter(id in ^Enum.uniq(ids))
+    |> Ash.Query.filter(^served)
     |> Ash.Query.select([:id])
     |> with_field(lock)
     |> Ash.read!(tenant: tenant, authorize?: false, page: false)
