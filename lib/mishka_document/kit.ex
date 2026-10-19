@@ -23,7 +23,7 @@ defmodule MishkaDocument.Kit do
 
   `doc-workspace-card`, `doc-pager`, `doc-notice`, `doc-callout` and `doc-example`. These hold
   nothing and read nothing: they draw what they are handed. The notice is drawn by all six blocks —
-  it is every skeleton, every empty line and every failed read in this kit — and the card is what
+  it is every skeleton but the list's own, every empty line and every failed read in this kit — and the card is what
   `doc-workspace-list` draws a document with unless the author names a card of their own in its
   `card` attribute. The callout and the example are placed by an author inside a page's text, with
   the content editor — `[[component doc-callout tone="tip"]]…[[/component]]` — and drawn by
@@ -423,6 +423,39 @@ defmodule MishkaDocument.Kit do
   Each task is started through `MishkaGervaz.Messages.start_async/4`, which hands it the site and
   the locale the page renders in (`MishkaCmsCore.Runtime.LiveViewHelpers.carry_into_tasks/0`), so a
   link `doc-switcher` builds there with `site_path/2` is the one its template would build.
+  `doc-workspace-list` starts its task with `Phoenix.LiveView.stream_async/4`, which has no such twin,
+  and wraps what it runs in `MishkaGervaz.Messages.in_caller_locale/1`, which is what the twins do.
+
+  ### A list reached by a live navigation
+
+  `doc-workspace-list` reads its first answer in a task as well, for a reader who arrived by a live
+  navigation: a click on a link of the site, or the browser's Back and Forward. The page tells it so
+  with its `live_visit` attribute, and `MishkaDocument.Plugins.LiveVisit` is what gives the page the
+  assign to hand it: a LiveView reads `Phoenix.LiveView.get_connect_params/1` in its own `mount/3`
+  and a live component never, and the client sends `"_live_referer"` with a live navigation and not
+  with the connection that follows a GET. The GET and that connection still draw the cards
+  themselves, so a crawler is served them and a reader who loaded the address is not shown a
+  skeleton; left false, `live_visit` leaves every read in step.
+
+  The list reads how many documents there are, and so how many pages, in step with the page on every
+  visit — one count, which the pager, the empty line and the skeletons all hang on — and only the
+  rows themselves wait for a task. While they do it draws one skeleton for every card the page will
+  hold (`doc-list-skeleton`, in `doc-list-skeletons` inside `doc-list-loading`) and the pager, then
+  streams the cards in behind them. Turning a page does the same, and so does asking again after a
+  failure. A list with nothing in it says so at once.
+
+  A skeleton is drawn with the structure, padding and line heights of the card it stands for, so
+  nothing moves when the cards arrive. The block knows its own card, with a description of two
+  lines. A card an author named in `card` is a size the block cannot know, so `skeleton` names the
+  component each skeleton is drawn with, in the way `card` does for each document: one of the site's
+  own that draws the same card with its text left out, handed nothing. Its height cannot follow the
+  text it replaces, so a card meant to be replaced without a shift gives its description a fixed
+  number of lines (`min-h-[5lh]`) and the skeleton the same.
+
+  The cards are `Phoenix.LiveView.stream/4` rows in a `<.async_result>`: `:loading` is the skeletons,
+  `:failed` is `doc-notice`'s error with its way to ask again, and the stream is drawn inside it with
+  `phx-update="stream"`. A read that returns an error or dies draws the error and never leaves the
+  skeletons up.
 
   `doc-workspace-list` with `show_details` also says, for each document, the version a reader lands
   on — the one marked latest, else the newest published — how many of its pages the visitor may

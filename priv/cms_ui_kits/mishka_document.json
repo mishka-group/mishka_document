@@ -5,7 +5,7 @@
   "components": [
     {
       "name": "doc-workspace-list",
-      "description": "The documents a site publishes, paged, read in the background and streamed in — as cards, or drawn with a card of the author's own.",
+      "description": "The documents a site publishes, paged — as cards, or drawn with a card of the author's own. The cards are in the page's HTML; a reader who arrives by a live navigation sees skeleton cards at once and the cards are streamed in behind them.",
       "type": "media",
       "format": "heex",
       "stateful": true,
@@ -13,7 +13,7 @@
       "precompile": false,
       "required": false,
       "priority": 0,
-      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-workspace-list\"\n  lang={page_lang(@language)}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-list-heading\"\n    class=\"mb-5 text-lg font-bold leading-tight\"\n  >\n    {@heading}\n  </h2>\n\n  <.component\n    :if={@loading}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"loading\"\n    role=\"doc-list-loading\"\n    text={@loading_text}\n  />\n\n  <.component\n    :if={@failed}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"error\"\n    role=\"doc-list-error\"\n    text={@error_text}\n    retry_text={@retry_text}\n    target={@myself}\n  />\n\n  <.component\n    :if={not @loading and not @failed and @total == 0}\n    component_name=\"doc-notice\"\n    site={site_name()}\n    tone=\"empty\"\n    role=\"doc-list-empty\"\n    text={@empty_text}\n  />\n\n  <div\n    :if={not @loading and not @failed}\n    id={\"#{@id}-items\"}\n    phx-update={(@myself && \"stream\") || nil}\n    data-role=\"doc-list-items\"\n    class=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3\"\n  >\n    <div\n      :for={{dom_id, row} <- @streams.documents}\n      id={dom_id}\n      data-role=\"doc-list-item\"\n      lang={row.doc.language}\n      dir={text_direction(row.doc.language)}\n      class=\"h-full\"\n    >\n      <.component\n        :if={trimmed(@card) == \"\"}\n        component_name=\"doc-workspace-card\"\n        site={site_name()}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n        editions={\n          (@show_languages && edition_links(@editions, row.doc, @doc_base, @lang_param)) || []\n        }\n        show_description={@show_description}\n        read_text={@read_text}\n        unavailable_text={@unavailable_text}\n        featured_text={@featured_text}\n        details={row.details}\n        version_text={@version_text}\n        pages_text={@pages_text}\n        one_page_text={@one_page_text}\n        updated_text={@updated_text}\n      />\n\n      <.component\n        :if={trimmed(@card) != \"\"}\n        component_name={@card}\n        site={site_name()}\n        id={\"#{dom_id}-card\"}\n        doc={row.doc}\n        href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n        details={row.details}\n      />\n    </div>\n  </div>\n\n  <.component\n    :if={@show_pager and not @loading and not @failed}\n    component_name=\"doc-pager\"\n    site={site_name()}\n    role=\"doc-list-pager\"\n    page={@page}\n    pages={@pages}\n    base={@base}\n    params={@params}\n    page_param={@page_param}\n    target={@myself}\n    first_text={@first_text}\n    previous_text={@previous_text}\n    next_text={@next_text}\n    last_text={@last_text}\n  />\n</div>",
+      "template": "<div\n  id={@id}\n  {@rest}\n  data-role=\"doc-workspace-list\"\n  lang={page_lang(@language)}\n  dir={text_direction(@language)}\n  class=\"text-[#1b1a18]\"\n>\n  <h2\n    :if={trimmed(@heading) != \"\"}\n    data-role=\"doc-list-heading\"\n    class=\"mb-5 text-lg font-bold leading-tight\"\n  >\n    {@heading}\n  </h2>\n\n  <.async_result assign={@documents}>\n    <:loading>\n      <div data-role=\"doc-list-loading\" aria-busy=\"true\">\n        <div\n          data-role=\"doc-list-skeletons\"\n          class=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3\"\n        >\n          <div :for={_skeleton <- 1..@skeletons//1} data-role=\"doc-list-skeleton\" class=\"h-full\">\n            <.component\n              :if={trimmed(@skeleton) != \"\"}\n              component_name={@skeleton}\n              site={site_name()}\n            />\n\n            <div\n              :if={trimmed(@skeleton) == \"\"}\n              aria-hidden=\"true\"\n              class=\"flex h-full animate-pulse select-none flex-col gap-2 rounded-[18px] border border-[#ecebe6] bg-white p-4 motion-reduce:animate-none\"\n            >\n              <div class=\"flex h-5 items-center\">\n                <div class=\"h-3.5 w-2/3 rounded-full bg-[#ecebe6]\"></div>\n              </div>\n\n              <div :if={@show_description} class=\"text-sm leading-relaxed\">\n                <div :for={width <- [\"w-full\", \"w-5/6\"]} class=\"flex h-lh items-center\">\n                  <div class={[\"h-2.5 rounded-full bg-[#f2f1ec]\", width]}></div>\n                </div>\n              </div>\n\n              <div :if={@show_details} class=\"flex h-4 items-center\">\n                <div class=\"h-2.5 w-1/2 rounded-full bg-[#f2f1ec]\"></div>\n              </div>\n\n              <div :if={@show_languages} class=\"flex flex-wrap gap-1\">\n                <span\n                  :for={code <- [\"en\", \"fa\"]}\n                  class=\"rounded-full border border-transparent bg-[#f2f1ec] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-transparent\"\n                >\n                  {code}\n                </span>\n              </div>\n\n              <span class=\"mt-auto inline-flex items-center gap-1 self-start rounded-full border border-transparent bg-[#ecebe6] px-3 py-1 text-xs font-semibold text-transparent\">\n                {@read_text} <span aria-hidden=\"true\">&rarr;</span>\n              </span>\n            </div>\n          </div>\n        </div>\n        <span class=\"sr-only\">{@loading_text}</span>\n      </div>\n    </:loading>\n\n    <:failed>\n      <.component\n        component_name=\"doc-notice\"\n        site={site_name()}\n        tone=\"error\"\n        role=\"doc-list-error\"\n        text={@error_text}\n        retry_text={@retry_text}\n        target={@myself}\n      />\n    </:failed>\n\n    <.component\n      :if={@total == 0}\n      component_name=\"doc-notice\"\n      site={site_name()}\n      tone=\"empty\"\n      role=\"doc-list-empty\"\n      text={@empty_text}\n    />\n\n    <div\n      id={\"#{@id}-items\"}\n      phx-update={(@myself && \"stream\") || nil}\n      data-role=\"doc-list-items\"\n      class=\"grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3\"\n    >\n      <div\n        :for={{dom_id, row} <- @streams.documents}\n        id={dom_id}\n        data-role=\"doc-list-item\"\n        lang={row.doc.language}\n        dir={text_direction(row.doc.language)}\n        class=\"h-full\"\n      >\n        <.component\n          :if={trimmed(@card) == \"\"}\n          component_name=\"doc-workspace-card\"\n          site={site_name()}\n          doc={row.doc}\n          href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n          editions={edition_links(row.editions, row.doc, @doc_base, @lang_param)}\n          show_description={@show_description}\n          read_text={@read_text}\n          unavailable_text={@unavailable_text}\n          featured_text={@featured_text}\n          details={row.details}\n          version_text={@version_text}\n          pages_text={@pages_text}\n          one_page_text={@one_page_text}\n          updated_text={@updated_text}\n        />\n\n        <.component\n          :if={trimmed(@card) != \"\"}\n          component_name={@card}\n          site={site_name()}\n          id={\"#{dom_id}-card\"}\n          doc={row.doc}\n          href={document_href(@doc_base, row.doc, [], @lang_param, %{})}\n          details={row.details}\n        />\n      </div>\n    </div>\n  </.async_result>\n\n  <.component\n    :if={@show_pager and is_nil(@documents.failed)}\n    component_name=\"doc-pager\"\n    site={site_name()}\n    role=\"doc-list-pager\"\n    page={@page}\n    pages={@pages}\n    base={@base}\n    params={@params}\n    page_param={@page_param}\n    target={@myself}\n    first_text={@first_text}\n    previous_text={@previous_text}\n    next_text={@next_text}\n    last_text={@last_text}\n  />\n</div>",
       "attrs": [
         {
           "name": "heading",
@@ -127,6 +127,14 @@
           }
         },
         {
+          "name": "live_visit",
+          "type": "boolean",
+          "opts": {
+            "default": false,
+            "doc": "True when the reader reached this page by a live navigation, a click on a link of the site or Back and Forward, and the page knows it: its live_visit assign. The cards are then read in the background behind skeleton cards. Left false, they are drawn with the page and are in the HTML a crawler is served."
+          }
+        },
+        {
           "name": "doc_base",
           "type": "any",
           "opts": {
@@ -140,6 +148,14 @@
           "opts": {
             "default": "",
             "doc": "The name of a component to draw each document with, in place of the card this block ships. It is handed doc and href. Left empty, the built-in card is drawn."
+          }
+        },
+        {
+          "name": "skeleton",
+          "type": "string",
+          "opts": {
+            "default": "",
+            "doc": "The component each skeleton card is drawn with, as card is for each document: the name of a component of this site that draws a card the size of the one named in card, so nothing moves when the cards arrive. It is handed nothing. Left empty, the block draws a skeleton of its own card."
           }
         },
         {
@@ -281,7 +297,7 @@
         {
           "name": "mount",
           "args": "socket",
-          "code": "{:ok,\n socket\n |> Phoenix.Component.assign(\n   asked: nil,\n   loading: true,\n   failed: false,\n   page: 1,\n   editions: %{},\n   language: \"\",\n   total: 0,\n   pages: 1\n )\n |> Phoenix.LiveView.stream(:documents, [])}\n"
+          "code": "{:ok,\n socket\n |> Phoenix.Component.assign(\n   asked: nil,\n   documents: Phoenix.LiveView.AsyncResult.loading(),\n   page: 1,\n   language: \"\",\n   total: 0,\n   pages: 1,\n   skeletons: 0\n )\n |> Phoenix.LiveView.stream(:documents, [])}\n"
         },
         {
           "name": "update",
@@ -389,9 +405,24 @@
           "code": "require Ash.Query\n\ncase sort do\n  \"updated\" -> Ash.Query.sort(query, updated_at: :desc)\n  \"newest\" -> Ash.Query.sort(query, inserted_at: :desc)\n  _the_order_an_editor_gave_them -> Ash.Query.sort(query, display_order: :asc, name: :asc)\nend\n"
         },
         {
+          "name": "documents_query",
+          "args": "asked",
+          "code": "# EVERY DOCUMENT THE READER MAY LIST, BEFORE ANY OF THEM IS ORDERED OR CUT TO A PAGE. The count and\n# the page of rows are both read from it, so what is counted is what is listed.\nrequire Ash.Query\n\nquery =\n  MishkaDocument.Workspace\n  |> Ash.Query.for_read(:public_list, %{}, read_as(asked.visitor))\n  |> narrow_language(asked.language)\n\ncase asked.featured_only do\n  true -> Ash.Query.filter(query, featured == true)\n  false -> query\nend\n"
+        },
+        {
+          "name": "documents_count",
+          "args": "asked",
+          "code": "asked\n|> documents_query()\n|> Ash.count(tenant: site_id())\n"
+        },
+        {
+          "name": "counted",
+          "args": "asked",
+          "code": "# HOW MANY DOCUMENTS, HOW MANY PAGES AND WHICH PAGE, read in step with the page on every visit. It is\n# the one cheap read, and the pager, the empty line and the number of skeletons all hang on it, so\n# only the rows themselves wait for a task. A page nobody has is a missing page when the address\n# named it, and is clamped to the last one there is when the pager's buttons asked for it. The\n# answer carries the term it was read for — `listed/3` stores that rather than what was asked, so a\n# clamp settles instead of asking again on the next render.\nwith {:ok, total} <- documents_count(asked) do\n  pages = max(ceil(total / asked.per_page), 1)\n\n  case asked.page > pages and asked.page_in_url do\n    true ->\n      {:missing, asked}\n\n    false ->\n      page = min(asked.page, pages)\n      {:ok, %{asked: %{asked | page: page}, total: total, pages: pages}}\n  end\nend\n"
+        },
+        {
           "name": "documents_page",
-          "args": "asked, page, per_page",
-          "code": "require Ash.Query\n\nquery =\n  MishkaDocument.Workspace\n  |> Ash.Query.for_read(:public_list, %{}, read_as(asked.visitor))\n  |> narrow_language(asked.language)\n  |> sorted(asked.sort)\n  |> Ash.Query.select([\n    :id,\n    :name,\n    :slug,\n    :path,\n    :description,\n    :language,\n    :language_group_id,\n    :featured,\n    :display_order,\n    :updated_at\n  ])\n\nquery =\n  case asked.featured_only do\n    true -> Ash.Query.filter(query, featured == true)\n    false -> query\n  end\n\nquery\n|> Ash.read(\n  tenant: site_id(),\n  page: [limit: per_page, offset: (page - 1) * per_page, count: true]\n)\n|> paged()\n"
+          "args": "asked",
+          "code": "require Ash.Query\n\nasked\n|> documents_query()\n|> sorted(asked.sort)\n|> Ash.Query.select([\n  :id,\n  :name,\n  :slug,\n  :path,\n  :description,\n  :language,\n  :language_group_id,\n  :featured,\n  :display_order,\n  :updated_at\n])\n|> Ash.read(\n  tenant: site_id(),\n  page: [limit: asked.per_page, offset: (asked.page - 1) * asked.per_page, count: false]\n)\n|> paged()\n"
         },
         {
           "name": "editions_of",
@@ -406,47 +437,27 @@
         {
           "name": "handle_event",
           "args": "\"retry\", _params, socket",
-          "code": "{:noreply,\n socket\n |> Phoenix.Component.assign(:asked, nil)\n |> load()}\n"
-        },
-        {
-          "name": "handle_async",
-          "args": ":documents, {:ok, result}, socket",
-          "code": "{:noreply, arrived(socket, result)}\n"
-        },
-        {
-          "name": "handle_async",
-          "args": ":documents, {:exit, _reason}, socket",
-          "code": "# A READ THAT DIED TAKES THE BLOCK'S OWN STATE WITH IT AND NOTHING ELSE. The task is unlinked\n# before it re-raises — see `Phoenix.LiveView.Async.do_async/5` — so the page around this block is\n# still standing, and this is what it draws instead of the list.\n{:noreply, Phoenix.Component.assign(socket, loading: false, failed: true)}\n"
+          "code": "{:noreply,\n socket\n |> Phoenix.Component.assign(:asked, :retry)\n |> load()}\n"
         },
         {
           "name": "asked",
           "args": "assigns",
-          "code": "# EVERYTHING THE READ DEPENDS ON, AS ONE TERM — AND EVERYTHING A ROW IS DRAWN FROM, which is the\n# same term for a reason. It is the argument the task is handed — a plain map rather than the\n# socket, so nothing of LiveView's is copied into another process — and it is also what says\n# whether anything has to be read at all: `update_many/1` runs on every render of the page holding\n# this block, and a block that re-read on each of them would restart its own load whenever\n# something else on the page moved.\n#\n# A STREAMED ROW IS RENDERED ONCE AND NEVER AGAIN. LiveView prunes `stream.inserts` after each\n# render, so `@streams.documents` is empty on every render that is not a fresh load and the rows\n# already on the page are never rebuilt. An attribute the ROWS read — the card they are drawn with,\n# the words inside them, the base their links are built from — therefore cannot reach them by\n# re-rendering, so it goes in here instead: a change to one re-reads and re-streams. Words OUTSIDE\n# the rows (`heading`, `empty_text`, the pager's labels) are free, because those are drawn afresh\n# every render.\n%{\n  visitor: assigns[:current_user],\n  language: asked_language(assigns),\n  sort: trimmed(assigns[:sort]),\n  featured_only: assigns[:featured_only] == true,\n  show_languages: assigns[:show_languages] == true,\n  per_page: positive(assigns[:per_page], 6),\n  page: asked_page(assigns),\n  page_in_url: page_in_url?(assigns),\n  card: trimmed(assigns[:card]),\n  doc_base: trimmed(assigns[:doc_base]),\n  lang_param: trimmed(assigns[:lang_param]),\n  show_description: assigns[:show_description] == true,\n  read_text: trimmed(assigns[:read_text]),\n  featured_text: trimmed(assigns[:featured_text]),\n  show_details: assigns[:show_details] == true,\n  version_text: trimmed(assigns[:version_text]),\n  pages_text: trimmed(assigns[:pages_text]),\n  one_page_text: trimmed(assigns[:one_page_text]),\n  updated_text: trimmed(assigns[:updated_text])\n}\n"
+          "code": "# EVERYTHING THE READ DEPENDS ON, AS ONE TERM — AND EVERYTHING A ROW IS DRAWN FROM, which is the\n# same term for a reason. It is the argument the task is handed — a plain map rather than the\n# socket, so nothing of LiveView's is copied into another process — and it is also what says\n# whether anything has to be read at all: `update_many/1` runs on every render of the page holding\n# this block, and a block that re-read on each of them would restart its own load whenever\n# something else on the page moved.\n#\n# A STREAMED ROW IS RENDERED ONCE AND NEVER AGAIN. LiveView prunes `stream.inserts` after each\n# render, so `@streams.documents` is empty on every render that is not a fresh load and the rows\n# already on the page are never rebuilt. An attribute the ROWS read — the card they are drawn with,\n# the words inside them, the base their links are built from — therefore cannot reach them by\n# re-rendering, so it goes in here instead: a change to one re-reads and re-streams. Words OUTSIDE\n# the rows (`heading`, `empty_text`, the pager's labels) are free, because those are drawn afresh\n# every render.\n%{\n  visitor: assigns[:current_user],\n  language: asked_language(assigns),\n  sort: trimmed(assigns[:sort]),\n  featured_only: assigns[:featured_only] == true,\n  show_languages: assigns[:show_languages] == true,\n  per_page: positive(assigns[:per_page], 6),\n  prefix: trimmed(assigns[:id]),\n  page: asked_page(assigns),\n  page_in_url: page_in_url?(assigns),\n  card: trimmed(assigns[:card]),\n  doc_base: trimmed(assigns[:doc_base]),\n  lang_param: trimmed(assigns[:lang_param]),\n  show_description: assigns[:show_description] == true,\n  read_text: trimmed(assigns[:read_text]),\n  featured_text: trimmed(assigns[:featured_text]),\n  show_details: assigns[:show_details] == true,\n  version_text: trimmed(assigns[:version_text]),\n  pages_text: trimmed(assigns[:pages_text]),\n  one_page_text: trimmed(assigns[:one_page_text]),\n  updated_text: trimmed(assigns[:updated_text])\n}\n"
         },
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# RUN IN THE TASK, so nothing here may touch the socket. A page nobody has is a missing page when\n# the address named it, and is clamped to the last one there is when the pager's buttons asked for\n# it. The answer carries the term it was read for — `arrived/2` stores that rather than what was\n# asked, so a clamp settles instead of asking again on the next render.\nwith {:ok, %{rows: documents, total: total}} <-\n       documents_page(asked, asked.page, asked.per_page) do\n  pages = max(ceil(total / asked.per_page), 1)\n\n  case asked.page > pages and asked.page_in_url do\n    true ->\n      {:missing, asked}\n\n    false ->\n      {page, documents} =\n        case asked.page > pages do\n          false ->\n            {asked.page, documents}\n\n          true ->\n            case documents_page(asked, pages, asked.per_page) do\n              {:ok, %{rows: clamped}} -> {pages, clamped}\n              {:error, _unreadable} -> {pages, []}\n            end\n        end\n\n      editions =\n        ((asked.show_languages or asked.show_details) && editions_of(documents, asked.visitor)) ||\n          %{}\n\n      {:ok,\n       %{\n         asked: %{asked | page: page},\n         page: page,\n         documents: documents,\n         editions: editions,\n         details: (asked.show_details && details_of(documents, editions, asked.visitor)) || %{},\n         language: asked.language,\n         total: total,\n         pages: pages\n       }}\n  end\nend\n"
+          "code": "# THE ROWS, AND NOTHING THE PAGE ALREADY KNOWS. Run in a task on a live visit, so nothing here may\n# touch the socket, and answered in the shape `stream_async` takes: `{:ok, rows, opts}` or\n# `{:error, reason}`. `reset` replaces the cards of the page the reader was on with these.\nwith {:ok, %{rows: documents}} <- documents_page(asked) do\n  editions =\n    ((asked.show_languages or asked.show_details) && editions_of(documents, asked.visitor)) || %{}\n\n  details = (asked.show_details && details_of(documents, editions, asked.visitor)) || %{}\n\n  {:ok, rowed(asked, documents, editions, details), reset: true}\nend\n"
         },
         {
           "name": "arrived",
-          "args": "socket, {:ok, data}",
-          "code": "socket\n|> Phoenix.Component.assign(\n  asked: data.asked,\n  loading: false,\n  failed: false,\n  page: data.page,\n  editions: data.editions,\n  language: data.language,\n  total: data.total,\n  pages: data.pages\n)\n|> Phoenix.LiveView.stream(:documents, rowed(socket, data.documents, data.details), reset: true)\n"
-        },
-        {
-          "name": "arrived",
-          "args": "socket, {:error, _reason}",
-          "code": "socket\n|> Phoenix.Component.assign(loading: false, failed: true, editions: %{}, total: 0, pages: 1)\n|> Phoenix.LiveView.stream(:documents, [], reset: true)\n"
-        },
-        {
-          "name": "arrived",
-          "args": "socket, {:missing, asked}",
-          "code": "socket\n|> Phoenix.Component.assign(asked: asked, loading: false, failed: false)\n|> missing!()\n"
+          "args": "socket, result",
+          "code": "case result do\n  {:ok, rows, opts} ->\n    socket\n    |> Phoenix.Component.assign(:documents, Phoenix.LiveView.AsyncResult.ok(true))\n    |> Phoenix.LiveView.stream(:documents, rows, opts)\n\n  {:error, reason} ->\n    failed(socket, reason)\nend\n"
         },
         {
           "name": "rowed",
-          "args": "socket, rows, details",
-          "code": "prefix =\n  case trimmed(socket.assigns[:id]) do\n    \"\" -> \"doc\"\n    id -> id <> \"-doc\"\n  end\n\nEnum.map(rows, &%{id: prefix <> \"-\" <> to_string(&1.id), doc: &1, details: Map.get(details, &1.id)})\n"
+          "args": "asked, documents, editions, details",
+          "code": "# A ROW CARRIES EVERYTHING ITS CARD IS DRAWN FROM, because it is drawn once and in another process\n# than the one that read it: its details, and the editions its language chips link to.\nprefix =\n  case asked.prefix do\n    \"\" -> \"doc\"\n    id -> id <> \"-doc\"\n  end\n\nEnum.map(documents, fn document ->\n  %{\n    id: prefix <> \"-\" <> to_string(document.id),\n    doc: document,\n    details: Map.get(details, document.id),\n    editions: (asked.show_languages && editions_for(editions, document)) || []\n  }\nend)\n"
         },
         {
           "name": "cold?",
@@ -454,14 +465,34 @@
           "code": "# NO PROCESS AT ALL, WHICH IS NOT THE SAME AS NOT CONNECTED. `connected?/1` answers false twice:\n# on the builder's canvas and the Preview, where `MishkaCmsCore.Runtime.LiveViewHelpers.cold/2`\n# renders this block with no LiveView behind it, and on the first HTTP render of a real page, where\n# there IS a process and the socket connects a moment later. Only the first has nobody to hand a\n# task's answer to; the second must NOT read here, or the page's HTTP response waits for every\n# block on it and then throws the rows away, because the mount that follows reads them again.\nsocket.private[:runtime_cold] == true\n"
         },
         {
+          "name": "inline?",
+          "args": "socket, before, total",
+          "code": "# WHETHER THE ROWS ARE READ IN STEP WITH THE PAGE. They are on the GET, so a crawler and a reader with\n# no JavaScript are served the cards themselves; on the builder's canvas and the Preview, where\n# nobody could be handed a task's answer; and on the first connected mount of a visit that began with\n# that GET, which draws the cards at once rather than a skeleton in their place. A visit that\n# arrived by a live navigation (`live_visit`) and every later read go to a task, except a first read\n# of a list with nothing in it, which has no cards to wait for.\ncold?(socket) or not Phoenix.LiveView.connected?(socket) or\n  (is_nil(before) and (socket.assigns[:live_visit] != true or total == 0))\n"
+        },
+        {
+          "name": "read_rows",
+          "args": "asked, total",
+          "code": "# A LIST WITH NOTHING IN IT HAS NO ROWS TO READ.\ncase total do\n  0 -> {:ok, [], reset: true}\n  _some -> fetch(asked)\nend\n"
+        },
+        {
+          "name": "failed",
+          "args": "socket, reason",
+          "code": "# A READ THAT FAILED DRAWS THE ERROR, NEVER A SKELETON THAT STAYS. A task still running for an earlier\n# term is stopped, or its answer would arrive after this one and draw rows over it.\nsocket\n|> Phoenix.LiveView.cancel_async(:documents)\n|> Phoenix.Component.assign(\n  :documents,\n  Phoenix.LiveView.AsyncResult.failed(Phoenix.LiveView.AsyncResult.loading(), {:error, reason})\n)\n|> Phoenix.LiveView.stream(:documents, [], reset: true)\n"
+        },
+        {
+          "name": "listed",
+          "args": "socket, counts, before",
+          "code": "asked = counts.asked\ntotal = counts.total\nleft = total - (asked.page - 1) * asked.per_page\n\nsocket =\n  Phoenix.Component.assign(socket,\n    asked: asked,\n    page: asked.page,\n    pages: counts.pages,\n    total: total,\n    language: asked.language,\n    skeletons: max(min(asked.per_page, left), 0)\n  )\n\ncase inline?(socket, before, total) do\n  true ->\n    arrived(socket, read_rows(asked, total))\n\n  false ->\n    require Phoenix.LiveView\n\n    # IN THE PAGE'S SITE AND LOCALE: `in_caller_locale/1` hands the task both, as\n    # `MishkaGervaz.Messages.start_async/4` does, so `site_path/2` and `t/1` answer in it what they\n    # answer in the template. `reset` is the loading state, not the cards: it is what puts the\n    # skeleton back over a page that was already drawn, and the rows reset the stream themselves.\n    Phoenix.LiveView.stream_async(\n      socket,\n      :documents,\n      MishkaGervaz.Messages.in_caller_locale(fn -> read_rows(asked, total) end),\n      reset: true\n    )\nend\n"
+        },
+        {
           "name": "load",
           "args": "socket",
-          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] do\n  ^asked ->\n    socket\n\n  before ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case cold?(socket) or is_nil(before) do\n      true ->\n        arrived(socket, fetch(asked))\n\n      false ->\n        socket\n        |> Phoenix.Component.assign(loading: true, failed: false)\n        # IN THE PAGE'S SITE AND LOCALE: `MishkaGervaz.Messages.start_async/4` hands the task both, so\n        # `site_path/2` and `t/1` answer in it what they answer in the template.\n        |> MishkaGervaz.Messages.start_async(:documents, fn -> fetch(asked) end)\n    end\nend\n"
+          "code": "asked = asked(socket.assigns)\n\ncase socket.assigns[:asked] do\n  ^asked ->\n    socket\n\n  before ->\n    socket = Phoenix.Component.assign(socket, :asked, asked)\n\n    case counted(asked) do\n      {:ok, counts} -> listed(socket, counts, before)\n      {:missing, _asked} -> missing!(socket)\n      {:error, reason} -> failed(socket, reason)\n    end\nend\n"
         },
         {
           "name": "edition_links",
           "args": "editions, document, doc_base, lang_param",
-          "code": "# THE CHIPS A CARD DRAWS, prepared here because only this block knows where a document lives.\n#\n# A CHIP ROW SAYS WHAT EXISTS, so an edition this site has no URL for stays in it as a word —\n# `doc_href/5` makes none for a language the site does not publish. That is the truth about it: the\n# translation was written, this site does not serve it.\nEnum.map(editions_for(editions, document), fn edition ->\n  %{\n    language: edition.language,\n    selected: edition.id == document.id,\n    href: document_href(doc_base, edition, [], lang_param, %{})\n  }\nend)\n"
+          "code": "# THE CHIPS A CARD DRAWS, prepared here because only this block knows where a document lives.\n#\n# A CHIP ROW SAYS WHAT EXISTS, so an edition this site has no URL for stays in it as a word —\n# `doc_href/5` makes none for a language the site does not publish. That is the truth about it: the\n# translation was written, this site does not serve it.\nEnum.map(editions, fn edition ->\n  %{\n    language: edition.language,\n    selected: edition.id == document.id,\n    href: document_href(doc_base, edition, [], lang_param, %{})\n  }\nend)\n"
         },
         {
           "name": "details_of",

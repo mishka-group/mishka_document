@@ -433,6 +433,7 @@ defmodule MishkaDocument.Provision do
           site="#{site}"
           id="doc-index"
           current_user={assigns[:current_user]}
+          live_visit={assigns[:live_visit] == true}
           heading="Documentation"
           lang={@page.language}
           per_page={12}
