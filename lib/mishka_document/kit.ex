@@ -398,6 +398,14 @@ defmodule MishkaDocument.Kit do
   streams the cards in behind them. Turning a page does the same, and so does asking again after a
   failure. A list with nothing in it says so at once.
 
+  A skeleton is drawn with the structure, padding and line heights of the card it stands for, so
+  nothing moves when the cards arrive. The block knows its own card, with a description of two
+  lines. A card an author named in `card` is a size the block cannot know, so `skeleton` names the
+  component each skeleton is drawn with, in the way `card` does for each document: one of the site's
+  own that draws the same card with its text left out, handed nothing. Its height cannot follow the
+  text it replaces, so a card meant to be replaced without a shift gives its description a fixed
+  number of lines (`min-h-[5lh]`) and the skeleton the same.
+
   The cards are `Phoenix.LiveView.stream/4` rows in a `<.async_result>`: `:loading` is the skeletons,
   `:failed` is `doc-notice`'s error with its way to ask again, and the stream is drawn inside it with
   `phx-update="stream"`. A read that returns an error or dies draws the error and never leaves the

@@ -437,9 +437,9 @@ defmodule MishkaDocument.KitTest do
     end
 
     # THE ONE COMPONENT THAT CALLS ANOTHER NAMES NONE OF ITS OWN. `doc-workspace-list` draws each
-    # document through whatever component an author puts in its `card` attribute, which is the whole
-    # of that feature: a name this bundle wrote down instead would be a dependency on a kit, and
-    # `dependencies: []` above would be a lie.
+    # document through whatever component an author puts in its `card` attribute, and each skeleton
+    # through the one in `skeleton`, which is the whole of that feature: a name this bundle wrote
+    # down instead would be a dependency on a kit, and `dependencies: []` above would be a lie.
     test "and the only component it calls through an assign is one an author chose" do
       called =
         for component <- components(),
@@ -454,7 +454,7 @@ defmodule MishkaDocument.KitTest do
           component["name"]
         end
 
-      assert called == ["doc-workspace-list"],
+      assert Enum.uniq(called) == ["doc-workspace-list"],
              "the set of components that call another one by assign has changed: #{inspect(called)}"
     end
 

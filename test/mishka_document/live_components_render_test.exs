@@ -3316,17 +3316,46 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {_view, full} = mount_raw(site, list_block(%{live_visit: true, show_details: true}))
       {_view, bare} = mount_raw(site, list_block(%{live_visit: true, show_description: false}))
 
+      {_view, chips} =
+        mount_raw(site, list_block(%{live_visit: true, show_languages: true}))
+
       lines = fn html ->
         html
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(~s([data-role="doc-list-skeleton"]))
         |> Enum.at(0)
-        |> LazyHTML.query("div")
+        |> LazyHTML.query(~s([class~="h-2.5"]))
         |> Enum.count()
       end
 
-      assert lines.(full) == lines.(plain) + 1
-      assert lines.(bare) == lines.(plain) - 2
+      assert lines.(plain) == 2, "a description of two lines"
+      assert lines.(full) == 3, "and the line of facts under it"
+      assert lines.(bare) == 0, "and none when the card draws no description"
+
+      assert roles(chips, "doc-list-skeleton") == 2
+      assert chips =~ "uppercase", "the language chips were left out of the skeleton"
+    end
+
+    # A CARD OF THE AUTHOR'S OWN IS A SIZE THE BLOCK CANNOT KNOW, so its skeleton is theirs too.
+    test "draws the author's own skeleton for the author's own card", %{site: site} do
+      create_component!(
+        site_id: site.id,
+        name: "my-doc-skeleton",
+        template: ~s(<div data-role="mine-pending">pending</div>),
+        attrs: [],
+        active: true
+      )
+
+      {view, first_paint} =
+        mount_raw(
+          site,
+          list_block(%{live_visit: true, skeleton: "my-doc-skeleton", card: "my-doc-skeleton"})
+        )
+
+      assert roles(first_paint, "doc-list-skeleton") == 2
+      assert roles(first_paint, "mine-pending") == 2, "the skeletons were not the author's"
+      assert has_element?(view, ~s([data-role="doc-list-skeleton"] [data-role="mine-pending"]))
+      assert roles(first_paint, "doc-list-loading") == 1
     end
 
     # A STREAMED ROW IS DRAWN ONCE, so turning the page replaces the cards instead of patching them:
