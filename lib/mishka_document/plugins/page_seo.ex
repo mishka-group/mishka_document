@@ -227,7 +227,9 @@ defmodule MishkaDocument.Plugins.PageSeo do
          %Workspace{} = workspace <- read(seo, versions: versions()),
          {version, tree} <- shown(workspace.versions, params["v"], seo.site_id),
          %{id: id} = page <- Address.page_at(tree, wanted),
-         %Section{} = section <- section(id, seo.site_id) do
+         lock =
+           lock_above(page.permissions, page.parent_section_id, Map.new(tree, &{&1.id, &1}), []),
+         %Section{} = section <- section(id, seo.site_id, lock) do
       answer(seo, workspace, %{
         page?: true,
         segments: Map.get(Address.paths(tree), page.id, []),
@@ -240,7 +242,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
         modified: section.last_modified_at,
         seo_tags: page_tags(section.seo_tags, workspace.seo_tags),
         schema: section.schema,
-        permissions: section.effective_permissions
+        permissions: opens_with(lock, section, workspace)
       })
     else
       _nothing_shown -> named_nothing(seo)
@@ -327,21 +329,50 @@ defmodule MishkaDocument.Plugins.PageSeo do
       :parent_section_id,
       :front_page,
       :group_heading,
-      :group_page
+      :group_page,
+      :permissions
     ])
   end
 
   # The page shown, with its text and its lock, read as the system for the reason `read/3` gives.
-  defp section(id, site_id) do
+  defp section(id, site_id, lock) do
     Section
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
     |> Ash.Query.filter(id == ^id)
     |> Ash.Query.select(@section_fields)
-    |> Ash.Query.load([:effective_permissions, :last_modified_at])
+    |> Ash.Query.load(loads(lock))
     |> Ash.read(tenant: site_id, authorize?: false, page: [limit: 1])
     |> case do
       {:ok, %{results: [section | _rest]}} -> section
       _none -> nil
+    end
+  end
+
+  # WHAT THE PAGE OPENS WITH, by the rule `MishkaDocument.Resources.Calculations.EffectivePermissions`
+  # gives: its own lock, else the nearest page above it that names one, else its document's. The
+  # pages read with the version already hold the answer where the page and every page above it are
+  # among them; where one is not — a page in review, or archived — `EffectivePermissions` is asked
+  # with the page.
+  defp loads({:ok, _lock}), do: :last_modified_at
+  defp loads(:unknown), do: [:effective_permissions, :last_modified_at]
+
+  defp opens_with({:ok, []}, _section, workspace), do: List.wrap(workspace.permissions)
+  defp opens_with({:ok, lock}, _section, _workspace), do: lock
+  defp opens_with(:unknown, section, _workspace), do: section.effective_permissions
+
+  defp lock_above([_ | _] = own, _parent_id, _by_id, _seen), do: {:ok, own}
+  defp lock_above(_none, nil, _by_id, _seen), do: {:ok, []}
+
+  defp lock_above(_none, parent_id, by_id, seen) do
+    cond do
+      parent_id in seen ->
+        {:ok, []}
+
+      parent = Map.get(by_id, parent_id) ->
+        lock_above(parent.permissions, parent.parent_section_id, by_id, [parent_id | seen])
+
+      true ->
+        :unknown
     end
   end
 
