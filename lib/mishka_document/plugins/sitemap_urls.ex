@@ -267,7 +267,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       workspace,
       segments,
       section.last_modified_at,
-      PageEditions.listed?(%{section | permissions: section.effective_permissions}, workspace)
+      PageEditions.listed?(section, workspace)
     )
   end
 
@@ -377,7 +377,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
       :permissions,
       :seo_tags
     ])
-    |> Ash.Query.load([:effective_permissions, :last_modified_at])
+    |> Ash.Query.load(:last_modified_at)
     |> SitemapCompiler.stream_rows(actor: nil, tenant: site_id)
   end
 end

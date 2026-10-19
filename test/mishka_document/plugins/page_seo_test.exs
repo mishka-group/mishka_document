@@ -801,6 +801,41 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       end
     end
 
+    # A PAGE'S LOCK IS WORKED OUT FROM THE PAGES THE HEAD READS ANYWAY — the document, its versions
+    # with their pages, and the page: four statements. A page whose parents are not all among them
+    # is asked of `EffectivePermissions` with the page, which reads the rest.
+    test "reads the document, its pages and the page, and nothing about a lock", %{
+      site: site,
+      members: members,
+      install: install,
+      billing: billing
+    } do
+      page!(site, members, "steps", parent_section_id: install.id)
+      page!(site, members, "invoices", parent_section_id: billing.id)
+
+      draft = page!(site, members, "draft", content_review_status: :pending)
+      page!(site, members, "notes", parent_section_id: draft.id)
+
+      read = fn section ->
+        params = %{"lang" => "en", "workspace" => "members", "section" => section}
+        with_queries(fn -> answer(given(site, :section, params)).permissions end)
+      end
+
+      {locks, counts} =
+        ["install", "billing", "install/steps", "billing/invoices"]
+        |> Enum.map(fn section ->
+          {permissions, statements} = read.(section)
+          {permissions, length(statements)}
+        end)
+        |> Enum.unzip()
+
+      assert locks == [["members:read"], ["billing:read"], ["members:read"], ["billing:read"]]
+      assert counts == [4, 4, 4, 4]
+
+      {["members:read"], asked} = read.("notes")
+      assert length(asked) == 7
+    end
+
     test "the head hands them on and keeps a locked one out of an index", %{site: site} do
       locked = head(given(site, :workspace, %{"lang" => "en", "workspace" => "members"}))
 

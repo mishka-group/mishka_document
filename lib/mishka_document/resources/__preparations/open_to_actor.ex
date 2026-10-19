@@ -30,15 +30,26 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   that is not active. A list leaves them out and one asked for alone is not found, as a document's
   own public reads leave out one that is not active.
 
-  WHAT A LIST IS KEPT TO is worked out as it runs, from the site's locked records alone, each lock
-  matched once, and the list's query is filtered by the ids that come out:
+  WHAT A LIST IS KEPT TO is decided in the statement that reads it, by the lock each record opens
+  with, so no read of another record is made to decide it and its pages and its count are of what
+  the reader sees:
 
     * a document (`:workspace`) — by its own lock;
     * a version (`:version`) and a clone record (`:lineage`, by its new version) — by its
       document's;
-    * a page of a document (`:section`) — by the lock it opens with (`effective_permissions`): those
-      in a version holding a page with a lock of its own are each worked out, every other one opens
-      with its document's.
+    * a page of a document (`:section`) — by the lock it opens with
+      (`MishkaDocument.Resources.Calculations.EffectivePermissions`): its own, else the nearest page
+      above it that names one, else its document's.
+
+  A lock that names nothing opens for anyone. Any other opens for a reader holding a name that
+  `AccessPermissions` finds covering one of its entries, and the statement asks the same: the names
+  the reader holds are handed to it as the literals that cover only themselves and the patterns of
+  those with a `*`, and the entries a dashboard request does not count (`admin:api:…`) match none.
+  An actor whose permissions are not loaded has them read once for the read, as the checker reads
+  them.
+
+  The statement holds `fragment`s because Ash has no function that tests the elements of an array
+  against patterns, and none that walks down a tree from the pages that name a lock.
 
   ## Options
 
@@ -52,7 +63,7 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   alias Ash.Error.Forbidden
   alias Ash.Resource.Info, as: ResourceInfo
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
-  alias MishkaDocument.{Section, Workspace, WorkspaceVersion}
+  alias MishkaDocument.WorkspaceVersion
 
   # Where the lock each kind opens with is read, for one asked for alone: the attribute naming the
   # record that holds it, that record's resource (`nil` for the record's own) and its field.
@@ -129,95 +140,174 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   # A list
   # ---------------------------------------------------------------------------
 
-  defp visible(:workspace, site_id, actor) do
-    case closed_documents(site_id, actor) do
-      [] -> true
-      closed -> Ash.Expr.expr(id not in ^closed)
-    end
-  end
+  defp visible(:workspace, _site_id, actor), do: opens_by(actor, Ash.Expr.ref([], :permissions))
 
-  defp visible(:version, site_id, actor) do
-    case closed_documents(site_id, actor) do
-      [] -> true
-      closed -> Ash.Expr.expr(workspace_id not in ^closed)
-    end
-  end
+  defp visible(:version, _site_id, actor),
+    do: opens_by(actor, Ash.Expr.ref([:workspace], :permissions))
 
-  defp visible(:lineage, site_id, actor) do
-    case closed_documents(site_id, actor) do
-      [] -> true
-      closed -> Ash.Expr.expr(new_version.workspace_id not in ^closed)
-    end
-  end
+  defp visible(:lineage, _site_id, actor),
+    do: opens_by(actor, Ash.Expr.ref([:new_version, :workspace], :permissions))
 
   defp visible(:section, site_id, actor) do
-    {opened, closed} = site_id |> worked_out_pages() |> split(actor)
+    document = opens_by(actor, Ash.Expr.ref([:workspace_version, :workspace], :permissions))
 
-    case {closed, closed_documents(site_id, actor)} do
+    case held(actor) do
       {[], []} ->
-        true
+        Ash.Expr.expr(^document and ^not_under_a_lock(site_id))
 
-      {_closed, []} ->
-        Ash.Expr.expr(id not in ^closed)
-
-      {_closed, documents} ->
+      {literals, patterns} ->
         Ash.Expr.expr(
-          id not in ^closed and
-            (id in ^opened or workspace_version.workspace_id not in ^documents)
+          ^under_a_lock_held(site_id, literals, patterns) or
+            (^not_under_a_lock(site_id) and ^document)
         )
     end
   end
 
-  defp closed_documents(site_id, actor) do
-    {_opened, closed} =
-      Workspace
-      |> Ash.Query.filter(not is_nil(permissions) and permissions != [])
-      |> Ash.Query.select([:id, :permissions])
-      |> Ash.read!(tenant: site_id, authorize?: false, page: false)
-      |> Map.new(&{&1.id, &1.permissions})
-      |> split(actor)
+  # THE PAGES THAT OPEN WITH A LOCK OF A PAGE: a page that names a lock, and each page under it that
+  # names none, down to the next page that does — `EffectivePermissions` for every page of the site
+  # at once, by walking down from the pages that name a lock. A page is under another when it names
+  # it as its parent, in the same version; an archived page is neither. Written as a statement
+  # because Ash has no way to walk a tree, and as two literals because `fragment/2` takes nothing
+  # else.
 
-    closed
+  # The pages that open with the lock of none of them: a reader meets their document's alone.
+  defp not_under_a_lock(site_id) do
+    Ash.Expr.expr(
+      type(
+        fragment(
+          """
+          ? NOT IN (
+            WITH RECURSIVE locked(id, version_id) AS (
+              SELECT s.id, s.workspace_version_id
+                FROM mishka_document_sections s
+               WHERE s.site_id = ? AND s.archived_at IS NULL
+                 AND s.permissions IS NOT NULL AND s.permissions <> '{}'
+              UNION ALL
+              SELECT c.id, c.workspace_version_id
+                FROM mishka_document_sections c
+                JOIN locked l ON c.parent_section_id = l.id
+               WHERE c.site_id = ? AND c.archived_at IS NULL
+                 AND c.workspace_version_id = l.version_id
+                 AND (c.permissions IS NULL OR c.permissions = '{}')
+            )
+            SELECT id FROM locked
+          )
+          """,
+          id,
+          type(^site_id, :uuid),
+          type(^site_id, :uuid)
+        ),
+        :boolean
+      )
+    )
   end
 
-  # The lock every page opens with in each version holding a page that names one of its own — the
-  # only versions where a page can open with anything but its document's.
-  defp worked_out_pages(site_id) do
-    versions =
-      Section
-      |> Ash.Query.filter(not is_nil(permissions) and permissions != [])
-      |> Ash.Query.select([:id, :workspace_version_id])
-      |> Ash.read!(tenant: site_id, authorize?: false, page: false)
-      |> Enum.map(& &1.workspace_version_id)
-      |> Enum.uniq()
+  # The pages that open with the lock of one of them, that a reader holding `literals` and
+  # `patterns` is let in by.
+  defp under_a_lock_held(site_id, literals, patterns) do
+    Ash.Expr.expr(
+      type(
+        fragment(
+          """
+          ? IN (
+            WITH RECURSIVE locked(id, version_id, lock) AS (
+              SELECT s.id, s.workspace_version_id, s.permissions
+                FROM mishka_document_sections s
+               WHERE s.site_id = ? AND s.archived_at IS NULL
+                 AND s.permissions IS NOT NULL AND s.permissions <> '{}'
+              UNION ALL
+              SELECT c.id, c.workspace_version_id, l.lock
+                FROM mishka_document_sections c
+                JOIN locked l ON c.parent_section_id = l.id
+               WHERE c.site_id = ? AND c.archived_at IS NULL
+                 AND c.workspace_version_id = l.version_id
+                 AND (c.permissions IS NULL OR c.permissions = '{}')
+            )
+            SELECT id FROM locked
+             WHERE EXISTS (
+               SELECT 1 FROM unnest(lock) AS held(name)
+                WHERE held.name NOT LIKE 'admin:api:%'
+                  AND (held.name = ANY(?) OR held.name ~ ANY(?))
+             )
+          )
+          """,
+          id,
+          type(^site_id, :uuid),
+          type(^site_id, :uuid),
+          type(^literals, {:array, :string}),
+          type(^patterns, {:array, :string})
+        ),
+        :boolean
+      )
+    )
+  end
 
-    case versions do
-      [] ->
-        %{}
+  # What `opens?/2` answers for the lock at `lock`, answered by the statement: a lock that names
+  # nothing opens for anyone; any other opens only for a reader holding what `AccessPermissions`
+  # would find among its names.
+  defp opens_by(actor, lock) do
+    case held(actor) do
+      {[], []} ->
+        Ash.Expr.expr(is_nil(^lock) or ^lock == [])
 
-      versions ->
-        Section
-        |> Ash.Query.filter(workspace_version_id in ^versions)
-        |> Ash.Query.select([:id])
-        |> Ash.Query.load(:effective_permissions)
-        |> Ash.read!(tenant: site_id, authorize?: false, page: false)
-        |> Map.new(&{&1.id, &1.effective_permissions})
+      {literals, patterns} ->
+        Ash.Expr.expr(
+          is_nil(^lock) or ^lock == [] or
+            type(
+              fragment(
+                "EXISTS (SELECT 1 FROM unnest(?) AS lock(name) WHERE lock.name NOT LIKE 'admin:api:%' AND (lock.name = ANY(?) OR lock.name ~ ANY(?)))",
+                type(^lock, {:array, :string}),
+                type(^literals, {:array, :string}),
+                type(^patterns, {:array, :string})
+              ),
+              :boolean
+            )
+        )
     end
   end
 
-  # The ids of these records the reader may open, and those it may not. Each distinct lock is
-  # matched once.
-  defp split(locks, actor) do
-    answers =
-      locks
-      |> Map.values()
-      |> Enum.uniq()
-      |> Map.new(&{&1, opens?(&1, actor)})
+  # The names `actor` holds, as `AccessPermissions` reads them (`with_permissions/1`, then each
+  # permission's name), told apart into those that cover only themselves and those with a wildcard,
+  # which are written as the pattern of the names they cover: a `*` covers one segment, the last
+  # one the rest of the name.
+  defp held(nil), do: {[], []}
 
-    Enum.reduce(locks, {[], []}, fn {id, required}, {opened, closed} ->
-      if Map.fetch!(answers, required), do: {[id | opened], closed}, else: {opened, [id | closed]}
-    end)
+  defp held(actor) do
+    names =
+      actor
+      |> AccessPermissions.with_permissions()
+      |> Map.get(:permissions)
+      |> List.wrap()
+      |> Enum.flat_map(fn
+        %{name: name} when is_binary(name) -> [name]
+        _other -> []
+      end)
+      |> Enum.uniq()
+
+    {literals, wildcards} = Enum.split_with(names, &(not String.contains?(&1, "*")))
+    {literals, wildcards |> Enum.map(&pattern/1) |> Enum.uniq()}
   end
+
+  defp pattern(name) do
+    segments = String.split(name, ":")
+    last = List.last(segments)
+
+    body =
+      segments
+      |> Enum.drop(-1)
+      |> Enum.map(fn
+        "*" -> "[^:]*"
+        segment -> literal(segment)
+      end)
+      |> Kernel.++([if(last == "*", do: ".*", else: literal(last))])
+      |> Enum.join(":")
+
+    "^" <> body <> "$"
+  end
+
+  # An ASCII punctuation mark is escaped, so it matches itself; anything else matches itself as it is.
+  defp literal(segment),
+    do: Regex.replace(~r/[!-\/:-@\[-\^`{-~]/, segment, fn character -> "\\" <> character end)
 
   # ---------------------------------------------------------------------------
   # One asked for alone

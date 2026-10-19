@@ -2570,10 +2570,10 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           render_async(view, @async)
         end)
 
-      # One load reads the documents that name a lock of their own — what the list is kept to for its
-      # visitor — then the page of rows and its count: three per render, two renders.
-      assert Enum.count(asked, &String.contains?(&1, "mishka_document_workspaces")) == 6,
-             "a load is the locked documents, the page of rows and its count, once for each render"
+      # One load reads the page of rows and its count: two per render, two renders. What the list is
+      # kept to for its visitor is in the statements themselves, so no document is asked for its lock.
+      assert Enum.count(asked, &String.contains?(&1, "mishka_document_workspaces")) == 4,
+             "a load is the page of rows and its count, once for each render"
     end
 
     # AND A CHANGE TO WHAT THE ROWS ARE DRAWN FROM RE-STREAMS THEM. A streamed row is rendered once
