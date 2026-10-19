@@ -2669,6 +2669,190 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # WHAT A DOCUMENTATION PAGE ASKS THE DATABASE FOR, counted off the repo's telemetry. A visit renders
+  # a page twice — the GET and the connected mount — so every count here is two renders' worth, and
+  # the reads that only check who may open a record are left out of it (`permission_read?/1`): they
+  # are the permission check's, not the block's, and a block that reads once reads once whatever the
+  # check costs.
+  describe "the reads of a documentation page" do
+    defp asked_while(site, blocks) do
+      queries_while(fn ->
+        {view, _first_paint} = mount_raw(site, blocks)
+        render_async(view, @async)
+      end)
+    end
+
+    defp permission_read?(sql), do: String.contains?(sql, ~s("permissions"::text[] IS NULL))
+
+    defp reads_of(queries, table),
+      do:
+        Enum.count(
+          queries,
+          &(String.contains?(&1, ~s(FROM "#{table}")) and not permission_read?(&1))
+        )
+
+    defp block(name, attrs), do: %{"name" => name, "id" => name, "attrs" => attrs}
+
+    defp fronted_attrs(params),
+      do: %{path: "/fronted/docs", lang_param: "", params: params}
+
+    test "doc-switcher reads the pages of all the versions it offers in one read", %{site: site} do
+      fronted!(site, path: "/fronted/docs")
+
+      blocks = [block("doc-switcher", fronted_attrs(%{"section" => "install"}))]
+
+      assert site |> asked_while(blocks) |> reads_of("mishka_document_sections") == 2,
+             "the page being read and the same page in the other versions were read apart"
+
+      {:ok, view, _html} = mount_blocks(site, blocks)
+
+      assert text_of(view, ~s([data-role="doc-switcher-version"] span:first-child)) ==
+               ["1.0.0", "0.9.0"]
+    end
+
+    test "and the pages of the version shown alone when it offers no versions", %{site: site} do
+      fronted!(site, path: "/fronted/docs")
+
+      blocks = [
+        block(
+          "doc-switcher",
+          Map.put(fronted_attrs(%{"section" => "install"}), :show, "language")
+        )
+      ]
+
+      assert site |> asked_while(blocks) |> reads_of("mishka_document_sections") == 2
+
+      {:ok, view, _html} = mount_blocks(site, blocks)
+      assert text_of(view, ~s([data-role="doc-switcher-version"])) == []
+    end
+
+    test "doc-section leaves a front page's change out of its read, and a page's in", %{
+      site: site
+    } do
+      %{document: document, front: front} = fronted!(site, path: "/fronted/docs")
+      Ash.Seed.update!(document, %{updated_at: ~U[2026-02-01 00:00:00Z]})
+      Ash.Seed.update!(front, %{updated_at: ~U[2026-05-01 00:00:00Z]})
+
+      front_asked = asked_while(site, [block("doc-section", fronted_attrs(%{}))])
+
+      refute Enum.any?(front_asked, &String.contains?(&1, "latest_note_change_at")),
+             "the front page is dated by its document, so its notes were asked when they changed"
+
+      {:ok, view, _html} = mount_blocks(site, [block("doc-section", fronted_attrs(%{}))])
+      assert %{datetime: ["2026-02-01T00:00:00Z"]} = updated(view)
+
+      page_asked =
+        asked_while(site, [block("doc-section", fronted_attrs(%{"section" => "install"}))])
+
+      assert Enum.count(page_asked, &String.contains?(&1, "latest_note_change_at")) == 2,
+             "a page is dated by its notes, one read of them for each render"
+
+      {:ok, view, _html} =
+        mount_blocks(site, [block("doc-section", fronted_attrs(%{"section" => "install"}))])
+
+      assert %{datetime: [_changed], version: ["v1.0.0"]} = updated(view)
+    end
+
+    test "doc-section reads the text of its notes only to draw them", %{site: site} do
+      %{version: version} = manual!(site)
+      page = page!(site, version, title: "Long one", slug: "long-one", order_position: 4)
+      note!(site, page, title: "First", order_position: 0, content: "<p>First body.</p>")
+
+      attrs = %{workspace: "mishka-cms", params: %{"section" => "long-one"}}
+
+      notes =
+        &Enum.filter(&1, fn sql -> String.contains?(sql, ~s(FROM "mishka_document_notes")) end)
+
+      drawn_asked = asked_while(site, [block("doc-section", attrs)])
+      assert [_, _] = notes.(drawn_asked)
+      assert Enum.all?(notes.(drawn_asked), &String.contains?(&1, ~s("content")))
+
+      hidden = Map.put(attrs, :show_notes, false)
+      hidden_asked = asked_while(site, [block("doc-section", hidden)])
+      assert [_, _] = notes.(hidden_asked)
+      refute Enum.any?(notes.(hidden_asked), &String.contains?(&1, ~s("content")))
+
+      {:ok, shown, _html} = mount_blocks(site, [block("doc-section", attrs)])
+      assert text_of(shown, ~s([data-role="doc-note-title"])) == ["First"]
+      assert text_of(shown, ~s([data-role="doc-note-body"])) == ["First body."]
+
+      {:ok, view, _html} = mount_blocks(site, [block("doc-section", hidden)])
+      assert text_of(view, ~s([data-role="doc-section-note"])) == []
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Long one"]
+    end
+
+    test "doc-toc reads the text of the page only for the headings it lists", %{site: site} do
+      %{version: version} = manual!(site)
+
+      page =
+        page!(site, version,
+          title: "Long one",
+          slug: "long-one",
+          order_position: 4,
+          content: "<h2>Why</h2><p>Because.</p><h2>How</h2><p>Like this.</p>"
+        )
+
+      note!(site, page, title: "A note", order_position: 0)
+
+      attrs = %{workspace: "mishka-cms", params: %{"section" => "long-one"}}
+
+      # THE PAGES OF THE VERSION, then the page itself, for each of the two renders.
+      assert site
+             |> asked_while([block("doc-toc", attrs)])
+             |> reads_of("mishka_document_sections") ==
+               4
+
+      {:ok, view, _html} = mount_blocks(site, [block("doc-toc", attrs)])
+      assert text_of(view, ~s([data-role="doc-toc-link"])) == ["Why", "How", "A note"]
+
+      notes_only = Map.put(attrs, :show_headings, false)
+
+      notes_asked = asked_while(site, [block("doc-toc", notes_only)])
+      assert reads_of(notes_asked, "mishka_document_sections") == 2
+      assert reads_of(notes_asked, "mishka_document_notes") == 2
+
+      {:ok, view, _html} =
+        mount_blocks(site, [block("doc-toc", Map.put(notes_only, :min_entries, 1))])
+
+      assert text_of(view, ~s([data-role="doc-toc-link"])) == ["A note"]
+    end
+
+    test "and reads nothing for a table of contents that lists nothing", %{site: site} do
+      %{version: version} = manual!(site)
+      page = page!(site, version, title: "Long one", slug: "long-one", order_position: 4)
+      note!(site, page, title: "A note", order_position: 0)
+
+      attrs = %{
+        workspace: "mishka-cms",
+        show_headings: false,
+        show_notes: false,
+        min_entries: 0,
+        params: %{"section" => "long-one"}
+      }
+
+      asked = asked_while(site, [block("doc-toc", attrs)])
+
+      assert reads_of(asked, "mishka_document_sections") == 0
+      assert reads_of(asked, "mishka_document_notes") == 0
+
+      {:ok, view, _html} = mount_blocks(site, [block("doc-toc", attrs)])
+      assert text_of(view, ~s([data-role="doc-toc-link"])) == []
+    end
+
+    test "the four blocks of a page read the pages of its version six times a render between them",
+         %{site: site} do
+      fronted!(site, path: "/fronted/docs")
+
+      blocks =
+        for name <- ~w(doc-sidebar doc-section doc-toc doc-switcher),
+            do: block(name, fronted_attrs(%{"section" => "install"}))
+
+      # sidebar one, section two (the list and the page), toc two (the list and the page), switcher
+      # one — each for two renders.
+      assert site |> asked_while(blocks) |> reads_of("mishka_document_sections") == 12
+    end
+  end
+
   # THE BUILDER'S PREVIEW AND ITS CANVAS RENDER A COMPONENT WITH NO PROCESS AT ALL —
   # `MishkaCmsCore.Runtime.LiveViewHelpers.cold/2` — where `Phoenix.LiveView.Async` starts no task
   # at all, so a block that only ever read in one would draw an author its skeleton and never

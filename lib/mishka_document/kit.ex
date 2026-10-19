@@ -345,6 +345,14 @@ defmodule MishkaDocument.Kit do
   to its approved pages — and always through the public reads, never by a raw id. That is what keeps
   a draft version out of a URL somebody typed.
 
+  What a block reads is what it draws. `doc-switcher` reads the approved pages of every version it
+  offers in one read, and of the version shown alone when it offers none; `doc-section` reads a
+  page's notes with their text only when it draws them, and the two aggregates behind
+  `last_modified_at` only for a page that is not the front page, which is dated by its document;
+  `doc-toc` reads a page's text only to list its headings and the page at all only to list its
+  headings or its notes. `MishkaDocument.Plugins.PageSeo` reads the approved pages of the version
+  it shows and no other's.
+
   ## When a block reads in step, and when in the background
 
   Five of the six read their FIRST answer in step with the page, on both of a visit's renders: the
