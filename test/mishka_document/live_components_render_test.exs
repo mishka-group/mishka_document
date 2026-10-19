@@ -2109,6 +2109,104 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
+  # A LINK TO ANOTHER PAGE OF THE SITE IN A PAGE'S TEXT OR IN ONE OF ITS NOTES NAVIGATES WITH
+  # LIVEVIEW, with the attributes `<.link navigate>` writes. They are put on the way out, after the
+  # scrub, so a page written before they existed draws them too and its stored text never holds one.
+  describe "links to other pages of the site in a page's text and its notes" do
+    defp linked_text(site) do
+      ~s(<p>Read <a href="/cms">Mishka CMS</a>, the <a href="/chelekom/docs/button" class="strong">button</a>, ) <>
+        ~s(<a href="#h-x">a heading</a>, <a href="https://example.com/docs">an example</a> and ) <>
+        ~s(<a href="/uploads/a.pdf">the PDF</a>. Back to <a href="/docs/mishka-cms/links#h-x">this page</a>, ) <>
+        ~s(on to <a href="/docs/mishka-cms/installation#h-x">another</a> or <a href="http://#{site.host}/blog">our blog</a>.</p>)
+    end
+
+    defp linked_manual!(site) do
+      %{version: version} = manual!(site)
+
+      page =
+        page!(site, version,
+          title: "Links",
+          slug: "links",
+          order_position: 9,
+          content: linked_text(site)
+        )
+
+      note!(site, page, title: "Aside", content: linked_text(site))
+      page
+    end
+
+    defp linked_attrs,
+      do: %{workspace: "mishka-cms", lang_param: "", params: %{"section" => "links"}}
+
+    test "navigate in the text and in its notes, and the rest stay plain links", %{site: site} do
+      page = linked_manual!(site)
+
+      {:ok, view, _html} = mount_page(site, "doc-section", linked_attrs())
+
+      for role <- ~w(doc-section-body doc-note-body) do
+        live = ~s([data-role="#{role}"] a[data-phx-link="redirect"][data-phx-link-state="push"])
+        plain = ~s|[data-role="#{role}"] a:not([data-phx-link])|
+
+        assert hrefs(view, live) ==
+                 ["/cms", "/chelekom/docs/button", "/docs/mishka-cms/installation#h-x", "/blog"]
+
+        assert hrefs(view, plain) ==
+                 [
+                   "#h-x",
+                   "https://example.com/docs",
+                   "/uploads/a.pdf",
+                   "/docs/mishka-cms/links#h-x"
+                 ]
+
+        assert hrefs(view, ~s([data-role="#{role}"] a.strong[data-phx-link])) ==
+                 ["/chelekom/docs/button"]
+      end
+
+      stored =
+        MishkaDocument.Section
+        |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
+        |> Ash.Query.filter(id == ^page.id)
+        |> Ash.read_one!(tenant: site.id)
+
+      refute stored.content =~ "data-phx-link"
+      assert stored.content =~ ~s(href="http://#{site.host}/blog")
+    end
+
+    test "are navigating links in the first paint too, which a crawler is served", %{site: site} do
+      linked_manual!(site)
+
+      {_view, first_paint} =
+        mount_raw(site, [%{"name" => "doc-section", "id" => "one", "attrs" => linked_attrs()}])
+
+      live =
+        first_paint
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s([data-role="doc-section-body"] a[data-phx-link="redirect"]))
+        |> Enum.flat_map(&LazyHTML.attribute(&1, "href"))
+
+      assert live == [
+               "/cms",
+               "/chelekom/docs/button",
+               "/docs/mishka-cms/installation#h-x",
+               "/blog"
+             ]
+    end
+
+    test "leave a fragment of the page being read to the browser, at whatever address it is read",
+         %{site: site} do
+      linked_manual!(site)
+      live = ~s([data-role="doc-section-body"] a[data-phx-link="redirect"])
+
+      {:ok, here, _html} = mount_page(site, "doc-section", linked_attrs())
+      refute "/docs/mishka-cms/links#h-x" in hrefs(here, live)
+
+      {:ok, elsewhere, _html} =
+        mount_page(site, "doc-section", Map.put(linked_attrs(), :doc_base, "/handbook"))
+
+      assert "/docs/mishka-cms/links#h-x" in hrefs(elsewhere, live)
+    end
+  end
+
   # THE TRAIL CAN END WITH THE PAGE ITSELF, as a word marked as the current page — and then a page
   # at the top of its document has a trail too. Left off, the trail is the pages above it alone.
   describe "doc-section's crumb_current" do

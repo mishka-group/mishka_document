@@ -161,7 +161,8 @@ defmodule MishkaDocument.Kit do
   A page's body and each of its notes are scrubbed with `HtmlSanitizeEx.html5/1`, the scrub a page's
   text is stored through, and drawn with `rich_content/1`, so a component the author placed in them
   with the content editor is drawn there as that component (`MishkaCmsCore.Runtime.ContentComponents`),
-  and a code block keeps the classes it was highlighted with.
+  and a code block keeps the classes it was highlighted with. The scrub is also where a link to
+  another page of the site is made to navigate with LiveView, below.
 
   After the scrub, `doc-section` draws each code block in a window: a head holding the block's
   language, read off its `language-x` class, and a `<button type="button">` that copies its code,
@@ -175,6 +176,34 @@ defmodule MishkaDocument.Kit do
   id, and a `doc-code-foot` under the code holds the `doc-code-expand` button that shows all of it,
   saying `expand_text` — `%{count}` is its number of lines — and then `collapse_text`. The copy
   button copies the whole code either way.
+
+  ### Links to other pages of the site
+
+  A link in a page's text or in one of its notes that leads to another page of the site navigates
+  with LiveView. `doc-section` writes it with the attributes `<.link navigate>` writes,
+  `data-phx-link="redirect"` and `data-phx-link-state="push"`, so a click changes the page in place
+  instead of loading a new one. It is done in the pass that scrubs the text on its way out, on what
+  the scrub kept, so nothing takes the attributes off again, and the text is read once; a text with
+  no link to change comes out as `HtmlSanitizeEx.html5/1` writes it. The text is stored as it was
+  written, so every page already written draws them.
+
+  A link is made live when its `href` is a path from the site's root — `/cms`,
+  `/chelekom/docs/button?v=2#props` — or an address in full on the site's own host, which is written
+  as the path it is. The path is read the way the router reads it, with its dot segments and
+  percent-encoding resolved. It is left as it is when it is:
+
+    * a fragment of the page being read, `/docs/button#props` on `/docs/button`, which the browser
+      scrolls to; a fragment alone (`#props`) is never a page;
+    * `//elsewhere`, a relative path, a query alone, or an address with a space, a backslash or a
+      control character in it;
+    * a file, a last segment with an extension (`.pdf`, `.xml`, `.gz`; a number after a dot, as in
+      `/docs/1.2.0`, is none), or a route that is not a page: `/admin`, `/api`, `/assets`, `/fonts`,
+      `/images`, `/uploads`, `/webhooks`, `/sitemap…`, `/feed`, `/feeds`, `/_preview`, `/oban`,
+      `/gql` and `/install`;
+    * a link with a `target` other than `_self`, a `download`, `rel="external"`, or a
+      `data-phx-link` of its own.
+
+  Every other attribute of the link is kept, in its place.
 
   ### What plugins add to a page
 

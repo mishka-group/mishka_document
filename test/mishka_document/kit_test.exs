@@ -892,9 +892,9 @@ defmodule MishkaDocument.KitTest do
       assert sources["args"] == "html, source"
 
       assert read["code"] =~
-               ~s|example_sources(clean(section.rendered_content), "section/\#{section.id}")|
+               ~s|example_sources(clean(section.rendered_content, links), "section/\#{section.id}")|
 
-      assert notes["code"] =~ ~s|example_sources(clean(note.content), "note/\#{note.id}")|
+      assert notes["code"] =~ ~s|example_sources(clean(note.content, links), "note/\#{note.id}")|
 
       preview = File.read!("lib/mishka_document_web/live/example_preview.ex")
 
