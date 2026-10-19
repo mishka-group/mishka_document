@@ -6,7 +6,8 @@ defmodule MishkaDocumentWeb.Api.Json.LockedRecordsTest do
   @moduledoc """
   The public JSON API keeps a locked document, its versions and its pages to whoever their page
   opens for (`MishkaDocument.Resources.Preparations.OpenToActor`): a list leaves out what its caller
-  may not open, and asking for one of them is refused as forbidden. A document opens with its own
+  may not open, and asking for one of them is answered as an id nothing is stored at is: a 404
+  `not_found`, never a 403. A document opens with its own
   permissions, a version and a clone record with its document's, and a page with its own, else its
   nearest parent page's, else its document's. A locked page takes a bookmark, and a locked document
   a follow, from no one else (`MishkaDocument.Resources.Validations.OpenToActor`).
@@ -68,7 +69,7 @@ defmodule MishkaDocumentWeb.Api.Json.LockedRecordsTest do
     }
   end
 
-  test "a locked document and its versions are left out, and forbidden alone", ctx do
+  test "a locked document and its versions are left out, and not found alone", ctx do
     assert ids(fetch(@documents, nil)) == ids_of([ctx.guide])
     assert ids(fetch(@documents, ctx.writer)) == ids_of([ctx.guide])
     assert ids(fetch(@documents, ctx.editor)) == ids_of([ctx.handbook, ctx.guide])
@@ -76,8 +77,10 @@ defmodule MishkaDocumentWeb.Api.Json.LockedRecordsTest do
     assert ids(fetch(@versions, nil)) == ids_of([ctx.open])
     assert ids(fetch(@versions, ctx.editor)) == ids_of([ctx.locked, ctx.open])
 
-    assert fetch("#{@documents}/#{ctx.handbook.id}", nil).status == 403
-    assert fetch("#{@versions}/#{ctx.locked.id}", ctx.writer).status == 403
+    assert_not_found(@documents, ctx.handbook.id, nil)
+    assert_not_found(@documents, ctx.handbook.id, ctx.writer)
+    assert_not_found(@versions, ctx.locked.id, ctx.writer)
+    assert fetch("#{@documents}/#{ctx.handbook.id}", ctx.editor).status == 200
     assert fetch("#{@versions}/#{ctx.locked.id}", ctx.editor).status == 200
   end
 
@@ -90,13 +93,13 @@ defmodule MishkaDocumentWeb.Api.Json.LockedRecordsTest do
     assert ids(fetch(at_version, nil)) == []
     assert ids(fetch(at_version, ctx.writer)) == ids_of([ctx.desk, ctx.style])
 
-    assert fetch("#{@pages}/#{ctx.style.id}", ctx.editor).status == 403
+    assert_not_found(@pages, ctx.style.id, ctx.editor)
     assert fetch("#{@pages}/#{ctx.style.id}", ctx.writer).status == 200
-    assert fetch("#{@pages}/#{ctx.start.id}", nil).status == 403
+    assert_not_found(@pages, ctx.start.id, nil)
     assert fetch("#{@pages}/#{ctx.intro.id}", nil).status == 200
   end
 
-  test "a locked document's clone records are left out, and forbidden alone",
+  test "a locked document's clone records are left out, and not found alone",
        %{site: site} = ctx do
     locked = clone!(site, ctx.handbook, ctx.locked)
     open = clone!(site, ctx.guide, ctx.open)
@@ -105,7 +108,7 @@ defmodule MishkaDocumentWeb.Api.Json.LockedRecordsTest do
     assert ids(fetch("#{@lineage}/recent", ctx.editor)) == ids_of([locked, open])
     assert ids(fetch("#{@lineage}/source-version/#{ctx.locked.id}", ctx.writer)) == []
 
-    assert fetch("#{@lineage}/#{locked.id}", ctx.writer).status == 403
+    assert_not_found(@lineage, locked.id, ctx.writer)
     assert fetch("#{@lineage}/#{locked.id}", ctx.editor).status == 200
   end
 
@@ -220,6 +223,21 @@ defmodule MishkaDocumentWeb.Api.Json.LockedRecordsTest do
   end
 
   defp fetch(path, token), do: make_api_request(path, %{}, method: :get, headers: bearer(token))
+
+  # A record the reader may not open answers what an id nothing is stored at answers: a 404
+  # `not_found`, with nothing to tell the two apart.
+  defp assert_not_found(collection, id, token) do
+    refused = fetch("#{collection}/#{id}", token)
+    missing = fetch("#{collection}/#{Ash.UUID.generate()}", token)
+
+    assert error_of(refused) == error_of(missing)
+    assert error_of(refused)["code"] == "not_found"
+  end
+
+  defp error_of(%{status: 404, resp_body: body}) do
+    assert [error] = Jason.decode!(body)["errors"]
+    Map.take(error, ["status", "code", "title"])
+  end
 
   defp write(path, type, attributes, token) do
     make_api_request(path, %{"type" => type, "attributes" => attributes},

@@ -109,8 +109,14 @@ defmodule MishkaDocument.OpenToActorTest do
             tenant: ctx.site.id
           )
 
-        assert match?({:ok, _}, result) == visible?(actor, record.lock),
-               "#{inspect(record.lock)} for #{inspect(Enum.map(actor.permissions, & &1.name))}"
+        held = inspect(Enum.map(actor.permissions, & &1.name))
+
+        if visible?(actor, record.lock) do
+          assert {:ok, _document} = result, "#{inspect(record.lock)} for #{held}"
+        else
+          assert {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} = result,
+                 "#{inspect(record.lock)} for #{held}"
+        end
       end
     end
   end

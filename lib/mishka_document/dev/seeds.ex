@@ -615,7 +615,7 @@ defmodule MishkaDocument.Dev.Seeds do
     # site has none at its slug. "Internal handbook" names `admin:dashboard:document:section` and its
     # pages follow it; in "Team guide", "Pay and leave" names it alone and "Meeting notes" says
     # `noindex, follow`; "Release notes archive" says `noindex, follow` and its pages follow it, but
-    # "Latest release" says `index, follow` and wins. A closed page sends a guest to sign in, answers
+    # "Latest release" says `index, follow` and wins. A closed page answers a guest and
     # `viewer@<site>.test` with a 404 and opens for `editor@<site>.test`, who holds the name
     # (`seed_role_accounts/2` above), and for `admin@<site>.test`. A noindex page opens for everyone
     # and stays out of the sitemap. After the documentation, not before it: written first, they would
