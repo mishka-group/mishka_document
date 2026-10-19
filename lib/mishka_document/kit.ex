@@ -266,14 +266,19 @@ defmodule MishkaDocument.Kit do
       nothing is a dash, and a table with no rows says `empty_text`.
     * `%{kind: :list, title: nil, description: nil, items: [fact]}` — facts, one a row.
 
-  Each tab is a link to the page with its id under `tab_param` — `?tab=props` — and the page's
-  other URL keys; the text is shown when the URL names no tab a plugin added. Every panel is drawn,
-  the ones not shown `hidden`, and changing tabs reads nothing again. Every element says what it is
-  in its `data-role`: `doc-extras`, `doc-extra-badges`, `doc-extra-badge`, `doc-extra-command`,
-  `doc-extra-link`, `doc-extra-text`, `doc-extra-label`, `doc-extra-value`, `doc-tabs`, `doc-tab`
-  (`aria-current` on the one shown), `doc-tab-panel`, `doc-extra-table`, `doc-extra-list`,
-  `doc-extra-row`, `doc-extra-item`, `doc-extra-blank`, `doc-extra-pending`, `doc-tab-pending` and
-  `doc-tab-failed`.
+  Each tab is a button, and carries in `data-href` the address of the page with its id under
+  `tab_param` — `?tab=props` — and the page's other URL keys; the text is shown when the URL names no
+  tab a plugin added. Every panel is drawn, the ones not shown `hidden`. Pressing a tab sends
+  `doc-section` its own `open_tab` event, which changes the tab shown from what the block already
+  holds: no navigation, no `handle_params/3` of the page's LiveView, and nothing read or asked again.
+  The `doc-tabs` hook, mounted on the tab bar, writes the pressed tab's address over the address
+  bar's as the same history entry, so a reload or a shared link opens that tab. A URL that asks for
+  another tab moves the tab shown to it, and the block drawn again with the URL it had keeps the tab
+  pressed. Every element says what it is in its `data-role`: `doc-extras`, `doc-extra-badges`,
+  `doc-extra-badge`, `doc-extra-command`, `doc-extra-link`, `doc-extra-text`, `doc-extra-label`,
+  `doc-extra-value`, `doc-tabs`, `doc-tab` (`aria-current` on the one shown), `doc-tab-panel`,
+  `doc-extra-table`, `doc-extra-list`, `doc-extra-row`, `doc-extra-item`, `doc-extra-blank`,
+  `doc-extra-pending`, `doc-tab-pending` and `doc-tab-failed`.
 
   A `pending` topic — on a tab, or on the answer as `pending: %{topic: "…"}` — is a
   `Phoenix.PubSub` topic on `MishkaCmsCore.PubSub` the plugin announces the end of its fetch on.
@@ -326,6 +331,11 @@ defmodule MishkaDocument.Kit do
   `aria-current="page"` into it only when it lies outside. The position is saved at most once a
   frame from a passive scroll listener, and not while the block draws no entries. With no scrolling
   box the hook does nothing. It writes `scrollTop` alone: no class, no style attribute, no markup.
+
+  The `doc-tabs` hook keeps the address bar in step with the tab pressed. `doc-section` mounts it on
+  its tab bar, under the name `browser_name/2` gives it; one listener there reads the pressed tab's
+  `data-href` and writes it with `history.replaceState/3`, keeping the history state LiveView put
+  there. It writes no class, no style attribute and no markup.
 
   ### The stylesheet
 
