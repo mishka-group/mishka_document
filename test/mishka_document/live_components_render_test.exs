@@ -4531,7 +4531,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert text_of(view, ~s([data-role="doc-tabs"] [data-role="doc-tab"])) ==
                ["Documentation", "Props", "CLI", "Pending"]
 
-      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+      assert tab_addresses(view) == [
                "/mishka/docs/breadcrumb",
                "/mishka/docs/breadcrumb?tab=props",
                "/mishka/docs/breadcrumb?tab=cli",
@@ -4609,7 +4609,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert open_panels(view) == ["props"]
 
-      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+      assert tab_addresses(view) == [
                "/mishka/docs/breadcrumb?utm=feed",
                "/mishka/docs/breadcrumb?tab=props&utm=feed",
                "/mishka/docs/breadcrumb?tab=cli&utm=feed",
@@ -4637,6 +4637,117 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert_received {:page_extras_asked, %{page: %{slug: "menu"}}}
     end
 
+    # A TAB IS A BUTTON THAT ASKS THE BLOCK FOR NOTHING BUT THE TAB SHOWN: the page, its notes and
+    # every tab's rows were read for the first paint, and pressing one changes which is drawn
+    # without reading them again, asking the plugin again, or leaving the LiveView.
+    test "shows the tab pressed from what it already holds, and reads nothing for it", %{
+      site: site
+    } do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site)
+      flush_asks()
+
+      assert view |> drawn(~s([data-role="doc-tab"])) |> LazyHTML.attribute("type") ==
+               ["button", "button", "button", "button"]
+
+      press_tab(view, "props")
+
+      assert shown_tab(view) == ["props"]
+      assert open_panels(view) == ["props"]
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               [""]
+
+      assert text_of(view, panel("props", ~s(td[data-column="name"] code))) == [
+               "color",
+               "<script>"
+             ]
+
+      press_tab(view, "cli")
+
+      assert shown_tab(view) == ["cli"]
+      assert open_panels(view) == ["cli"]
+
+      press_tab(view, "documentation")
+
+      assert shown_tab(view) == ["documentation"]
+      assert open_panels(view) == []
+
+      assert view |> drawn(~s([data-role="doc-section-body"])) |> LazyHTML.attribute("hidden") ==
+               []
+
+      refute_received {:page_extras_asked, _again}
+    end
+
+    test "answers a tab no plugin added, or one that is not text, with the page's own text",
+         %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"tab" => "props"})
+      assert shown_tab(view) == ["props"]
+
+      view |> element("#one-tab-props") |> render_click(%{"tab" => "nothing"})
+      assert shown_tab(view) == ["documentation"]
+
+      press_tab(view, "cli")
+      assert shown_tab(view) == ["cli"]
+
+      view |> element("#one-tab-props") |> render_click(%{"tab" => ["props"]})
+      assert shown_tab(view) == ["documentation"]
+    end
+
+    test "keeps the tab pressed while the URL stays as it was, and follows the URL when it changes",
+         %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"utm" => "feed"})
+      press_tab(view, "props")
+
+      flush_asks()
+      send(view.pid, {:params, %{"section" => "breadcrumb", "utm" => "feed"}})
+
+      assert shown_tab(view) == ["props"]
+      assert open_panels(view) == ["props"]
+
+      send(view.pid, {:params, %{"section" => "breadcrumb", "tab" => "cli", "utm" => "feed"}})
+
+      assert shown_tab(view) == ["cli"]
+
+      send(view.pid, {:params, %{"section" => "breadcrumb", "utm" => "feed"}})
+
+      assert shown_tab(view) == ["documentation"]
+
+      press_tab(view, "props")
+      send(view.pid, {:params, %{"section" => "menu"}})
+
+      assert text_of(view, ~s([data-role="doc-section-title"])) == ["Menu"]
+      assert shown_tab(view) == ["documentation"]
+    end
+
+    # THE ADDRESS BAR FOLLOWS A PRESS in the browser, by the `doc-tabs` hook, from the address each
+    # tab carries.
+    test "draws its tab bar for the hook that keeps the address bar in step", %{site: site} do
+      grouped!(site)
+      PageExtras.answer!(&with_tabs/1)
+
+      {:ok, view, _html} = mount_breadcrumb(site, %{"utm" => "feed"})
+
+      nav = drawn(view, ~s([data-role="doc-tabs"]))
+      assert LazyHTML.attribute(nav, "id") == ["one-tabs"]
+      assert LazyHTML.attribute(nav, "phx-hook") == [String.capitalize(site.name) <> "DocTabs"]
+
+      assert tab_addresses(view) == [
+               "/mishka/docs/breadcrumb?utm=feed",
+               "/mishka/docs/breadcrumb?tab=props&utm=feed",
+               "/mishka/docs/breadcrumb?tab=cli&utm=feed",
+               "/mishka/docs/breadcrumb?tab=pending&utm=feed"
+             ]
+    end
+
     test "on a document's landing, tells the plugin there is no page and hides the contents under a tab",
          %{site: site} do
       grouped!(site)
@@ -4655,7 +4766,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
              |> drawn(~s([data-role="doc-section-landing"] > [data-role="doc-tabs"]))
              |> Enum.count() == 1
 
-      assert hrefs(view, ~s([data-role="doc-tab"])) == [
+      assert tab_addresses(view) == [
                "/mishka/docs",
                "/mishka/docs?tab=props",
                "/mishka/docs?tab=cli",
@@ -4718,9 +4829,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert view |> drawn(~s([data-role="doc-extra-pending"])) |> Enum.count() == 0
       assert view |> drawn(~s([data-role="doc-tab"])) |> Enum.count() == 4
 
-      assert hrefs(view, ~s([data-role="doc-tab"][data-tab="cli"])) == [
-               "/mishka/docs/breadcrumb?tab=cli"
-             ]
+      assert view
+             |> drawn(~s([data-role="doc-tab"][data-tab="cli"]))
+             |> LazyHTML.attribute("data-href") == ["/mishka/docs/breadcrumb?tab=cli"]
     end
 
     test "says what it could not fetch once the wait is over, and a tab the plugin says failed",
@@ -4824,6 +4935,17 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   end
 
   defp panel(id, selector), do: ~s([data-role="doc-tab-panel"][data-tab="#{id}"] #{selector})
+
+  defp tab_addresses(view) do
+    view
+    |> drawn(~s([data-role="doc-tab"]))
+    |> LazyHTML.attribute("data-href")
+  end
+
+  defp press_tab(view, id) do
+    view |> element("#one-tab-#{id}") |> render_click()
+    render_async(view, @async)
+  end
 
   defp shown_tab(view) do
     view

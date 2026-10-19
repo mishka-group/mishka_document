@@ -594,9 +594,45 @@ defmodule MishkaDocument.KitTest do
              "the bundle's directory is not in the package, so a hex install has nothing to read"
     end
 
-    test "ships exactly three hooks: the code windows', the examples' and the contents'" do
+    test "ships exactly four hooks: the code windows', the examples', the contents' and the tabs'" do
       assert Enum.map(bundle()["js_hooks"], & &1["name"]) ==
-               ["doc-code-copy", "doc-example", "doc-sidebar-scroll"]
+               ["doc-code-copy", "doc-example", "doc-sidebar-scroll", "doc-tabs"]
+    end
+
+    # THE ADDRESS BAR FOLLOWS A TAB PRESSED. The press itself is `doc-section`'s own event, so the
+    # page is neither navigated nor read again; the hook `doc-section` mounts on its tab bar writes
+    # the address the pressed tab carries over the one in the address bar, as the same history entry,
+    # so a reload or a shared link opens that tab and the back button still leaves the page.
+    test "ships the hook doc-section mounts on its tab bar to keep the address bar in step" do
+      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-tabs"))
+      content = hook["content"]
+
+      assert hook["format"] == "js"
+      assert hook["active"] == true
+      assert content =~ "export default DocTabs;"
+      assert content =~ ~s|tab.getAttribute("data-href")|
+      assert content =~ "window.history.replaceState(window.history.state"
+      assert content =~ "url.origin !== window.location.origin"
+      assert content =~ ~s|this.el.addEventListener("click", this.onClick);|
+      assert content =~ ~s|this.el.removeEventListener("click", this.onClick);|
+
+      refute content =~
+               ~r/pushState|setAttribute|innerHTML|insertAdjacentHTML|\.style\b|classList/
+
+      section = Enum.find(components(), &(&1["name"] == "doc-section"))
+      tabs_hook = Enum.find(section["helpers"], &(&1["name"] == "tabs_hook"))
+      bar = Enum.find(section["helpers"], &(&1["name"] == "doc_tab_bar"))
+
+      assert tabs_hook["code"] =~
+               "MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name("
+
+      assert tabs_hook["code"] =~ ~s(name: "doc-tabs")
+      assert bar["code"] =~ ~S|id={"#{@id}-tabs"}|
+      assert bar["code"] =~ "phx-hook={tabs_hook()}"
+      assert bar["code"] =~ ~s|phx-click="open_tab"|
+      assert bar["code"] =~ "phx-target={@target}"
+      refute bar["code"] =~ "patch="
+      assert length(Regex.scan(~r/target=\{@myself\}/, section["template"])) == 2
     end
 
     # THE CONTENTS KEEP THEIR PLACE ACROSS PAGES. A live navigation draws the next page with the box
