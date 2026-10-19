@@ -17,8 +17,8 @@ defmodule MishkaDocument.LiveLinksTest do
   import Phoenix.Component
   import Phoenix.LiveViewTest, only: [rendered_to_string: 1]
 
-  @helpers ~w(clean live_nodes live_attrs live_anchor? live_target live_written live_here?
-              live_page?)
+  @helpers ~w(clean live_nodes live_attrs live_kind live_anchor? live_target live_written
+              live_here? live_page? address_key)
 
   # THE PAGE BEING READ, AND THE HOST OF THE SITE, as `doc-section` hands them.
   @links %{current: "/chelekom/docs/button", host: "docs.example.test"}
@@ -134,6 +134,102 @@ defmodule MishkaDocument.LiveLinksTest do
           ~s(<blockquote><p>See <em><a href="/d">D</a></em></p></blockquote>)
 
       assert live_hrefs(html) == ["/a", "/b", "/c", "/d"]
+    end
+  end
+
+  # THE PAGES A LINK MAY PATCH TO are named by `links.patch`, the addresses of the pages of the document
+  # being read written as its contents write them; the front page is not one of them.
+  describe "a link to another page of the document being read" do
+    defp patching(addresses),
+      do: Map.put(@links, :patch, MapSet.new(addresses, &helpers().address_key(&1)))
+
+    defp patch_links,
+      do: patching(["/chelekom/docs/badge", "/chelekom/docs/badge?v=2", "/fa/docs/راهنما"])
+
+    defp kinds(html, links) do
+      for attributes <- attributes(live(html, links)),
+          {"data-phx-link", kind} <- attributes,
+          do: kind
+    end
+
+    test "is written as <.link patch> writes it" do
+      assigns = %{}
+
+      patched =
+        rendered_to_string(
+          ~H|<p><.link patch="/chelekom/docs/badge" class="strong">Link</.link></p>|
+        )
+
+      ours =
+        live(~s(<p><a href="/chelekom/docs/badge" class="strong">Link</a></p>), patch_links())
+
+      assert [patch_attributes] = attributes(patched)
+      assert [attributes] = attributes(ours)
+      assert Enum.sort(attributes) == Enum.sort(patch_attributes)
+    end
+
+    test "is one however it is written: fragment, trailing slash, encoding, query order" do
+      for href <- [
+            "/chelekom/docs/badge",
+            "/chelekom/docs/badge/",
+            "/chelekom/docs/badge#props",
+            "/chelekom/docs/%62adge",
+            "/chelekom/docs/./badge",
+            "/chelekom/docs/x/../badge",
+            "/chelekom/docs/badge?v=2",
+            "/fa/docs/راهنما",
+            "/fa/docs/%D8%B1%D8%A7%D9%87%D9%86%D9%85%D8%A7",
+            "http://docs.example.test/chelekom/docs/badge"
+          ] do
+        assert kinds(anchor(href), patch_links()) == ["patch"], "#{href} did not patch"
+      end
+
+      keyed = patching(["/docs/a?lang=fa&v=2"])
+
+      for href <- ["/docs/a?v=2&lang=fa", "/docs/a?lang=fa&v=2#x"] do
+        assert kinds(anchor(href), keyed) == ["patch"], "#{href} did not patch"
+      end
+    end
+
+    test "navigates when it leads to another page, another version or another key" do
+      for href <- [
+            "/chelekom/docs",
+            "/chelekom/docs/button",
+            "/chelekom/docs/badge?v=1",
+            "/chelekom/docs/badge?v=2&utm=feed",
+            "/chelekom/docs/badge?utm=feed",
+            "/cms",
+            "/cms/docs/badge",
+            "/blog/2026/10/post"
+          ] do
+        assert kinds(anchor(href), patch_links()) == ["redirect"], "#{href} did not navigate"
+      end
+    end
+
+    test "navigates when no page is named, which is every link before the view has joined" do
+      assert kinds(anchor("/chelekom/docs/badge"), @links) == ["redirect"]
+      assert kinds(anchor("/chelekom/docs/badge"), Map.put(@links, :patch, nil)) == ["redirect"]
+      assert kinds(anchor("/chelekom/docs/badge"), patching([])) == ["redirect"]
+    end
+
+    test "is still left as it is when it leads off the site or to the page being read" do
+      for href <- [
+            "https://example.com/chelekom/docs/badge",
+            "#props",
+            "/chelekom/docs/button#x",
+            "mailto:a@b.c"
+          ] do
+        assert live(anchor(href), patch_links()) == scrubbed(anchor(href)), "#{href} was changed"
+      end
+    end
+
+    test "keeps the rest of the link as it was" do
+      html =
+        ~s(<p><a href="/chelekom/docs/badge#props" class="link" title="Badge" rel="nofollow">Badge</a></p>)
+
+      assert live(html, patch_links()) ==
+               ~s(<p><a href="/chelekom/docs/badge#props" class="link" title="Badge" rel="nofollow" ) <>
+                 ~s(data-phx-link="patch" data-phx-link-state="push">Badge</a></p>)
     end
   end
 

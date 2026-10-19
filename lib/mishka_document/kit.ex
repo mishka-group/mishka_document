@@ -177,12 +177,49 @@ defmodule MishkaDocument.Kit do
   saying `expand_text` — `%{count}` is its number of lines — and then `collapse_text`. The copy
   button copies the whole code either way.
 
+  ### Moving between the pages of a document
+
+  A link to another page of the document being read is a `<.link patch>`, once the page's LiveView has
+  joined: the LiveView stays, its `handle_params/3` runs for the new address, and what the blocks draw
+  changes in place — the contents, the page's pager and breadcrumb, the links of the version switch,
+  the text of the page in the text's own links. These are the links of `doc-sidebar`, of the pager
+  (`doc-section-prev`, `doc-section-next`) and the breadcrumb (`doc-section-crumb`) of `doc-section`,
+  and the links in a page's text and notes that lead to another page of the same document in the
+  version being read, written the way the contents write them. Every other link navigates: the
+  document's front page and its landing, which are served by another page of the site than the pages
+  under them; a page of another document, another version (`?v=`) or another language; and a link of
+  a block pinned to a document by its `workspace`, which may sit on any page. Until the LiveView has
+  joined every link navigates, because a patch pressed before then makes the LiveView client load
+  the address that is open again, and a navigation loads the one pressed; the HTTP response draws
+  `data-phx-link="redirect"` and the join draws `data-phx-link="patch"`.
+
+  On a patch each block keeps what it holds of the document and reads only what the new page needs.
+  The blocks tell a patch from another read by the address: it differs from the one they read for in
+  the page alone, and the document, version and reader are the same.
+
+    * `doc-sidebar` reads nothing. It finds the page among the pages it holds, moves
+      `aria-current` and the open branch to it, and keeps the filter the reader typed. Its entries
+      are keyed, so only the entries that change are sent.
+    * `doc-section` reads the page and its notes, and asks `document:page:extras` for the page. A page
+      the document it holds does not have — one published since — reads the document again.
+    * `doc-toc` reads the page's text, for its headings, and its notes, and keeps the entries drawn
+      until the new ones arrive.
+    * `doc-switcher` reads nothing: it makes the links of the version switch, the banner and the
+      languages again for the new page, from the pages of every version it read for the document.
+
+  The `doc-sidebar-scroll` and `doc-page-scroll` hooks (below) keep the contents in place and bring the
+  new page's top into view. `doc-sidebar`'s `link_click` is a JS command run when one of its links is
+  pressed — `JS.exec("phx-remove", to: "#drawer")` closes the drawer the contents sit in, which a patch
+  does not remount.
+
   ### Links to other pages of the site
 
   A link in a page's text or in one of its notes that leads to another page of the site navigates
   with LiveView. `doc-section` writes it with the attributes `<.link navigate>` writes,
   `data-phx-link="redirect"` and `data-phx-link-state="push"`, so a click changes the page in place
-  instead of loading a new one. It is done in the pass that scrubs the text on its way out, on what
+  instead of loading a new one; one that leads to another page of the same document, in the version
+  being read, is written with the attributes `<.link patch>` writes, `data-phx-link="patch"`, once
+  the LiveView has joined. It is done in the pass that scrubs the text on its way out, on what
   the scrub kept, so nothing takes the attributes off again, and the text is read once; a text with
   no link to change comes out as `HtmlSanitizeEx.html5/1` writes it. The text is stored as it was
   written, so every page already written draws them.
@@ -330,7 +367,16 @@ defmodule MishkaDocument.Kit do
   the position saved for that block and document in `sessionStorage`, then scrolls the entry marked
   `aria-current="page"` into it only when it lies outside. The position is saved at most once a
   frame from a passive scroll listener, and not while the block draws no entries. With no scrolling
-  box the hook does nothing. It writes `scrollTop` alone: no class, no style attribute, no markup.
+  box the hook does nothing. It writes `scrollTop` alone: no class, no style attribute, no markup. A
+  patch to another page of the document keeps the box and its position and moves `aria-current` to
+  another entry, which the hook scrolls into the box in the same way.
+
+  The `doc-page-scroll` hook brings the top of a page into view when a patch draws another one.
+  `doc-section` mounts it on the article it draws a page in, with the page's id as `data-page`. When
+  LiveView reports a patch in its `phx:navigate` event and the page drawn is another since the last
+  one, the window scrolls to the top, or to the element the address's fragment names; a back or a
+  forward navigation is left to LiveView, which puts the window where that entry left it. It writes
+  the window's scroll position alone.
 
   The `doc-tabs` hook keeps the address bar in step with the tab pressed. `doc-section` mounts it on
   its tab bar, under the name `browser_name/2` gives it; one listener there reads the pressed tab's

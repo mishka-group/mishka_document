@@ -594,9 +594,15 @@ defmodule MishkaDocument.KitTest do
              "the bundle's directory is not in the package, so a hex install has nothing to read"
     end
 
-    test "ships exactly four hooks: the code windows', the examples', the contents' and the tabs'" do
+    test "ships exactly five hooks: the code windows', the examples', the contents', the tabs' and the page's" do
       assert Enum.map(bundle()["js_hooks"], & &1["name"]) ==
-               ["doc-code-copy", "doc-example", "doc-sidebar-scroll", "doc-tabs"]
+               [
+                 "doc-code-copy",
+                 "doc-example",
+                 "doc-sidebar-scroll",
+                 "doc-tabs",
+                 "doc-page-scroll"
+               ]
     end
 
     # THE ADDRESS BAR FOLLOWS A TAB PRESSED. The press itself is `doc-section`'s own event, so the
@@ -633,6 +639,76 @@ defmodule MishkaDocument.KitTest do
       assert bar["code"] =~ "phx-target={@target}"
       refute bar["code"] =~ "patch="
       assert length(Regex.scan(~r/target=\{@myself\}/, section["template"])) == 2
+    end
+
+    # A PATCH TO ANOTHER PAGE OF THE DOCUMENT KEEPS THE PAGE'S LIVEVIEW, so nothing scrolls the window
+    # to the new page's top unless something does: the hook `doc-section` mounts on the article it
+    # draws a page in, which LiveView's `phx:navigate` event tells of a patch.
+    test "ships the hook doc-section mounts on its article to bring a patched page's top into view" do
+      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-page-scroll"))
+      content = hook["content"]
+
+      assert hook["format"] == "js"
+      assert hook["active"] == true
+      assert content =~ "export default DocPageScroll;"
+      assert content =~ ~s|window.addEventListener("phx:navigate", this.onNavigate);|
+      assert content =~ ~s|window.removeEventListener("phx:navigate", this.onNavigate);|
+      assert content =~ ~s|this.el.getAttribute("data-page")|
+      assert content =~ "changed && detail.patch && !detail.pop"
+      assert content =~ "window.scrollTo({ top: 0, left: 0, behavior: \"instant\" })"
+
+      refute content =~
+               ~r/pushState|replaceState|setAttribute|innerHTML|insertAdjacentHTML|\.style\b|classList/
+
+      section = Enum.find(components(), &(&1["name"] == "doc-section"))
+      page_hook = Enum.find(section["helpers"], &(&1["name"] == "page_hook"))
+
+      assert page_hook["code"] =~
+               "MishkaCmsCore.Runtime.Compilers.JavaScriptCompiler.browser_name("
+
+      assert page_hook["code"] =~ ~s(name: "doc-page-scroll")
+      assert section["template"] =~ ~S|id={"#{@id}-article"}|
+      assert section["template"] =~ "phx-hook={page_hook()}"
+      assert section["template"] =~ "data-page={@section.id}"
+    end
+
+    test "scrolls the contents to the entry a patch makes current" do
+      hook = Enum.find(bundle()["js_hooks"], &(&1["name"] == "doc-sidebar-scroll"))
+
+      assert hook["content"] =~ ~s|this.el.querySelector(ACTIVE) !== this.active|
+      assert hook["content"] =~ "this.active = active;"
+    end
+
+    # EVERY LINK TO A PAGE OF THE DOCUMENT IS WRITTEN BY A HELPER that decides whether it patches or
+    # navigates, so no template says `navigate=` or `patch=` of its own for them.
+    test "writes the links to the pages of a document through link_attrs/4, never navigate= or patch=" do
+      for name <- ~w(doc-sidebar doc-section) do
+        component = Enum.find(components(), &(&1["name"] == name))
+        helper = Enum.find(component["helpers"], &(&1["name"] == "link_attrs"))
+
+        assert helper["args"] == "href, segments, patch?, live?"
+        assert helper["code"] =~ "[patch: href]"
+        assert helper["code"] =~ "[navigate: href]"
+        assert helper["code"] =~ "patch? and live? and segments != []"
+
+        refute component["template"] =~ "navigate=", "#{name} writes a navigation of its own"
+        refute component["template"] =~ "patch=", "#{name} writes a patch of its own"
+        assert component["template"] =~ ~r/<\.link\s+:if=\{link\b/
+      end
+
+      sidebar = Enum.find(components(), &(&1["name"] == "doc-sidebar"))
+      assert sidebar["template"] =~ ":key={item.section.id}"
+      assert sidebar["template"] =~ "phx-click={@link_click}"
+      assert Enum.any?(sidebar["attrs"], &(&1["name"] == "link_click"))
+    end
+
+    test "joins before it patches: every block decides from the socket it is drawn on" do
+      for name <- ~w(doc-sidebar doc-section) do
+        component = Enum.find(components(), &(&1["name"] == name))
+        update = Enum.find(component["helpers"], &(&1["name"] == "update"))
+
+        assert update["code"] =~ "Phoenix.LiveView.connected?(socket)", "#{name} never asks"
+      end
     end
 
     # THE CONTENTS KEEP THEIR PLACE ACROSS PAGES. A live navigation draws the next page with the box
@@ -922,7 +998,7 @@ defmodule MishkaDocument.KitTest do
     test "names every example doc-section draws by the rule the preview page reads it by" do
       section = Enum.find(components(), &(&1["name"] == "doc-section"))
       sources = Enum.find(section["helpers"], &(&1["name"] == "example_sources"))
-      read = Enum.find(section["helpers"], &(&1["name"] == "read_page"))
+      read = Enum.find(section["helpers"], &(&1["name"] == "page_read"))
       notes = Enum.find(section["helpers"], &(&1["name"] == "note_blocks"))
 
       assert sources["args"] == "html, source"
