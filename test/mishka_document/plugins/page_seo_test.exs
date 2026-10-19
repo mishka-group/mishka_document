@@ -190,6 +190,32 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
     end
   end
 
+  # The SQL of every query the repo ran while `fun` ran, each with the number of rows it returned.
+  defp rows_while(fun) do
+    handler = "page-seo-rows-#{System.unique_integer([:positive])}"
+    test = self()
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:mishka_document, :repo, :query],
+        fn _event, _measurements, meta, _config ->
+          rows =
+            case meta.result do
+              {:ok, %{num_rows: rows}} -> rows
+              _unread -> nil
+            end
+
+          send(test, {handler, {meta.query, rows}})
+        end,
+        nil
+      )
+
+    _answered = fun.()
+    :telemetry.detach(handler)
+    drain(handler, [])
+  end
+
   describe "a document's front page" do
     for mode <- ~w(prefix_others prefix_all) do
       test "is the document's own head, in #{mode}", %{site: site} do
@@ -415,6 +441,29 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
       |> create_shown_note!(@march, content_review_status: :pending)
 
       assert modified(site) == iso(@january)
+    end
+
+    test "reads the pages of the version it shows and no other's", %{site: site, latest: latest} do
+      page!(site, latest, "upgrade", title: "Upgrade")
+
+      for {asked, shown} <- [{nil, 2}, {"1.0.0", 1}] do
+        params =
+          Map.merge(
+            %{"lang" => "en", "workspace" => "guide", "section" => "install"},
+            (asked && %{"v" => asked}) || %{}
+          )
+
+        reads = rows_while(fn -> answer(given(site, :section, params)) end)
+
+        tree =
+          for {sql, rows} <- reads,
+              String.contains?(sql, ~s(FROM "mishka_document_sections")),
+              not String.contains?(sql, ~s("content")),
+              do: rows
+
+        assert tree == [shown],
+               "the pages of the version shown (#{shown}) were read with another version's"
+      end
     end
 
     test "is the page in the version `?v=` names", %{site: site} do

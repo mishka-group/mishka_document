@@ -23,9 +23,10 @@ defmodule MishkaDocument.Plugins.PageSeo do
   One read, through `:public_list` as `doc-section` reads it, on the page's site, as the system: the
   active document whose own address the page is at, else the one the `workspace` capture names, in
   the page's language. A slug names only a document with no address of its own: one that has an
-  address is read there and nowhere else, so `/docs/<its slug>` names nothing. For one of its pages it brings its published versions and, in each, the approved
-  pages as a tree; the version shown is the one `?v=` names, else the one marked latest, else the
-  newest published, and the page is the one at the address the `section` capture holds —
+  address is read there and nowhere else, so `/docs/<its slug>` names nothing. It brings the
+  document's published versions, and the approved pages of the one shown as a tree — the version
+  shown is the one `?v=` names, else the one marked latest, else the newest published, and no other
+  version's pages are read. The page is the one at the address the `section` capture holds —
   `headless/switch` — read once more for its own text and lock. A version's front page is at the
   document's own address and nowhere under it (`MishkaDocument.Address`), so a `section` naming its
   slug names nothing; a group is only a heading in the contents, and nothing is named at its slug
@@ -197,7 +198,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
     case read(seo, versions: versions()) do
       %Workspace{} = workspace ->
-        {version, tree} = shown(workspace.versions, params["v"]) || {nil, []}
+        {version, tree} = shown(workspace.versions, params["v"], seo.site_id) || {nil, []}
 
         answer(seo, workspace, %{
           page?: false,
@@ -224,7 +225,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
     with wanted when is_binary(wanted) and wanted != "" <- params["section"],
          %Workspace{} = workspace <- read(seo, versions: versions()),
-         {version, tree} <- shown(workspace.versions, params["v"]),
+         {version, tree} <- shown(workspace.versions, params["v"], seo.site_id),
          %{id: id} = page <- Address.page_at(tree, wanted),
          %Section{} = section <- section(id, seo.site_id) do
       answer(seo, workspace, %{
@@ -301,35 +302,33 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   defp in_language(query, _no_language), do: query
 
-  # Every published version, each with its approved pages as a tree — what a page's address is
-  # followed through (`MishkaDocument.Address.page_at/2`).
-  defp versions do
-    WorkspaceVersion
-    |> Ash.Query.select(@version_fields)
-    |> Ash.Query.load(
-      sections:
-        Ash.Query.select(Section, [
-          :id,
-          :title,
-          :slug,
-          :order_position,
-          :parent_section_id,
-          :front_page,
-          :group_heading,
-          :group_page
-        ])
-    )
-  end
+  # Every published version, without its pages: which one is shown is told from the versions alone.
+  defp versions, do: Ash.Query.select(WorkspaceVersion, @version_fields)
 
-  # The version a reader is shown (`MishkaDocument.Address.version_shown/2`) and its pages, or `nil`
-  # when there is none.
-  defp shown(versions, asked) do
-    version = Address.version_shown(versions, asked)
-
-    case version do
-      %WorkspaceVersion{sections: pages} when is_list(pages) -> {version, pages}
+  # The version a reader is shown (`MishkaDocument.Address.version_shown/2`) and its approved pages
+  # as a tree — what a page's address is followed through (`MishkaDocument.Address.page_at/2`),
+  # read for that version alone; `nil` when there is none.
+  defp shown(versions, asked, site_id) do
+    with %WorkspaceVersion{} = version <- Address.version_shown(versions, asked),
+         {:ok, %WorkspaceVersion{sections: pages} = shown} when is_list(pages) <-
+           Ash.load(version, [sections: pages()], tenant: site_id, authorize?: false) do
+      {shown, pages}
+    else
       _none -> nil
     end
+  end
+
+  defp pages do
+    Ash.Query.select(Section, [
+      :id,
+      :title,
+      :slug,
+      :order_position,
+      :parent_section_id,
+      :front_page,
+      :group_heading,
+      :group_page
+    ])
   end
 
   # The page shown, with its text and its lock, read as the system for the reason `read/3` gives.
