@@ -8,7 +8,8 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   record whose lock names permissions opens only for a reader holding one of them
   (`AccessPermissions.match?/3`), and never for a visitor who is not signed in. A list leaves out,
   in its own query, every record the reader may not open, so its pages and its count are of what
-  the reader sees; asking for one of them by itself is refused as forbidden.
+  the reader sees; asking for one of them by itself finds nothing, as an id nothing is stored at
+  does.
 
       prepare {OpenToActor, kind: :section}
 
@@ -60,7 +61,6 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
   require Ash.Expr
   require Ash.Query
 
-  alias Ash.Error.Forbidden
   alias Ash.Resource.Info, as: ResourceInfo
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaDocument.WorkspaceVersion
@@ -318,10 +318,7 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
     keys = Enum.map(records, &Map.get(&1, key))
     locks = locks(resource || query.resource, lock, keys, query.tenant)
 
-    case Enum.reject(records, &opens?(locks, Map.get(&1, key), actor)) do
-      [] -> {:ok, records}
-      _closed -> {:error, Forbidden.exception([])}
-    end
+    {:ok, Enum.filter(records, &opens?(locks, Map.get(&1, key), actor))}
   end
 
   # A record whose lock is not found — its row gone — opens for no one.
