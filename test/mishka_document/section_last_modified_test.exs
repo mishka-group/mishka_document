@@ -96,6 +96,18 @@ defmodule MishkaDocument.SectionLastModifiedTest do
     assert last_modified(ctx, section) == @april
   end
 
+  test "moves to the newest of several archived notes, not the notes of another section", ctx do
+    section = page!(ctx, "guide")
+    section |> create_shown_note!(@january) |> archive_note_at!(@march)
+    section |> create_shown_note!(@january) |> archive_note_at!(@april)
+
+    page!(ctx, "other")
+    |> create_shown_note!(@january)
+    |> archive_note_at!(~U[2026-06-01 00:00:00.000000Z])
+
+    assert last_modified(ctx, section) == @april
+  end
+
   test "is one read for a batch of sections, whatever notes they hold", ctx do
     [edited, archived, untouched] = sections = for slug <- ~w(a b c), do: page!(ctx, slug)
 

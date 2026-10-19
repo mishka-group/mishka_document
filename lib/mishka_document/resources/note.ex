@@ -64,6 +64,12 @@ defmodule MishkaDocument.Note do
       index [:content_review_status]
       index [:technical_review_status]
       index [:site_id]
+
+      # The archived notes of a section, for `Section.latest_note_archived_at`. Every other index
+      # carries the base filter `archived_at IS NULL`, so none of them can answer a read of archived rows.
+      index [:section_id, :archived_at],
+        where: "archived_at IS NOT NULL",
+        include_base_filter?: false
     end
 
     check_constraints do
