@@ -24,7 +24,11 @@ defmodule MishkaDocument.KitTest do
   """
   use MishkaDocument.DataCase, async: false
 
+  import ExUnit.CaptureLog, only: [with_log: 1]
+
   alias MishkaCmsCore.Runtime.{Component, JsHook, Stylesheet}
+  alias MishkaCmsCore.Runtime.Compilers.CssClosure
+  alias MishkaCmsCore.Runtime.Handlers.BootHandler
 
   require Ash.Query
 
@@ -456,6 +460,52 @@ defmodule MishkaDocument.KitTest do
 
       assert Enum.uniq(called) == ["doc-workspace-list"],
              "the set of components that call another one by assign has changed: #{inspect(called)}"
+    end
+
+    # A SITE THAT DRAWS THE KIT KEEPS A NARROW STYLESHEET. `doc-workspace-list` names its card through
+    # an attribute, and once any reached template does, `MishkaCmsCore.Runtime.Compilers.CssClosure`
+    # reads every other reached template's code for a `component(` or `send_update(` call, which
+    # could name any component at all — and when it finds one it gives up and the site's stylesheet is
+    # built from EVERY component installed, Chelekom's included. It reads the text, not the syntax, so
+    # the `[[component` a regular expression of `doc-section`'s helpers looks for was one: nothing
+    # called anything, and the stylesheet carried every component for it.
+    #
+    # The files are written as boot writes them (`BootHandler.build_component_class_content/1`), so
+    # this asks the walk the question it asks in production.
+    test "and nothing in its code makes the stylesheet of a site that draws it unbounded" do
+      root = Path.join(System.tmp_dir!(), "doc_kit_closure_#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf(root) end)
+
+      write = fn kind, name, source ->
+        dir = Path.join([root, "docville", kind])
+        File.mkdir_p!(dir)
+        File.write!(Path.join(dir, "#{name}.template"), source)
+      end
+
+      for component <- components() do
+        write.(
+          "component",
+          component["name"],
+          BootHandler.build_component_class_content(component)
+        )
+      end
+
+      # A docs page draws the six blocks, which draw the rest.
+      write.(
+        "page",
+        "docs",
+        Enum.map_join(@live, &~s|<.component component_name="#{&1}" site="docville" />|)
+      )
+
+      {closure, log} = with_log(fn -> CssClosure.for_site("docville", runtime_dir: root) end)
+
+      assert is_map(closure),
+             "the walk gave up, so every component of the site would be scanned: #{log}"
+
+      for name <- @names do
+        assert name in closure.components,
+               "#{name} is a component of the kit and the walk missed it"
+      end
     end
 
     # EDITOR HINTS ARE PART OF THE COMPONENT, not documentation kept somewhere else. The inspector
@@ -1011,13 +1061,20 @@ defmodule MishkaDocument.KitTest do
 
       preview = File.read!("lib/mishka_document_web/live/example_preview.ex")
 
+      # THE SAME RULE, SPELT TWO WAYS. The bundle opens a marker with `\[\[(?:component)` and the
+      # preview page with `\[\[component`: a template's code with `component` straight before a `(`
+      # is read by the site's stylesheet walk as a call that may draw any component, so a stored
+      # helper never writes it that way — see "and nothing in its code makes the stylesheet of a site
+      # that draws it unbounded" above — and a page module's code is never read by it.
+      kit = String.replace(sources["code"], ~S"\[\[(?:component)", ~S"\[\[component")
+
       for rule <- [
             ~S"\[\[component(?:\s|&nbsp;|&#160;|\x{00A0})+doc-example(?![A-Za-z0-9_-])",
             ~S"\A\[\[component(?:\s|&nbsp;|&#160;|\x{00A0})+doc-example\z",
             ~S"<(pre|code)(?:\s[^>]*)?>.*?<\/\1>",
             ~S"\A<(?:pre|code)[\s>]"
           ] do
-        assert sources["code"] =~ rule, "doc-section counts examples by another rule than #{rule}"
+        assert kit =~ rule, "doc-section counts examples by another rule than #{rule}"
         assert preview =~ rule, "the preview page counts examples by another rule than #{rule}"
       end
 
