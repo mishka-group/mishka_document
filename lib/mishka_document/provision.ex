@@ -118,19 +118,25 @@ defmodule MishkaDocument.Provision do
   `base`, which only the index's pager has, stays a real URL: nothing appends a slug to it, and its
   `?page=2` has to be somewhere a reader could have typed.
 
-  ## The header, the footer and the language nav are the layout's
+  ## The header, the footer, the language nav and the bar are the layout's
 
-  Every page below hangs on the site's `site-main` layout when the site has one, and
-  draws only what the design shows between its header and its footer: the logo, the Docs and GitHub
-  links, the sign-in menu, the dark-mode switch and the language switcher are `site-header`'s, and
-  the footer is `site-footer`'s. The layout hands the header `@page_languages`, which is this same
-  page's URL with the `lang` capture swapped and every OTHER capture kept as it was. On `/:lang/docs`
-  that is exactly right, so the index draws no language links of its own. On the two document paths
-  it is not: the `:workspace` and `:section` captures are slugs of one edition, and the Persian
-  edition of a document has Persian slugs, so the header would offer `/fa/docs/<english-slug>`, a URL
-  its own page answers as not published. `doc-switcher` is what those pages carry instead, in the
-  bar under the header: it maps the document and the page being read to their translations by
-  `language_group_id` and links to the slugs that edition really has.
+  Every page below hangs on the site's `site-main` layout when the site has one, and draws only what
+  the design shows between its header and its footer, straight into the layout's column
+  (`MishkaCmsCore.Runtime.SiteLayout`): no container, no `max-w-*` and no side padding of its own,
+  since the column is 1160 pixels with its gutters, and a second one would double them. The logo,
+  the Docs and GitHub links, the sign-in menu, the dark-mode switch and the language switcher are
+  `site-header`'s, and the footer is `site-footer`'s.
+
+  The documentation has no switcher of its own. The header lists the languages a page is in
+  (`@page_languages`), and on the library, `/:lang/docs`, that is this same page's URL with the
+  `lang` capture swapped, which is exactly right. On the two document paths it is not: the
+  `:workspace` and `:section` captures are slugs of one edition, and the Persian edition of a
+  document has Persian slugs, so the core's default would offer `/fa/docs/<english-slug>`, a URL
+  its own page answers as not published. `MishkaDocument.Plugins.PageFrame` answers for them on
+  `runtime:page:frame`: the languages the document or the page really exists in, each at its own
+  address, and the bar under the header — Docs, the document and the page as a trail, and the
+  version in a menu (`doc-switcher`). A page of a document at an address of its own
+  (`ensure_address!/3`) is answered the same way.
 
   Every template stays inside what BOTH renderers assign: `@page`, `@query_params` and
   `@page_languages`. The admin's Preview tab assigns no visitor and no captures (see
@@ -140,12 +146,11 @@ defmodule MishkaDocument.Provision do
 
   require Ash.Query
 
-  alias MishkaCmsCore.Runtime.ExtensionProvision
+  alias MishkaCmsCore.Runtime.{ExtensionProvision, SiteLayout}
   alias MishkaDocument.Kit
 
   @section "document"
   @snippet_name "Latest documents"
-  @layout_name "site-main"
 
   # THE DOCUMENTATION'S ADDRESSES, WRITTEN ONCE. A page's path, the base a block builds links to it
   # from and the URL the index's pager writes are all the same string — `/:lang/docs/:workspace` is
@@ -198,11 +203,13 @@ defmodule MishkaDocument.Provision do
   @doc """
   Gives `site` everything the documentation ships and it is missing, and returns what happened as
   `%{permissions: names, components: names, pages: paths, snippets: names, renamed_pages: renamed,
-  skipped_pages: held}` — `permissions` empty once any site has installed it, the next three empty
-  on a site that already has it all, `renamed_pages`
+  skipped_pages: held, upgraded: names, adopted_pages: paths}` — `permissions` empty once any site
+  has installed it, the next three empty on a site that already has it all, `renamed_pages`
   naming every sample page written under a name of its own because the one it asked for was taken,
   and `skipped_pages` naming every one something already there holds, so the caller can say which
-  rather than leave it to the logs.
+  rather than leave it to the logs. `upgraded` names the starter rows brought up to date for the
+  pages to be drawn in, and `adopted_pages` the pages of the documentation a site had with no
+  layout, now hung on its `site-main` (`MishkaCmsCore.Runtime.SiteLayout.adopt_pages/3`).
 
   Takes the site record the hook is handed, or its id. Raises when the site is not there, or when a
   write is refused for any reason but a page being taken.
@@ -265,7 +272,9 @@ defmodule MishkaDocument.Provision do
         pages: [],
         snippets: [],
         renamed_pages: [],
-        skipped_pages: paths
+        skipped_pages: paths,
+        upgraded: [],
+        adopted_pages: []
       },
       else: ExtensionProvision.ensure!(address_manifest(address), site, %{}, opts)
   end
@@ -399,24 +408,19 @@ defmodule MishkaDocument.Provision do
     end)
   end
 
-  # THE LAYOUT THE PAGES ARE DRAWN IN, which is what gives them their header and footer: the site's
-  # `site-main`, the one its home page hangs on (`MishkaCmsCore.Install.StarterContent`), when it
-  # has one. The templates below draw only what sits between the two, so a page written with no
-  # layout would have neither. A site installed without the starter content has no such layout and
-  # gets the pages bare, which is all this can give it: the layout is core's to write, not an
-  # extension's. Read as the system, because whether a layout is there decides what the page is,
-  # whoever pressed the button.
+  # THE LAYOUT THE PAGES ARE DRAWN IN, which is what gives them their header, their bar and their
+  # footer: the site's `site-main`, the one its home page hangs on
+  # (`MishkaCmsCore.Runtime.SiteLayout.layout_id/1`), when it has one. The templates below draw only
+  # what sits between them, so a page written with no layout would have none. A site installed
+  # without the starter content has no such layout and gets the pages bare, which is all this can
+  # give it: the layout is core's to write, not an extension's. `ExtensionProvision` brings the
+  # starter rows up to date before it asks for the pages, so a site set up before the layout had its
+  # column has it by now — and hangs the pages an earlier release wrote with no layout on it
+  # (`MishkaCmsCore.Runtime.SiteLayout.adopt_pages/3`), after them.
   defp layout_for(site) do
-    site_id = site_id_of(site)
-
-    MishkaCmsCore.Runtime.Layout
-    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
-    |> Ash.Query.filter(site_id == ^site_id and name == ^@layout_name)
-    |> Ash.Query.select([:id])
-    |> Ash.read(authorize?: false, page: [limit: 1])
-    |> case do
-      {:ok, %{results: [%{id: layout_id}]}} -> %{layout_id: layout_id}
-      _no_such_layout -> %{}
+    case SiteLayout.layout_id(site_id_of(site)) do
+      nil -> %{}
+      layout_id -> %{layout_id: layout_id}
     end
   end
 
@@ -457,53 +461,52 @@ defmodule MishkaDocument.Provision do
     ]
   end
 
-  # THE LIBRARY, drawn between the layout's header and its footer: the hero, the search, the
-  # documents flagged Featured as cards and the rest as rows. `doc-workspace-list` draws the search
-  # and both groups, because the search narrows what it reads and the split is how it pages them:
-  # `q` and `page` travel in `params`, so a page of results has an address of its own.
+  # THE LIBRARY, drawn between the layout's header and its footer, straight into the column: the
+  # hero, the search, the documents flagged Featured as cards and the rest as rows.
+  # `doc-workspace-list` draws the search and both groups, because the search narrows what it reads
+  # and the split is how it pages them: `q` and `page` travel in `params`, so a page of results has
+  # an address of its own.
   #
   # `featured_text` is empty because the cards ARE the featured ones here, which is all the badge
   # would say; the language links are the layout's `site-header`, which `@page_languages` is right
   # for on this path.
   defp index(site) do
     """
-    <div class="mx-auto w-full max-w-[1280px] flex-1 px-8 pb-24">
-      <section class="flex flex-col items-center gap-4 pt-[72px] text-center">
-        <span class="text-[12px] font-semibold tracking-[0.16em] text-subtle dark:text-subtle-dark">
-          DOCUMENTATION
-        </span>
-        <h1 class="font-newsreader text-[clamp(44px,6vw,72px)] leading-none font-normal tracking-[-0.03em] text-balance">
-          Everything, <em class="text-brand italic dark:text-[#a9a2f7]">written down</em>.
-        </h1>
-        <p class="max-w-[520px] text-[17px] leading-[1.6] text-dim dark:text-dim-dark">
-          Guides, references and handbooks — versioned and available in several languages.
-        </p>
-      </section>
+    <section class="flex flex-col items-center gap-4 pt-[72px] text-center">
+      <span class="text-[12px] font-semibold tracking-[0.16em] text-subtle dark:text-subtle-dark">
+        DOCUMENTATION
+      </span>
+      <h1 class="font-newsreader text-[clamp(44px,6vw,72px)] leading-none font-normal tracking-[-0.03em] text-balance">
+        Everything, <em class="text-brand italic dark:text-brand-dark">written down</em>.
+      </h1>
+      <p class="max-w-[520px] text-[17px] leading-[1.6] text-dim dark:text-dim-dark">
+        Guides, references and handbooks — versioned and available in several languages.
+      </p>
+    </section>
 
-      <.component
-        component_name="doc-workspace-list"
-        site="#{site}"
-        id="doc-index"
-        current_user={assigns[:current_user]}
-        live_visit={assigns[:live_visit] == true}
-        heading=""
-        lang={@page.language}
-        per_page={12}
-        sort="order"
-        show_description={true}
-        show_languages={true}
-        show_details={true}
-        show_search={true}
-        split_featured={true}
-        featured_text=""
-        updated_text=""
-        read_text="Open"
-        doc_base="#{@docs}"
-        base={#{live_url(@docs)}}
-        params={Map.drop(@query_params, ["lang"])}
-        empty_text="Nothing is published here yet."
-      />
-    </div>
+    <.component
+      component_name="doc-workspace-list"
+      site="#{site}"
+      id="doc-index"
+      current_user={assigns[:current_user]}
+      live_visit={assigns[:live_visit] == true}
+      heading=""
+      lang={@page.language}
+      per_page={12}
+      sort="order"
+      show_description={true}
+      show_languages={true}
+      show_details={true}
+      show_search={true}
+      split_featured={true}
+      featured_text=""
+      updated_text=""
+      read_text="Open"
+      doc_base="#{@docs}"
+      base={#{live_url(@docs)}}
+      params={Map.drop(@query_params, ["lang"])}
+      empty_text="Nothing is published here yet."
+    />
     """
   end
 
@@ -513,7 +516,11 @@ defmodule MishkaDocument.Provision do
   # both. Two paths rather than one `*rest` because `*rest` must match at least one segment (see
   # `MishkaCmsCore.Runtime.States.WebRunTimeMetaDataState`), so a front page would have no address.
   #
-  # `params` is what carries `:workspace`, `:section` and `?v=` to all four blocks, which read them
+  # THE BAR WITH WHERE THE READER IS AND THE VERSION IS NOT HERE: it is the layout's section bar,
+  # which `MishkaDocument.Plugins.PageFrame` fills for these two paths. What is here is the page
+  # itself, in the layout's column — the contents, the page and the list of what is on it.
+  #
+  # `params` is what carries `:workspace`, `:section` and `?v=` to all three blocks, which read them
   # by name out of that one map. The language is the one key taken out of it, for the reason the
   # moduledoc gives.
   #
@@ -523,56 +530,46 @@ defmodule MishkaDocument.Provision do
   # takes no room: `doc-toc` draws nothing under two entries, and its wrapper is hidden then.
   defp document(site, address \\ nil) do
     """
-    <div class="flex flex-1 flex-col">
-      <div class="border-b border-edge dark:border-edge-dark">
-        <div class="mx-auto w-full max-w-[1280px] px-8 py-3.5">
-    #{indent(offered(site, {:switcher, address}), 6)}
+    <div class="flex flex-wrap items-start gap-12 pt-10">
+      <aside class="max-h-[calc(100vh-3rem)] max-w-full flex-[0_0_240px] overflow-y-auto pb-6 min-[880px]:sticky min-[880px]:top-6">
+        <.component
+          component_name="doc-sidebar"
+          site="#{site}"
+          id="doc-contents"
+          current_user={assigns[:current_user]}#{serves(address, 6)}
+          heading=""
+          lang={@page.language}
+          doc_base="#{@docs}"
+          params={Map.drop(@query_params, ["lang"])}
+          show_filter={true}
+        />
+      </aside>
+
+      <div class="flex min-w-0 flex-[1_1_520px] flex-wrap items-start gap-12">
+        <div class="min-w-0 flex-[1_1_480px]">
+          <.component
+            component_name="doc-section"
+            site="#{site}"
+            id="doc-page"
+            current_user={assigns[:current_user]}#{serves(address, 8)}
+            crumb_current={true}
+            lang={@page.language}
+            doc_base="#{@docs}"
+            params={Map.drop(@query_params, ["lang"])}
+          />
         </div>
-      </div>
 
-      <div class="mx-auto w-full max-w-[1280px] flex-1 px-8 pb-24">
-        <div class="flex flex-wrap items-start gap-12 pt-10">
-          <aside class="max-h-[calc(100vh-3rem)] max-w-full flex-[0_0_240px] overflow-y-auto pb-6 min-[880px]:sticky min-[880px]:top-6">
-            <.component
-              component_name="doc-sidebar"
-              site="#{site}"
-              id="doc-contents"
-              current_user={assigns[:current_user]}#{serves(address, 14)}
-              heading=""
-              lang={@page.language}
-              doc_base="#{@docs}"
-              params={Map.drop(@query_params, ["lang"])}
-              show_filter={true}
-            />
-          </aside>
-
-          <div class="flex min-w-0 flex-[1_1_520px] flex-wrap items-start gap-12">
-            <div class="min-w-0 flex-[1_1_480px]">
-              <.component
-                component_name="doc-section"
-                site="#{site}"
-                id="doc-page"
-                current_user={assigns[:current_user]}#{serves(address, 16)}
-                crumb_current={true}
-                lang={@page.language}
-                doc_base="#{@docs}"
-                params={Map.drop(@query_params, ["lang"])}
-              />
-            </div>
-
-            <div class="sticky top-6 w-[200px] flex-none pt-4 [&:not(:has([data-role='doc-toc']>*))]:hidden">
-              <.component
-                component_name="doc-toc"
-                site="#{site}"
-                id="doc-on-this-page"
-                current_user={assigns[:current_user]}#{serves(address, 16)}
-                heading="ON THIS PAGE"
-                lang={@page.language}
-                doc_base="#{@docs}"
-                params={Map.drop(@query_params, ["lang"])}
-              />
-            </div>
-          </div>
+        <div class="sticky top-6 w-[200px] flex-none pt-4 [&:not(:has([data-role='doc-toc']>*))]:hidden">
+          <.component
+            component_name="doc-toc"
+            site="#{site}"
+            id="doc-on-this-page"
+            current_user={assigns[:current_user]}#{serves(address, 8)}
+            heading="ON THIS PAGE"
+            lang={@page.language}
+            doc_base="#{@docs}"
+            params={Map.drop(@query_params, ["lang"])}
+          />
         </div>
       </div>
     </div>
@@ -612,29 +609,6 @@ defmodule MishkaDocument.Provision do
     """
   end
 
-  # THE BAR UNDER THE LAYOUT'S HEADER ON A DOCUMENT'S PAGES: where the reader is (Docs, then the
-  # document), the version being read and the languages the document is in. It is `doc-switcher`
-  # rather than the header's own language switcher for the reason the moduledoc gives: the other
-  # captures of these paths are one edition's slugs, and only the switcher knows what the next
-  # edition calls them.
-  defp offered(site, {:switcher, address}) do
-    """
-    <.component
-      component_name="doc-switcher"
-      site="#{site}"
-      id="doc-switcher"
-      current_user={assigns[:current_user]}#{serves(address, 6)}
-      show="both"
-      show_crumb={true}
-      version_text=""
-      lang={@page.language}
-      doc_base="#{@docs}"
-      params={Map.drop(@query_params, ["lang"])}
-      show_banner={true}
-    />
-    """
-  end
-
   # A PAGE AT A DOCUMENT'S OWN ADDRESS NAMES IT, so every block reads that document rather than one
   # a slug in the URL names, and writes no `?lang=`: the address is one edition's, and says which.
   defp serves(nil, _indent), do: ""
@@ -647,16 +621,4 @@ defmodule MishkaDocument.Provision do
   # the address the site's URL mode gives it, which is what the index's pager and its search write
   # to the address bar.
   defp live_url(address), do: ~s|site_path("#{address}", @page.language)|
-
-  defp indent(markup, spaces) do
-    pad = String.duplicate(" ", spaces)
-
-    markup
-    |> String.trim_trailing("\n")
-    |> String.split("\n")
-    |> Enum.map_join("\n", fn
-      "" -> ""
-      line -> pad <> line
-    end)
-  end
 end

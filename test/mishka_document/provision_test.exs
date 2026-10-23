@@ -222,6 +222,40 @@ defmodule MishkaDocument.ProvisionTest do
       end
     end
 
+    # A SITE SET UP BEFORE THE PAGES CARRIED A LAYOUT has them with none, and a page already written
+    # is never updated. `ExtensionProvision` hangs the section's pages that have no layout on the
+    # site's `site-main` after the run, so the next set-up of the documentation (or of any
+    # extension's section) gives them the frame — and an admin's own choice of layout is left alone.
+    test "hangs the pages an earlier release wrote with no layout on site-main", %{site: site} do
+      Provision.ensure!(site)
+
+      for path <- Provision.page_paths(), do: assert(page(site, path).layout_id == nil)
+
+      layout = create_layout!(site_id: site.id, name: "site-main")
+      own = create_layout!(site_id: site.id, name: "their-own")
+      chosen = page(site, "/:lang/docs/:workspace")
+
+      chosen
+      |> Ash.Changeset.for_update(:master_update, %{layout_id: own.id},
+        authorize?: false,
+        context: %{page_code: :package}
+      )
+      |> Ash.update!()
+
+      report = Provision.ensure!(site)
+
+      assert Enum.sort(report.adopted_pages) ==
+               Enum.sort(Provision.page_paths() -- ["/:lang/docs/:workspace"])
+
+      for path <- Provision.page_paths() -- ["/:lang/docs/:workspace"] do
+        assert page(site, path).layout_id == layout.id, "#{path} is not drawn in site-main"
+      end
+
+      assert page(site, "/:lang/docs/:workspace").layout_id == own.id
+
+      assert Provision.ensure!(site).adopted_pages == []
+    end
+
     test "draws no header and no footer of its own, and no hand-written colour", %{site: site} do
       Provision.ensure!(site)
 
@@ -232,6 +266,9 @@ defmodule MishkaDocument.ProvisionTest do
 
         refute found.template =~ "text-[#1b1a18]",
                "#{found.path} still writes the old page's colours"
+
+        refute found.template =~ ~r/\[#[0-9a-fA-F]{3,6}\]/,
+               "#{found.path} writes a colour the theme has a token for"
       end
     end
 
@@ -257,27 +294,65 @@ defmodule MishkaDocument.ProvisionTest do
       assert given["params"] == {:expression, ~S|Map.drop(@query_params, ["lang"])|}
     end
 
-    # THE BAR UNDER THE HEADER CARRIES THE DOCUMENT'S OWN SWITCHES, and the language ones are the
-    # switcher's rather than the header's: the header's are this page's URL in another language, and
-    # on these two paths that is a slug only one edition has.
-    test "draws a document's pages as a bar, the contents, the page and the list of its headings",
-         %{
-           site: site
-         } do
+    # THE BAR UNDER THE HEADER IS THE LAYOUT'S, filled by `MishkaDocument.Plugins.PageFrame` with
+    # where the reader is and the version being read, so the page draws the contents, the page and the
+    # list of its headings and nothing above them.
+    test "draws a document's pages as the contents, the page and the list of its headings", %{
+      site: site
+    } do
       Provision.ensure!(site)
 
       for path <- Provision.item_paths() |> Map.values() do
         template = page(site, path).template
 
         assert Enum.map(component_calls(template), &elem(&1, 0)) ==
-                 ["doc-switcher", "doc-sidebar", "doc-section", "doc-toc"]
+                 ["doc-sidebar", "doc-section", "doc-toc"]
 
-        switcher = template |> component_calls() |> hd() |> elem(1) |> Map.new()
-        assert switcher["show_crumb"] == {:expression, "true"}
-        assert switcher["show"] == {:literal, "both"}
-
-        section = template |> component_calls() |> Enum.at(2) |> elem(1) |> Map.new()
+        section = template |> component_calls() |> Enum.at(1) |> elem(1) |> Map.new()
         assert section["crumb_current"] == {:expression, "true"}
+      end
+    end
+
+    # THE HEADER'S LANGUAGE DROPDOWN IS THE ONLY LANGUAGE SWITCH. The pages used to carry a second
+    # one, `doc-switcher`'s row of language pills, in a bar of their own.
+    test "draws no language pills and no switcher of its own", %{site: site} do
+      Provision.ensure!(site)
+      Provision.ensure_address!(site, "/handbook/docs")
+
+      for {name, template} <- templates(site) do
+        refute template =~ "doc-switcher", "#{name} still draws the switcher"
+        refute template =~ ~r/\bshow_crumb=|\bshow="(both|language)"/, "#{name} asks for pills"
+        refute template =~ ~r/data-role="doc-switcher/, "#{name} draws a switcher's part"
+      end
+    end
+
+    # THE LAYOUT'S COLUMN IS THE PAGE'S WIDTH: 1160 pixels with its gutters, so a page that wraps
+    # itself in a container of its own doubles the gutters and widens the page past the header and the
+    # footer. What each page draws is its sections straight into the column.
+    test "draws no outer container: the layout's column is the width", %{site: site} do
+      Provision.ensure!(site)
+      Provision.ensure_address!(site, "/handbook/docs")
+
+      pages =
+        Enum.filter(pages(site), fn found ->
+          found.path in Provision.page_paths() or String.starts_with?(found.path, "/handbook")
+        end)
+
+      assert length(pages) == 5
+
+      for found <- pages do
+        refute found.template =~ "max-w-[1280px]", "#{found.path} still uses the 1280 column"
+        refute found.template =~ "max-w-[1160px]", "#{found.path} draws the layout's column again"
+
+        # The elements at the root of the template: none is a centred, side-padded or capped box.
+        roots = Regex.scan(~r/^<[a-z][a-z0-9]*\b[^>]*?\bclass="([^"]*)"/m, found.template)
+
+        assert roots != [], "#{found.path} has no element at its root"
+
+        for [_tag, classes] <- roots, class <- String.split(classes) do
+          refute class == "mx-auto", "#{found.path} centres its whole page"
+          refute class =~ ~r/^(max-w-|px-|container$)/, "#{found.path} wraps its page in #{class}"
+        end
       end
     end
 
@@ -481,7 +556,11 @@ defmodule MishkaDocument.ProvisionTest do
             uniq: true,
             do: piece
 
-      assert Enum.sort(Enum.uniq(on_a_page ++ drawn_by_a_block)) ==
+      # AND THE ONE THE BAR UNDER THE HEADER DRAWS, which no page names:
+      # `MishkaDocument.Plugins.PageFrame` hands it to the layout.
+      drawn_by_the_bar = MishkaDocument.Plugins.PageFrame.bar_components()
+
+      assert Enum.sort(Enum.uniq(on_a_page ++ drawn_by_a_block ++ drawn_by_the_bar)) ==
                Enum.sort(Provision.component_names())
     end
 
@@ -969,7 +1048,8 @@ defmodule MishkaDocument.ProvisionTest do
 
       assert Install.installed?()
       assert Extensions.installed?(first.id, :mishka_document)
-      assert length(components(first)) == length(Provision.component_names())
+      # The site's own header and footer are components too, written by the wizard beside them.
+      assert Provision.component_names() -- Enum.map(components(first), & &1.name) == []
       assert Provision.page_paths() -- Enum.map(pages(first), & &1.path) == []
 
       assert {:error, {:extension_failed, _message}} =

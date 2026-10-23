@@ -27,8 +27,10 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   alias MishkaCmsCore.Runtime.Compilers.Helpers, as: CompilerHelpers
   alias MishkaCmsCore.Runtime.Handlers.ModuleCompilerHandler
   alias MishkaCmsCore.Runtime.LiveViewHelpers
+  alias MishkaCmsCore.Runtime.SiteLayout
   alias MishkaCmsCore.Runtime.States.{SettingsState, SiteState}
   alias MishkaCmsCore.Runtime.Translations
+  alias MishkaDocument.Plugins.PageFrame
   alias MishkaDocument.Test.Plugins.PageExtras
   alias MishkaInstaller.Event.{Event, EventHandler, ModuleStateCompiler}
 
@@ -138,6 +140,24 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           )}
         </div>
       </div>
+      """
+    end
+  end
+
+  # THE BAR UNDER THE LAYOUT'S HEADER, drawn by the layout's own `section_bar/1` inside a LiveView, as
+  # `site-main` draws it: a component the bar names is drawn in the page's LiveView, where a block
+  # that keeps state handles its own events.
+  defmodule BarHost do
+    use Phoenix.LiveView
+
+    def mount(_params, session, socket) do
+      :ok = Translations.put_site(session["site_id"])
+      {:ok, Phoenix.Component.assign(socket, bar: session["bar"], site: session["site"])}
+    end
+
+    def render(assigns) do
+      ~H"""
+      <MishkaCmsCore.Runtime.SiteLayout.section_bar bar={@bar} site={@site} />
       """
     end
   end
@@ -490,7 +510,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
       assert text_of(toc, ~s([data-role="doc-toc-link"])) == ["Clone", "Build"]
 
-      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", attrs)
 
       # The older version has no "From source", so its entry leads to its front page.
       assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == [
@@ -555,8 +575,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, toc, _html} = mount_page(site, "doc-toc", under_base)
       assert text_of(toc, ~s([data-role="doc-toc-link"])) == []
 
-      {:ok, switch, _html} =
-        mount_page(site, "doc-switcher", Map.put(under_base, :show, "version"))
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", under_base)
 
       assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == []
     end
@@ -623,7 +642,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, toc, _html} = mount_page(site, "doc-toc", attrs)
       assert text_of(toc, ~s([data-role="doc-toc-link"])) == ["Why", "How"]
 
-      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", attrs)
 
       assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == [
                "/mishka/docs",
@@ -1416,7 +1435,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, contents, _html} = mount_page(site, "doc-sidebar", attrs)
       assert hrefs(contents, ~s([data-role="doc-sidebar-link"][aria-current="page"])) == []
 
-      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", attrs)
       assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == ["/mishka/docs"]
     end
   end
@@ -1526,7 +1545,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
                "Where to go next"
              ]
 
-      {:ok, switch, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :show, "version"))
+      {:ok, switch, _html} = mount_page(site, "doc-switcher", attrs)
       assert hrefs(switch, ~s([data-role="doc-switcher-version"])) == ["/mishka/docs/navigation"]
     end
 
@@ -2419,7 +2438,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   describe "doc-switcher's version_text" do
     test "names the version switch, and left empty leaves the number alone", %{site: site} do
       addressed!(site)
-      attrs = %{path: "/mishka/docs", lang_param: "", show: "version"}
+      attrs = %{path: "/mishka/docs", lang_param: ""}
 
       {:ok, named, _html} = mount_page(site, "doc-switcher", attrs)
 
@@ -2702,22 +2721,6 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(view, ~s([data-role="doc-switcher-version"] span:first-child)) ==
                ["v1.0.0", "v0.9.0"]
-    end
-
-    test "and the pages of the version shown alone when it offers no versions", %{site: site} do
-      fronted!(site, path: "/fronted/docs")
-
-      blocks = [
-        block(
-          "doc-switcher",
-          Map.put(fronted_attrs(%{"section" => "install"}), :show, "language")
-        )
-      ]
-
-      assert site |> asked_while(blocks) |> reads_of("mishka_document_sections") == 2
-
-      {:ok, view, _html} = mount_blocks(site, blocks)
-      assert text_of(view, ~s([data-role="doc-switcher-version"])) == []
     end
 
     test "doc-section leaves a front page's change out of its read, and a page's in", %{
@@ -5877,26 +5880,19 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       end
     end
 
-    test "draws only the half the author asked for", %{site: site} do
-      {:ok, versions_only, _html} =
-        mount_page(site, "doc-switcher", %{workspace: "mishka-cms", show: "version"})
-
-      assert text_of(versions_only, ~s([data-role="doc-switcher-language"])) == []
-      assert text_of(versions_only, ~s([data-role="doc-switcher-version"])) != []
-    end
-
-    # AND A SWITCH WITH ONE OPTION IS NOT A SWITCH. This document has one edition and was written
-    # the way every document here is written, which is to say `SetLanguageGroupId` gave it a group
-    # holding itself: a language half built from that group offers the language the reader is
-    # already in, on every document on a site that publishes in one.
-    test "and says nothing about languages for a document nobody translated", %{site: site} do
+    # THE SITE'S HEADER IS THE ONLY LANGUAGE SWITCH. The block draws the versions of the document and
+    # nothing else: no language chips, no trail of its own — the bar it is drawn in has the trail
+    # (`MishkaDocument.Plugins.PageFrame`) and the header the languages. A document written the way
+    # every document here is has a group of translations holding itself (`SetLanguageGroupId`).
+    test "draws the versions and neither a language switch nor a trail", %{site: site} do
       {:ok, view, _html} = mount_page(site, "doc-switcher", %{workspace: "mishka-cms"})
 
-      assert text_of(view, ~s([data-role="doc-switcher-language"])) == []
-      assert text_of(view, ~s([data-role="doc-switcher-languages"])) == []
+      assert text_of(view, ~s([data-role="doc-switcher-version"])) != []
 
-      assert text_of(view, ~s([data-role="doc-switcher-version"])) != [],
-             "the version half went with it"
+      for role <- ~w(doc-switcher-language doc-switcher-languages doc-switcher-crumb
+                     doc-switcher-docs doc-switcher-document) do
+        refute has_element?(view, ~s([data-role="#{role}"])), "#{role} is drawn"
+      end
     end
   end
 
@@ -5931,7 +5927,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
             {"doc-section", Map.put(attrs, :params, %{"section" => "installation/from-source"}),
              ["doc-section-crumb", "doc-section-prev", "doc-section-next"]},
             {"doc-sidebar", Map.put(attrs, :expand_all, true), ["doc-sidebar-link"]},
-            {"doc-switcher", Map.put(attrs, :show, "version"), []}
+            {"doc-switcher", attrs, []}
           ] do
         {:ok, view, _html} = mount_page(site, name, given)
 
@@ -5964,21 +5960,21 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         mount_page(site, "doc-switcher", %{
           workspace: "mishka-cms",
           doc_base: "/:lang/docs",
-          lang_param: "",
-          show: "version"
+          lang_param: ""
         })
 
       assert text_of(switcher, ~s([data-role="doc-switcher-version"])) == []
     end
   end
 
-  describe "doc-switcher across languages" do
-    setup %{site: site} do
-      # See the note in "doc-workspace-list in one language": a switch can only offer a language the
-      # site publishes, because that is the only one its `:lang` pages answer.
+  # A TRANSLATED DOCUMENT HAS NO SWITCH IN THE BLOCK EITHER. The languages a page is in are the
+  # header's, which `MishkaDocument.Plugins.PageFrame` fills with the page of each edition
+  # (`MishkaDocument.Plugins.PageFrameTest` holds that); the block read them itself before, and drew
+  # a second row of chips beside the header's.
+  describe "doc-switcher beside a translated document" do
+    test "draws no language chip, however the author asks", %{site: site} do
       {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["en", "fa"], site_id: site.id)
-      %{document: master, pages: pages} = manual!(site)
-      english = Enum.find(pages, &(&1.slug == "installation"))
+      %{document: master} = manual!(site)
 
       persian =
         document!(site,
@@ -5988,155 +5984,23 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
           language_group_id: master.language_group_id
         )
 
-      persian_version =
-        version!(site, persian, version_number: "0.3.0", is_latest_for_version: true)
+      version!(site, persian, version_number: "0.3.0", is_latest_for_version: true)
 
-      translated =
-        page!(site, persian_version,
-          title: "نصب",
-          slug: "nasb",
-          order_position: 0,
-          language: "fa",
-          language_group_id: english.language_group_id
-        )
-
-      {:ok, master: master, english: english, persian: persian, translated: translated}
-    end
-
-    test "offers every edition of the document", %{site: site} do
-      {:ok, view, _html} =
-        mount_page(site, "doc-switcher", %{workspace: "mishka-cms", show: "language"})
-
-      assert text_of(view, ~s([data-role="doc-switcher-language"])) == ["en", "fa"]
-    end
-
-    # THE TRANSLATION OF THE PAGE, not the front page of the other edition. Translations of one page
-    # share a `language_group_id`, which is what makes the two the same page — and the Persian one is
-    # filed under a different slug on purpose, so nothing here can be right by having the same name.
-    #
-    # Read in the background, in the task `MishkaGervaz.Messages.start_async/4` hands the page's
-    # site: each link is the address this site's URL mode gives its language, built by
-    # `site_path/2` there as in the template.
-    for mode <- ~w(prefix_others prefix_all) do
-      test "and each leads to the same page in that language, in #{mode}", %{site: site} do
-        url_mode!(site, unquote(mode))
-
+      for asked <- [%{}, %{show: "language"}, %{show: "both", show_crumb: true}] do
         {:ok, view, _html} =
-          mount_page(site, "doc-switcher", %{
-            workspace: "mishka-cms",
-            show: "language",
-            doc_base: "/:lang/docs",
-            params: %{"section" => "installation"}
-          })
+          mount_page(
+            site,
+            "doc-switcher",
+            Map.merge(%{workspace: "mishka-cms", doc_base: "/:lang/docs"}, asked)
+          )
 
-        assert Enum.sort(hrefs(view, ~s([data-role="doc-switcher-language"]))) ==
-                 Enum.sort([
-                   english(unquote(mode), "/docs/mishka-cms/installation"),
-                   "/fa/docs/mishka-cms-fa/nasb"
-                 ])
+        assert text_of(view, ~s([data-role="doc-switcher-version"])) != []
+
+        for role <- ~w(doc-switcher-language doc-switcher-languages doc-switcher-crumb) do
+          refute has_element?(view, ~s([data-role="#{role}"])),
+                 "#{role} is drawn for #{inspect(asked)}"
+        end
       end
-    end
-
-    # AND THE SLUG IS THE FALLBACK WHERE NOBODY LINKED THEM. An admin can write a translation without
-    # joining it to the page it translates, and a Persian page called `upgrading` is still the
-    # Persian `upgrading`.
-    test "and falls back to the same slug when the two were never linked", %{
-      site: site,
-      persian: persian
-    } do
-      [version] = public_versions(site, persian)
-
-      page!(site, version,
-        title: "ارتقا",
-        slug: "upgrading",
-        order_position: 1,
-        language: "fa"
-      )
-
-      {:ok, view, _html} =
-        mount_page(site, "doc-switcher", %{
-          workspace: "mishka-cms",
-          show: "language",
-          doc_base: "/:lang/docs",
-          params: %{"section" => "upgrading"}
-        })
-
-      assert "/fa/docs/mishka-cms-fa/upgrading" in hrefs(
-               view,
-               ~s([data-role="doc-switcher-language"])
-             )
-    end
-
-    # EDITIONS NUMBER THEIR VERSIONS ON THEIR OWN. Persian is on 0.3.0 while English is on 1.0.0, so
-    # a `?v=` must never survive a language switch.
-    test "and no version number crosses the switch", %{site: site} do
-      {:ok, view, _html} =
-        mount_page(site, "doc-switcher", %{
-          workspace: "mishka-cms",
-          show: "language",
-          doc_base: "/:lang/docs",
-          params: %{"section" => "installation", "v" => "1.0.0"}
-        })
-
-      for href <- hrefs(view, ~s([data-role="doc-switcher-language"])) do
-        refute href =~ "v=", "#{href} carried a version into another edition"
-      end
-    end
-
-    test "an edition nobody linked into the group offers no switch at all", %{site: site} do
-      document = document!(site, name: "Alone", slug: "alone")
-      version!(site, document, version_number: "1.0.0", is_latest_for_version: true)
-
-      Ash.update!(
-        Ash.Changeset.for_update(document, :master_update, %{language_group_id: nil},
-          authorize?: false
-        ),
-        authorize?: false
-      )
-
-      {:ok, view, _html} =
-        mount_page(site, "doc-switcher", %{workspace: "alone", show: "language"})
-
-      assert text_of(view, ~s([data-role="doc-switcher-language"])) == []
-    end
-
-    # AND THE CHIP FOR THE EDITION BEING READ IS A NO-OP, which is the one link in this switch
-    # allowed to keep a `?v=`: built like the others it would take a reader on an older version to
-    # the latest one, and to whatever page that version files under the lineage — from the chip
-    # marked as the language they are already reading in.
-    test "and the chip for the edition being read keeps the page and version the reader is on", %{
-      site: site,
-      master: master,
-      english: english
-    } do
-      older =
-        version!(site, master, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
-
-      page!(site, older,
-        title: "Installation (old)",
-        slug: "installation-old",
-        order_position: 0,
-        section_lineage_id: english.section_lineage_id
-      )
-
-      {:ok, view, _html} =
-        mount_page(site, "doc-switcher", %{
-          workspace: "mishka-cms",
-          show: "language",
-          doc_base: "/docs",
-          lang_param: "",
-          params: %{"section" => "installation-old", "v" => "0.9.0"}
-        })
-
-      current =
-        view
-        |> render_async(@async)
-        |> LazyHTML.from_fragment()
-        |> LazyHTML.query(~s([data-role="doc-switcher-language"][data-selected="true"]))
-        |> Enum.map(&LazyHTML.attribute(&1, "href"))
-        |> List.flatten()
-
-      assert current == ["/docs/mishka-cms/installation-old?v=0.9.0"]
     end
   end
 
@@ -6351,7 +6215,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         section_lineage_id: intro.section_lineage_id
       )
 
-      blocks = [docs_block("doc-switcher", "/two/docs", "intro", %{show: "version"})]
+      blocks = [docs_block("doc-switcher", "/two/docs", "intro")]
       {:ok, view, _html} = mount_blocks(site, blocks)
 
       assert hrefs(view, ~s([data-role="doc-switcher-version"])) ==
@@ -6745,13 +6609,6 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     view
   end
 
-  defp public_versions(site, document) do
-    MishkaDocument.WorkspaceVersion
-    |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
-    |> Ash.Query.filter(workspace_id == ^document.id)
-    |> Ash.read!(tenant: site.id)
-  end
-
   # THE LIBRARY OF THE DESIGN: the documents a site publishes with a search box over them, the ones an
   # editor flagged Featured as cards and every other one as a row under a heading of its own, each on
   # a tile of its first letter, with a badge for the ones only some readers may open and for the ones
@@ -6987,34 +6844,11 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     end
   end
 
-  # THE BAR UNDER THE LAYOUT'S HEADER on a document's pages: where the reader is, and what the document
-  # is in. The versions and the languages it offered before are still all it offers.
-  describe "doc-switcher's crumb" do
-    test "draws the documentation and the document, each a link, when asked to", %{site: site} do
-      manual!(site)
-
-      attrs = %{workspace: "mishka-cms", doc_base: "/docs", lang_param: "", show_crumb: true}
-
-      {:ok, view, _html} = mount_page(site, "doc-switcher", attrs)
-
-      assert text_of(view, ~s([data-role="doc-switcher-docs"])) == ["Docs"]
-      assert hrefs(view, ~s([data-role="doc-switcher-docs"])) == ["/docs"]
-      assert text_of(view, ~s([data-role="doc-switcher-document"])) == ["Mishka CMS"]
-      assert hrefs(view, ~s([data-role="doc-switcher-document"])) == ["/docs/mishka-cms"]
-
-      {:ok, named, _html} =
-        mount_page(site, "doc-switcher", Map.put(attrs, :docs_text, "Library"))
-
-      assert text_of(named, ~s([data-role="doc-switcher-docs"])) == ["Library"]
-
-      {:ok, bare, _html} =
-        mount_page(site, "doc-switcher", Map.delete(attrs, :show_crumb))
-
-      refute has_element?(bare, ~s([data-role="doc-switcher-crumb"]))
-    end
-
-    test "keeps the version being read when it links to the document, and says which is latest",
-         %{site: site} do
+  # THE VERSION MENU IN THE BAR UNDER THE LAYOUT'S HEADER on a document's pages. The trail beside it is
+  # the bar's own (`MishkaDocument.Plugins.PageFrame`), so the block names the version being read
+  # and nothing about where the reader is.
+  describe "doc-switcher's summary" do
+    test "names the version being read, and says which is latest", %{site: site} do
       %{document: document} = manual!(site)
 
       version!(site, document, version_number: "0.9.0", is_latest_for_version: false)
@@ -7023,16 +6857,11 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         workspace: "mishka-cms",
         doc_base: "/docs",
         lang_param: "",
-        show_crumb: true,
         version_text: "",
         params: %{"v" => "0.9.0"}
       }
 
       {:ok, view, _html} = mount_page(site, "doc-switcher", attrs)
-
-      assert hrefs(view, ~s([data-role="doc-switcher-document"])) == [
-               "/docs/mishka-cms?v=0.9.0"
-             ]
 
       assert text_of(view, ~s([data-role="doc-switcher-versions-summary"])) == ["v0.9.0"]
 
@@ -7040,6 +6869,107 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(latest, ~s([data-role="doc-switcher-versions-summary"])) ==
                ["v1.0.0 · latest"]
+    end
+  end
+
+  # THE BAR A DOCUMENT'S PAGE HANDS THE LAYOUT, drawn as the layout draws it: Docs, the trail and, at
+  # its end, the version menu — the block `MishkaDocument.Plugins.PageFrame` names, drawn from the
+  # assigns it hands it. The languages are the header's.
+  describe "the section bar of a document's page" do
+    defp bar_for(site, params, record \\ "docs:page") do
+      given =
+        SiteLayout.given(
+          %{
+            title: "Document page",
+            path: MishkaDocument.Provision.item_paths()[:section],
+            language: "en",
+            section: "document"
+          },
+          site_id: site.id,
+          extra: %{"record" => record},
+          params: Map.put(params, "lang", "en")
+        )
+
+      {:reply, :halt, answered} = PageFrame.call(given)
+      %{section_bar: bar} = SiteLayout.accept(answered, given)
+      bar
+    end
+
+    defp mount_bar(site, bar) do
+      {:ok, view, _first_paint} =
+        live_isolated(Phoenix.ConnTest.build_conn(), BarHost,
+          session: %{"bar" => bar, "site" => site.name, "site_id" => site.id}
+        )
+
+      {:ok, view, render_async(view, @async)}
+    end
+
+    test "draws Docs, the document and the page, and the versions in a menu beside them",
+         %{site: site} do
+      %{document: document} = manual!(site)
+
+      version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+      bar = bar_for(site, %{"workspace" => "mishka-cms", "section" => "installation"})
+      {:ok, view, _html} = mount_bar(site, bar)
+
+      assert text_of(view, ~s([data-role="site-section-bar"] > div > a)) == ["Docs"]
+      assert hrefs(view, ~s([data-role="site-section-bar"] > div > a)) == ["/docs"]
+
+      assert hrefs(view, ~s([data-role="site-section-crumbs"] a)) == ["/docs/mishka-cms"]
+      assert text_of(view, ~s([data-role="site-section-crumbs"] a)) == ["Mishka CMS"]
+
+      assert text_of(view, ~s([data-role="site-section-crumbs"] [aria-current="page"])) ==
+               ["Installation"]
+
+      assert ids_of(view, ~s([data-role="site-section-component"] [data-role="doc-switcher"])) ==
+               ["doc-version"]
+
+      assert hrefs(view, ~s([data-role="doc-switcher-version"])) == [
+               "/docs/mishka-cms/installation",
+               "/docs/mishka-cms?v=0.9.0"
+             ]
+
+      assert text_of(view, ~s([data-role="doc-switcher-versions-summary"])) == ["v1.0.0 · latest"]
+    end
+
+    test "draws the version being read, and the way back from an older one", %{site: site} do
+      %{document: document} = manual!(site)
+
+      version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+      bar =
+        bar_for(site, %{"workspace" => "mishka-cms", "v" => "0.9.0"}, "docs:document")
+
+      {:ok, view, _html} = mount_bar(site, bar)
+
+      assert text_of(view, ~s([data-role="doc-switcher-versions-summary"])) == ["v0.9.0"]
+      assert text_of(view, ~s([data-role="doc-switcher-banner-text"])) != []
+      assert hrefs(view, ~s([data-role="doc-switcher-latest"])) == ["/docs/mishka-cms"]
+    end
+
+    test "draws no language pill and no switcher but the one menu", %{site: site} do
+      {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["en", "fa"], site_id: site.id)
+      %{document: master} = manual!(site)
+
+      persian =
+        document!(site,
+          name: "میشکا",
+          slug: "mishka-cms-fa",
+          language: "fa",
+          language_group_id: master.language_group_id
+        )
+
+      version!(site, persian, version_number: "0.3.0", is_latest_for_version: true)
+
+      bar = bar_for(site, %{"workspace" => "mishka-cms"}, "docs:document")
+      {:ok, view, _html} = mount_bar(site, bar)
+
+      for role <- ~w(doc-switcher-language doc-switcher-languages doc-switcher-crumb) do
+        refute has_element?(view, ~s([data-role="#{role}"])), "#{role} is drawn"
+      end
+
+      assert roles(render(view), "doc-switcher") == 1
     end
   end
 

@@ -16,8 +16,11 @@ defmodule MishkaDocument.Plugins.ContentComponents do
 
   Read as the system, as the sitemap reads them (`MishkaDocument.Plugins.SitemapUrls`): a page
   locked to some readers draws its components, icons and classes for them, so it counts. Only the
-  rows that name a component, an icon or a class are read, and only those columns. Registered in
-  `MishkaDocument.Application`.
+  rows that name a component, an icon or a class are read, and only those columns.
+
+  And the block only the bar under the header draws, `doc-switcher`
+  (`MishkaDocument.Plugins.PageFrame`): no page or layout names it, so nothing else would bring its
+  classes into the stylesheet. Registered in `MishkaDocument.Application`.
   """
 
   use MishkaInstaller.Event.Hook,
@@ -28,6 +31,7 @@ defmodule MishkaDocument.Plugins.ContentComponents do
 
   alias MishkaCmsCore.Runtime.Compilers.SitemapCompiler
   alias MishkaDocument.{Note, Section}
+  alias MishkaDocument.Plugins.PageFrame
 
   @impl true
   def call(%{site_id: site_id, components: names, icons: icons} = data)
@@ -36,7 +40,10 @@ defmodule MishkaDocument.Plugins.ContentComponents do
 
     {:reply,
      data
-     |> Map.merge(%{components: names ++ found.components, icons: icons ++ found.icons})
+     |> Map.merge(%{
+       components: names ++ found.components ++ PageFrame.bar_components(),
+       icons: icons ++ found.icons
+     })
      |> with_classes(found.classes)}
   end
 
