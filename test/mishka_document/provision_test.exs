@@ -183,6 +183,104 @@ defmodule MishkaDocument.ProvisionTest do
       end
     end
 
+    # THE HEADER, THE FOOTER AND THE LANGUAGE SWITCHER ARE THE LAYOUT'S. The templates draw what the
+    # design shows between the two, so a page written with no layout is a page with neither — and the
+    # site's `site-main` is the one its home page hangs on, which is the layout a page is given when
+    # the site has it.
+    test "hangs every page on the site's site-main layout, which gives it a header and a footer",
+         %{site: site} do
+      layout = create_layout!(site_id: site.id, name: "site-main")
+
+      Provision.ensure!(site)
+
+      for path <- Provision.page_paths() do
+        assert page(site, path).layout_id == layout.id, "#{path} is not drawn in site-main"
+      end
+    end
+
+    test "writes no layout where the site has none, and none of another site's", %{site: site} do
+      elsewhere = create_site!()
+      create_layout!(site_id: elsewhere.id, name: "site-main")
+      create_layout!(site_id: site.id, name: "something-else")
+
+      Provision.ensure!(site)
+
+      for path <- Provision.page_paths() do
+        assert page(site, path).layout_id == nil
+      end
+    end
+
+    test "hangs a document's own address on the layout too", %{site: site} do
+      layout = create_layout!(site_id: site.id, name: "site-main")
+
+      report = Provision.ensure_address!(site, "/handbook/docs")
+
+      assert Enum.sort(report.pages) == ["/handbook/docs", "/handbook/docs/*section"]
+
+      for path <- report.pages do
+        assert page(site, path).layout_id == layout.id
+      end
+    end
+
+    test "draws no header and no footer of its own, and no hand-written colour", %{site: site} do
+      Provision.ensure!(site)
+
+      for found <- pages(site) do
+        refute found.template =~ "<header", "#{found.path} draws a header the layout owns"
+        refute found.template =~ "<footer", "#{found.path} draws a footer the layout owns"
+        refute found.template =~ ~r/\bstyle=/, "#{found.path} writes a style attribute"
+
+        refute found.template =~ "text-[#1b1a18]",
+               "#{found.path} still writes the old page's colours"
+      end
+    end
+
+    # THE LIBRARY IS THE DESIGN'S: a hero over the search, the featured documents as cards and the rest
+    # as rows. Its words are the design's, and the list is told to draw all of it.
+    test "draws the library with its hero, its search and its two lists", %{site: site} do
+      Provision.ensure!(site)
+      template = page(site, "/:lang/docs").template
+
+      assert template =~ "DOCUMENTATION"
+      assert template =~ "written down"
+
+      assert template =~
+               "Guides, references and handbooks — versioned and available in several languages."
+
+      [{"doc-workspace-list", given}] = component_calls(template)
+      given = Map.new(given)
+
+      assert given["show_search"] == {:expression, "true"}
+      assert given["split_featured"] == {:expression, "true"}
+      assert given["show_details"] == {:expression, "true"}
+      assert given["read_text"] == {:literal, "Open"}
+      assert given["params"] == {:expression, ~S|Map.drop(@query_params, ["lang"])|}
+    end
+
+    # THE BAR UNDER THE HEADER CARRIES THE DOCUMENT'S OWN SWITCHES, and the language ones are the
+    # switcher's rather than the header's: the header's are this page's URL in another language, and
+    # on these two paths that is a slug only one edition has.
+    test "draws a document's pages as a bar, the contents, the page and the list of its headings",
+         %{
+           site: site
+         } do
+      Provision.ensure!(site)
+
+      for path <- Provision.item_paths() |> Map.values() do
+        template = page(site, path).template
+
+        assert Enum.map(component_calls(template), &elem(&1, 0)) ==
+                 ["doc-switcher", "doc-sidebar", "doc-section", "doc-toc"]
+
+        switcher = template |> component_calls() |> hd() |> elem(1) |> Map.new()
+        assert switcher["show_crumb"] == {:expression, "true"}
+        assert switcher["show"] == {:literal, "both"}
+
+        section = template |> component_calls() |> Enum.at(2) |> elem(1) |> Map.new()
+        assert section["crumb_current"] == {:expression, "true"}
+      end
+    end
+
     # A PAGE IS ONE ROW FOR EVERY LANGUAGE. `:lang` is a capture the resolver fills from the URL and
     # `MishkaCmsCore.Runtime.Languages` admits only the site's own languages into — so three rows
     # serve a site publishing in five languages, and each block is told which one it was asked for.
