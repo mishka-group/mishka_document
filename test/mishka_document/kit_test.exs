@@ -645,14 +645,15 @@ defmodule MishkaDocument.KitTest do
              "the bundle's directory is not in the package, so a hex install has nothing to read"
     end
 
-    test "ships exactly five hooks: the code windows', the examples', the contents', the tabs' and the page's" do
+    test "ships exactly six hooks: the code windows', the examples', the contents', the tabs', the page's and the page list's" do
       assert Enum.map(bundle()["js_hooks"], & &1["name"]) ==
                [
                  "doc-code-copy",
                  "doc-example",
                  "doc-sidebar-scroll",
                  "doc-tabs",
-                 "doc-page-scroll"
+                 "doc-page-scroll",
+                 "doc-toc-spy"
                ]
     end
 
@@ -1191,7 +1192,7 @@ defmodule MishkaDocument.KitTest do
 
       assert sheet, "the stylesheet was not installed"
       assert sheet.kind == :base
-      assert sheet.content =~ "background-color: #272822"
+      assert sheet.content =~ "background-color: #1c1b22"
 
       monokai = Makeup.stylesheet(:monokai_style, "highlight")
       classes = Regex.scan(~r/^\.highlight \.([\w-]+) \{/m, monokai, capture: :all_but_first)

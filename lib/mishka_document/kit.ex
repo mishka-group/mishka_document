@@ -51,6 +51,36 @@ defmodule MishkaDocument.Kit do
   `doc-cards-badge` (`data-tone`), `doc-cards-description`, `doc-cards-empty`, `doc-cards-loading`
   and `doc-cards-error`.
 
+  ### The design they are drawn in
+
+  Every block is drawn in the starter theme's tokens — `text-fg dark:text-fg-dark`, `border-edge
+  dark:border-edge-dark`, `bg-surface dark:bg-surface-dark` and the rest — and in the three
+  typefaces it names, so the site's dark mode turns the whole documentation. A colour the theme has
+  no token for is written as a value with its `dark:` twin beside it. A site that was installed with
+  no starter content has no such theme, and draws these blocks in the browser's colours until it
+  has one.
+
+    * `doc-workspace-list` draws a document as a card — its tile, how many pages and which version,
+      its name, its summary, the editions it is published in and the way in — or, as one line of a
+      list, as a row. `show_search` draws a search box over the list that narrows it to the documents
+      whose name or summary carries the words, read from `search_param` of the page's own query
+      string (`q`) and written back there, so a search has an address of its own; `split_featured`
+      draws the documents flagged Featured as cards and every other one as a row under
+      `others_heading`, the featured ones first. A document only some readers may open carries
+      `locked_text`, and one that asks search engines to leave it out `unlisted_text`. Its tile is
+      the first letter of its name — without a leading `Mishka ` — on one of six tints picked from
+      the document (`doc-workspace-card`).
+    * `doc-switcher` draws, with `show_crumb`, the bar a document's pages hang under the site's
+      header: the documentation and the document each a link, then the version being read in a menu
+      and the languages the document is in.
+    * `doc-section` draws a document's overview — its tile, its version and how many pages, its name
+      and summary, the first `start_count` pages as numbered cards with the start of their text, and
+      every page under the heading it is filed under — and a page with its trail, its title, its text
+      and the pages either side. The first paragraph of a page's text is its lead. A callout
+      (`doc-callout`) has six tones, each with its own mark.
+    * `doc-toc` is the list of what is on the page; its `doc-toc-spy` hook marks the entry the reader
+      has scrolled to.
+
   ### The version in a page's text
 
   `{{doc.version}}` — or `{{ doc.version }}` — anywhere in a page's text or in one of its notes is

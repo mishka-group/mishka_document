@@ -1596,8 +1596,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       [grid] = Enum.to_list(drawn(view, ~s([data-role="doc-cards-items"])))
       [classes] = LazyHTML.attribute(grid, "class")
-      assert "grid-cols-1" in String.split(classes)
-      assert "sm:grid-cols-2" in String.split(classes)
+      assert "grid" in String.split(classes)
 
       assert [body] = text_of(view, ~s([data-role="doc-section-body"]))
       assert body =~ "Ways to move around a site."
@@ -1917,7 +1916,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         assert styles |> reached("list-disc") |> Enum.map(&LazyHTML.text/1) == ["Own item"]
         assert styles |> reached("list-decimal") |> Enum.map(&LazyHTML.text/1) == ["First step"]
 
-        assert styles |> reached("ml-5") |> Enum.map(&LazyHTML.text/1) == [
+        assert styles |> reached("ps-5") |> Enum.map(&LazyHTML.text/1) == [
                  "Own item",
                  "First step"
                ]
@@ -1960,7 +1959,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       styles = styled(view, "doc-section-body")
 
-      assert styles |> reached("text-lg") |> Enum.map(&LazyHTML.text/1) == ["Own heading"]
+      assert styles |> reached("font-normal") |> Enum.map(&LazyHTML.text/1) == ["Own heading"]
       assert styles |> reached("list-disc") |> Enum.count() == 1
 
       assert styles |> reached("underline") |> Enum.flat_map(&LazyHTML.attribute(&1, "href")) ==
@@ -2425,11 +2424,11 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, named, _html} = mount_page(site, "doc-switcher", attrs)
 
       assert text_of(named, ~s([data-role="doc-switcher-versions-summary"])) == [
-               "Version: 1.0.0"
+               "Version: 1.0.0 · latest"
              ]
 
       {:ok, bare, _html} = mount_page(site, "doc-switcher", Map.put(attrs, :version_text, ""))
-      assert text_of(bare, ~s([data-role="doc-switcher-versions-summary"])) == ["1.0.0"]
+      assert text_of(bare, ~s([data-role="doc-switcher-versions-summary"])) == ["v1.0.0 · latest"]
     end
   end
 
@@ -2702,7 +2701,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, view, _html} = mount_blocks(site, blocks)
 
       assert text_of(view, ~s([data-role="doc-switcher-version"] span:first-child)) ==
-               ["1.0.0", "0.9.0"]
+               ["v1.0.0", "v0.9.0"]
     end
 
     test "and the pages of the version shown alone when it offers no versions", %{site: site} do
@@ -5759,7 +5758,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, view, _html} = mount_page(site, "doc-switcher", %{workspace: "mishka-cms"})
 
       assert text_of(view, ~s([data-role="doc-switcher-version"] span:first-child)) ==
-               ["1.0.0", "0.9.0"]
+               ["v1.0.0", "v0.9.0"]
     end
 
     # A MENU CLOSES WHEN THE READER LEAVES IT: a click outside it or Escape presses its summary while
@@ -6751,6 +6750,506 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
     |> Ash.Query.for_read(:public_list, %{}, authorize?: false)
     |> Ash.Query.filter(workspace_id == ^document.id)
     |> Ash.read!(tenant: site.id)
+  end
+
+  # THE LIBRARY OF THE DESIGN: the documents a site publishes with a search box over them, the ones an
+  # editor flagged Featured as cards and every other one as a row under a heading of its own, each on
+  # a tile of its first letter, with a badge for the ones only some readers may open and for the ones
+  # kept out of search engines. `Provision`'s documentation page is this block with all of it on.
+  describe "doc-workspace-list's search and its two lists" do
+    defp titles(view, within),
+      do: text_of(view, ~s(#{within} [data-role="doc-list-title"]))
+
+    test "show_search draws the box with what the address asked for in it, and narrows the list",
+         %{site: site} do
+      document!(site, name: "Team guide", slug: "team-guide", display_order: 1)
+      document!(site, name: "Release notes", slug: "release-notes", display_order: 2)
+
+      attrs = %{per_page: 10, show_search: true, base: "/docs"}
+
+      {:ok, all, _html} = mount_page(site, "doc-workspace-list", attrs)
+      assert titles(all, "#one") == ["Team guide", "Release notes"]
+      assert has_element?(all, ~s(#one-search input[name="q"][value=""]))
+
+      # A box with an address writes the search there, and without JavaScript is a form that asks for it.
+      assert has_element?(all, ~s(#one-search[action="/docs"][method="get"]))
+
+      {:ok, asked, _html} =
+        mount_page(site, "doc-workspace-list", Map.put(attrs, :params, %{"q" => "GUIDE"}))
+
+      assert titles(asked, "#one") == ["Team guide"], "whatever the case"
+      assert has_element?(asked, ~s(#one-search input[name="q"][value="GUIDE"]))
+    end
+
+    test "matches a document's summary as well as its name", %{site: site} do
+      document!(site, name: "One", slug: "one-doc", description: "Everything about uploads.")
+      document!(site, name: "Two", slug: "two-doc", description: "Something else.")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_search: true,
+          params: %{"q" => "uploads"}
+        })
+
+      assert titles(view, "#one") == ["One"]
+    end
+
+    test "reads no search from an address when it draws no box", %{site: site} do
+      document!(site, name: "Team guide", slug: "team-guide")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, params: %{"q" => "zzz"}})
+
+      assert titles(view, "#one") == ["Team guide"]
+      refute has_element?(view, ~s([data-role="doc-list-search"]))
+    end
+
+    test "treats what a reader types as words, never as a pattern", %{site: site} do
+      document!(site, name: "100% sure", slug: "sure")
+      document!(site, name: "Other", slug: "other")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_search: true,
+          params: %{"q" => "%"}
+        })
+
+      assert titles(view, "#one") == ["100% sure"]
+    end
+
+    test "says nothing matches, in their words, and not that nothing is published", %{site: site} do
+      document!(site, name: "Team guide", slug: "team-guide")
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_search: true,
+          params: %{"q" => "zzz"}
+        })
+
+      assert text_of(view, ~s([data-role="doc-list-no-match"])) == ["Nothing matches “zzz”."]
+      assert text_of(view, ~s([data-role="doc-list-empty"])) == []
+
+      {:ok, other, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_search: true,
+          no_match_text: "No “%{query}” here",
+          params: %{"q" => "zzz"}
+        })
+
+      assert text_of(other, ~s([data-role="doc-list-no-match"])) == ["No “zzz” here"]
+    end
+
+    test "narrows the list as the reader types, from the first page, when it has no address",
+         %{site: site} do
+      for {name, order} <- Enum.with_index(~w(Alpha Bravo Alpine)) do
+        document!(site, name: name, slug: String.downcase(name), display_order: order)
+      end
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 2, show_search: true})
+
+      view |> element("#one [data-role=doc-list-next]") |> render_click()
+      assert titles(view, "#one") == ["Alpine"]
+
+      view |> form("#one-search", %{"q" => "alp"}) |> render_change()
+      assert titles(view, "#one") == ["Alpha", "Alpine"]
+      assert text_of(view, ~s([data-role="doc-list-position"])) == []
+
+      view |> form("#one-search", %{"q" => "zzz"}) |> render_change()
+      assert text_of(view, ~s([data-role="doc-list-no-match"])) == ["Nothing matches “zzz”."]
+
+      view |> form("#one-search", %{"q" => ""}) |> render_change()
+      assert titles(view, "#one") == ["Alpha", "Bravo"]
+    end
+
+    test "split_featured draws the featured ones as cards and the rest as rows, the featured first",
+         %{site: site} do
+      document!(site, name: "Plain one", slug: "plain-one", display_order: 1)
+      document!(site, name: "Picked", slug: "picked", featured: true, display_order: 2)
+      document!(site, name: "Plain two", slug: "plain-two", display_order: 3)
+
+      attrs = %{per_page: 10, split_featured: true}
+
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", attrs)
+
+      assert titles(view, ~s([data-role="doc-list-items"])) == ["Picked"]
+
+      assert titles(view, ~s([data-role="doc-list-others-items"])) ==
+               ["Plain one", "Plain two"]
+
+      assert text_of(view, ~s([data-role="doc-list-others-heading"])) == [
+               "Handbooks & archives"
+             ]
+
+      assert drawn(view, ~s([data-role="doc-card"][data-variant="row"])) |> Enum.count() == 2
+
+      {:ok, heading_less, _html} =
+        mount_page(site, "doc-workspace-list", Map.put(attrs, :others_heading, ""))
+
+      assert text_of(heading_less, ~s([data-role="doc-list-others-heading"])) == []
+
+      # Off, every document is a card, and there is no second list.
+      {:ok, flat, _html} = mount_page(site, "doc-workspace-list", %{per_page: 10})
+      assert titles(flat, "#one") == ["Plain one", "Picked", "Plain two"]
+
+      refute has_element?(flat, ~s([data-role="doc-list-others"]))
+    end
+
+    test "a list that is all featured has no second list", %{site: site} do
+      document!(site, name: "Picked", slug: "picked", featured: true)
+
+      {:ok, only_cards, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, split_featured: true})
+
+      assert titles(only_cards, ~s([data-role="doc-list-items"])) == ["Picked"]
+      refute has_element?(only_cards, ~s([data-role="doc-list-others"]))
+    end
+
+    test "badges a document only some readers may open, and one kept out of search engines",
+         %{site: site} do
+      member = create_user_with_permissions!(["members:read"], site_id: site.id)
+
+      document!(site, name: "Open one", slug: "open-one", display_order: 1)
+
+      document!(site,
+        name: "Staff handbook",
+        slug: "staff",
+        permissions: ["members:read"],
+        display_order: 2
+      )
+
+      document!(site,
+        name: "Archive",
+        slug: "archive",
+        seo_tags: [%{tag: "meta", attrs: %{"name" => "robots"}, content: "noindex, follow"}],
+        display_order: 3
+      )
+
+      attrs = %{per_page: 10, split_featured: true, current_user: member}
+
+      {:ok, view, _html} = mount_page(site, "doc-workspace-list", attrs)
+
+      assert text_of(view, ~s([data-role="doc-list-locked"])) == ["Editors"]
+      assert text_of(view, ~s([data-role="doc-list-unlisted"])) == ["Unlisted"]
+
+      {:ok, named, _html} =
+        mount_page(
+          site,
+          "doc-workspace-list",
+          Map.merge(attrs, %{locked_text: "Members", unlisted_text: ""})
+        )
+
+      assert text_of(named, ~s([data-role="doc-list-locked"])) == ["Members"]
+      assert text_of(named, ~s([data-role="doc-list-unlisted"])) == []
+    end
+
+    test "puts the first letter of a document on its tile, and the same tint every time",
+         %{site: site} do
+      document!(site, name: "Mishka Gervaz", slug: "gervaz", display_order: 1)
+      document!(site, name: "Internal handbook", slug: "internal", display_order: 2)
+
+      tints = fn ->
+        {:ok, view, _html} = mount_page(site, "doc-workspace-list", %{per_page: 10})
+
+        assert text_of(view, ~s([data-role="doc-list-initial"])) == ["G", "I"]
+
+        view
+        |> drawn(~s([data-role="doc-list-initial"]))
+        |> Enum.map(&(&1 |> LazyHTML.attribute("class") |> List.first()))
+      end
+
+      assert tints.() == tints.()
+    end
+
+    test "writes how many pages and which version on a card, and no date when told to leave it out",
+         %{site: site} do
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, show_details: true})
+
+      assert text_of(view, ~s([data-role="doc-list-pages"])) == ["4 pages"]
+      assert text_of(view, ~s([data-role="doc-list-version"])) == ["v1.0.0"]
+      assert [_date] = text_of(view, ~s([data-role="doc-list-updated"]))
+
+      {:ok, bare, _html} =
+        mount_page(site, "doc-workspace-list", %{
+          per_page: 10,
+          show_details: true,
+          updated_text: ""
+        })
+
+      assert text_of(bare, ~s([data-role="doc-list-updated"])) == []
+    end
+  end
+
+  # THE BAR UNDER THE LAYOUT'S HEADER on a document's pages: where the reader is, and what the document
+  # is in. The versions and the languages it offered before are still all it offers.
+  describe "doc-switcher's crumb" do
+    test "draws the documentation and the document, each a link, when asked to", %{site: site} do
+      manual!(site)
+
+      attrs = %{workspace: "mishka-cms", doc_base: "/docs", lang_param: "", show_crumb: true}
+
+      {:ok, view, _html} = mount_page(site, "doc-switcher", attrs)
+
+      assert text_of(view, ~s([data-role="doc-switcher-docs"])) == ["Docs"]
+      assert hrefs(view, ~s([data-role="doc-switcher-docs"])) == ["/docs"]
+      assert text_of(view, ~s([data-role="doc-switcher-document"])) == ["Mishka CMS"]
+      assert hrefs(view, ~s([data-role="doc-switcher-document"])) == ["/docs/mishka-cms"]
+
+      {:ok, named, _html} =
+        mount_page(site, "doc-switcher", Map.put(attrs, :docs_text, "Library"))
+
+      assert text_of(named, ~s([data-role="doc-switcher-docs"])) == ["Library"]
+
+      {:ok, bare, _html} =
+        mount_page(site, "doc-switcher", Map.delete(attrs, :show_crumb))
+
+      refute has_element?(bare, ~s([data-role="doc-switcher-crumb"]))
+    end
+
+    test "keeps the version being read when it links to the document, and says which is latest",
+         %{site: site} do
+      %{document: document} = manual!(site)
+
+      version!(site, document, version_number: "0.9.0", is_latest_for_version: false)
+
+      attrs = %{
+        workspace: "mishka-cms",
+        doc_base: "/docs",
+        lang_param: "",
+        show_crumb: true,
+        version_text: "",
+        params: %{"v" => "0.9.0"}
+      }
+
+      {:ok, view, _html} = mount_page(site, "doc-switcher", attrs)
+
+      assert hrefs(view, ~s([data-role="doc-switcher-document"])) == [
+               "/docs/mishka-cms?v=0.9.0"
+             ]
+
+      assert text_of(view, ~s([data-role="doc-switcher-versions-summary"])) == ["v0.9.0"]
+
+      {:ok, latest, _html} = mount_page(site, "doc-switcher", Map.delete(attrs, :params))
+
+      assert text_of(latest, ~s([data-role="doc-switcher-versions-summary"])) ==
+               ["v1.0.0 · latest"]
+    end
+  end
+
+  # THE OVERVIEW OF A DOCUMENT, as the design draws it: its tile and how big it is, its name and
+  # summary, the first pages of it as numbered cards with the start of each, and every page under the
+  # heading it is filed under.
+  describe "doc-section's overview" do
+    test "says which version and how many pages, on a tile of the document's first letter",
+         %{site: site} do
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", lang_param: ""})
+
+      assert text_of(view, ~s([data-role="doc-landing-initial"])) == ["C"]
+      assert text_of(view, ~s([data-role="doc-landing-version"])) == ["v1.0.0"]
+      assert text_of(view, ~s([data-role="doc-landing-pages"])) == ["4 pages"]
+
+      {:ok, custom, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          lang_param: "",
+          pages_text: "%{count} entries"
+        })
+
+      assert text_of(custom, ~s([data-role="doc-landing-pages"])) == ["4 entries"]
+    end
+
+    test "draws the first pages as numbered cards with the start of their text", %{site: site} do
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", lang_param: ""})
+
+      assert text_of(view, ~s([data-role="doc-landing-start-number"])) == ["01", "02", "03"]
+
+      assert text_of(view, ~s([data-role="doc-landing-start-title"])) ==
+               ["Getting started", "Installation", "Upgrading"]
+
+      assert text_of(view, ~s([data-role="doc-landing-start-description"])) == [
+               "Getting started Body of Getting started.",
+               "Installation Body of Installation.",
+               "Upgrading Body of Upgrading."
+             ]
+
+      assert hrefs(view, ~s([data-role="doc-landing-start-link"])) == [
+               "/docs/mishka-cms/getting-started",
+               "/docs/mishka-cms/installation",
+               "/docs/mishka-cms/upgrading"
+             ]
+
+      {:ok, two, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", lang_param: "", start_count: 2})
+
+      assert text_of(two, ~s([data-role="doc-landing-start-number"])) == ["01", "02"]
+
+      {:ok, none, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", lang_param: "", start_count: 0})
+
+      refute has_element?(none, ~s([data-role="doc-landing-start"]))
+    end
+
+    test "gives a page its own description when its SEO has one, and leaves a card with none bare",
+         %{site: site} do
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "A zero",
+        slug: "a-zero",
+        order_position: 0,
+        content: "<pre><code>only code</code></pre>",
+        seo_tags: [%{tag: "meta", attrs: %{"name" => "description"}, content: "Start here."}]
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", lang_param: ""})
+
+      assert text_of(view, ~s([data-role="doc-landing-start-title"])) |> hd() == "A zero"
+
+      assert text_of(view, ~s([data-role="doc-landing-start-description"])) |> hd() ==
+               "Start here."
+    end
+
+    test "leaves a page's code out of the start of its text", %{site: site} do
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "A zero",
+        slug: "a-zero",
+        order_position: 0,
+        content: "<p>Words first.</p><pre><code>mix deps.get</code></pre><p>More words.</p>"
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{workspace: "mishka-cms", lang_param: ""})
+
+      assert text_of(view, ~s([data-role="doc-landing-start-description"])) |> hd() ==
+               "Words first. More words."
+    end
+  end
+
+  describe "doc-section's pager and trail" do
+    test "write their words and their arrows apart, so a link's words are the page's title",
+         %{site: site} do
+      manual!(site)
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-section", %{
+          workspace: "mishka-cms",
+          params: %{"section" => "installation"}
+        })
+
+      assert text_of(
+               view,
+               ~s([data-role="doc-section-prev"] [data-role="doc-section-step-title"])
+             ) ==
+               ["Getting started"]
+
+      assert text_of(
+               view,
+               ~s([data-role="doc-section-next"] [data-role="doc-section-step-title"])
+             ) ==
+               ["Upgrading"]
+
+      refute text_of(view, ~s([data-role="doc-section-pager"])) |> Enum.join() =~ "→"
+      refute text_of(view, ~s([data-role="doc-section-pager"])) |> Enum.join() =~ "←"
+    end
+  end
+
+  describe "doc-callout's tones" do
+    test "each has its own mark beside its title, and a callout with no title has none",
+         %{site: site} do
+      tones = [
+        {"note", "–"},
+        {"info", "i"},
+        {"tip", "i"},
+        {"success", "↗"},
+        {"warning", "!"},
+        {"danger", "!"}
+      ]
+
+      markers =
+        Enum.map_join(
+          tones,
+          fn {tone, _mark} ->
+            ~s([[component doc-callout tone="#{tone}" title="#{tone} title"]]Words.[[/component]])
+          end
+        ) <> ~s([[component doc-callout tone="tip"]]Untitled.[[/component]])
+
+      body = callout_page!(site, markers)
+
+      assert body
+             |> LazyHTML.query(~s([data-role="doc-callout-icon"]))
+             |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim())) ==
+               Enum.map(tones, &elem(&1, 1))
+
+      assert body
+             |> LazyHTML.query(~s([data-role="doc-callout-title"]))
+             |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim())) ==
+               Enum.map(tones, fn {tone, _mark} -> "#{tone} title" end)
+
+      assert body |> LazyHTML.query(~s([data-role="doc-callout"])) |> Enum.count() == 7
+    end
+  end
+
+  describe "doc-sidebar's indent" do
+    test "draws the pages of a group flush with its heading, and a page's own pages in from it",
+         %{site: site} do
+      grouped!(site)
+
+      {:ok, contents, _html} =
+        mount_page(site, "doc-sidebar", %{
+          path: "/mishka/docs",
+          lang_param: "",
+          expand_all: true,
+          params: %{"section" => "upgrading"}
+        })
+
+      indents =
+        contents
+        |> drawn(~s([data-role="doc-sidebar-item"]))
+        |> Enum.map(fn item ->
+          {item |> LazyHTML.text() |> String.trim(), item |> LazyHTML.attribute("class") |> hd()}
+        end)
+
+      assert {"Navigation", "ps-0"} in indents
+      assert {"Breadcrumb", "ps-0"} in indents
+      assert {"Menu", "ps-0"} in indents
+    end
+  end
+
+  describe "doc-toc's hook" do
+    test "is mounted on the list, by the name the site's scripts know it by", %{site: site} do
+      %{version: version} = manual!(site)
+
+      page!(site, version,
+        title: "Long",
+        slug: "long",
+        order_position: 4,
+        content: "<h2>Why</h2><p>Because.</p><h2>How</h2><p>Like this.</p>"
+      )
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-toc", %{workspace: "mishka-cms", params: %{"section" => "long"}})
+
+      html = render_async(view, @async)
+
+      assert html =~ ~r/phx-hook="[A-Za-z0-9]*DocTocSpy"/
+      assert html =~ ~s(data-role="doc-toc-link")
+    end
   end
 
   # The one page of the fixture manual a test needs by row rather than by name.
