@@ -36,9 +36,11 @@ defmodule MishkaDocument.Plugins.PageFrame do
       edition, which numbers its versions on its own: it is read at its latest.
 
   The edition being read is read as the system, as `MishkaDocument.Plugins.PageSeo` reads it, since
-  the visitor was admitted to it. The others are read as a visitor who is not signed in: the
-  frame hands the plugin no visitor, so an edition locked to permissions is not offered rather than
-  named to someone who may not open it. The library keeps the core's default.
+  the visitor was admitted to it. The others are read as the visitor, the frame's `current_user`:
+  an edition (or, for a page, the page of it) locked to permissions is offered to a reader who
+  holds one of them, and a guest, or a reader who holds none, is offered only what a guest can
+  read, so an edition is never named to someone who may not open it. The library keeps the core's
+  default.
 
   ## The bar
 
@@ -47,26 +49,42 @@ defmodule MishkaDocument.Plugins.PageFrame do
   menu on its trailing side: the kit's `doc-switcher`, which reads the document's versions and the
   same page in each of them. It is a component with state of its own, so the bar gives it an `id`
   and the page's `params`, and `MishkaDocument.Plugins.ContentComponents` names it for the site's
-  stylesheet, since only the bar draws it.
+  stylesheet, since only the bar draws it. It reads the versions and their pages as the visitor
+  too, so the bar hands it the `current_user` the frame names.
+
+  The words are the site's own translations (`MishkaCmsCore.Runtime.Translations`), in the language
+  of the response, and the key itself where nobody has written one. `MishkaDocument.Provision`
+  registers them (`words/0`) when it sets a site up, and `MishkaDocument.Plugins.UsedTranslationKeys`
+  names them to "Remove unused".
 
   Registered in `MishkaDocument.Application`.
   """
 
-  use Gettext, backend: MishkaCmsCore.Gettext
   use MishkaInstaller.Event.Hook, event: "runtime:page:frame", initial: %{priority: 50}
 
   require Ash.Query
 
   alias MishkaCmsCore.Runtime.Languages
+  alias MishkaCmsCore.Runtime.States.TranslationsState
   alias MishkaDocument.{Address, PageSource, Provision, Workspace}
 
   @records ["docs:document", "docs:page"]
+
+  # What the bar calls the documentation: a key of the site's translations.
+  @title "Docs"
 
   # The block the bar draws its version menu with, and the id its state is kept under.
   @switcher "doc-switcher"
   @switcher_id "doc-version"
 
   @workspace_fields [:id, :name, :slug, :path, :language, :language_group_id]
+
+  @doc """
+  The words the bar asks the site's translations for, for `MishkaDocument.Provision` to register:
+  the documentation's name.
+  """
+  @spec words() :: [String.t()]
+  def words, do: [@title]
 
   @doc """
   The components the bar draws on a document's pages, by name. No page or layout names them, so
@@ -126,52 +144,55 @@ defmodule MishkaDocument.Plugins.PageFrame do
 
   defp translations(_frame, _workspace, nil), do: []
 
-  defp translations(%{site_id: site_id}, workspace, shown) do
-    case other_editions(workspace, site_id) do
+  defp translations(%{site_id: site_id} = frame, workspace, shown) do
+    visitor = visitor(frame)
+
+    case other_editions(workspace, site_id, visitor) do
       [] ->
         []
 
       others ->
-        for {edition, found} <- editions_of(others, workspace, shown, site_id),
+        for {edition, found} <- editions_of(others, workspace, shown, site_id, visitor),
             path = address(edition, found.segments, site_id),
             is_binary(path),
             do: %{language: edition.language, path: path, title: found.title}
     end
   end
 
-  # The other documents of the group the document is in, as a visitor who is not signed in reads
-  # them. None while the site publishes one language, which has nothing to switch to.
-  defp other_editions(%{language_group_id: nil}, _site_id), do: []
+  # The other documents of the group the document is in, as the visitor reads them: a document
+  # locked to permissions the visitor does not hold is not among them. None while the site
+  # publishes one language, which has nothing to switch to.
+  defp other_editions(%{language_group_id: nil}, _site_id, _visitor), do: []
 
-  defp other_editions(%{language_group_id: group, id: id}, site_id) do
+  defp other_editions(%{language_group_id: group, id: id}, site_id, visitor) do
     case Languages.site(site_id) do
       [_only] ->
         []
 
       _several ->
         Workspace
-        |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
+        |> Ash.Query.for_read(:public_list, %{}, actor: visitor, tenant: site_id)
         |> Ash.Query.filter(language_group_id == ^group and id != ^id)
         |> Ash.Query.select(@workspace_fields)
-        |> Ash.read(actor: nil, tenant: site_id, page: false)
+        |> Ash.read(actor: visitor, tenant: site_id, page: false)
         |> rows()
     end
   end
 
   # Each edition with what it shows of the record: the edition being read as it was read, the others
   # as they have it. A front page is every document's own name.
-  defp editions_of(others, workspace, %{page: nil} = shown, _site_id),
+  defp editions_of(others, workspace, %{page: nil} = shown, _site_id, _visitor),
     do: [{workspace, shown} | for(edition <- others, do: {edition, front(edition)})]
 
-  defp editions_of(others, workspace, %{page: page} = shown, site_id),
-    do: [{workspace, shown} | translated(others, page, site_id)]
+  defp editions_of(others, workspace, %{page: page} = shown, site_id, visitor),
+    do: [{workspace, shown} | translated(others, page, site_id, visitor)]
 
   defp front(edition), do: %{title: edition.name, page: nil, segments: []}
 
   # The page in each edition that has it, in the version that edition is on: the page that shares
   # its group of translations, else the one called the same.
-  defp translated(editions, page, site_id) do
-    trees = latest_trees(editions, site_id)
+  defp translated(editions, page, site_id, visitor) do
+    trees = latest_trees(editions, site_id, visitor)
 
     for edition <- editions,
         tree = Map.get(trees, edition.id, []),
@@ -188,15 +209,16 @@ defmodule MishkaDocument.Plugins.PageFrame do
 
   # The approved pages of the version each edition is on — the one marked latest, else the newest
   # published (`MishkaDocument.Address.version_shown/2`) — as `%{document_id => pages}`, in two reads
-  # for all of them.
-  defp latest_trees(editions, site_id) do
+  # for all of them, as the visitor reads them: a page locked to permissions they do not hold is
+  # not the edition's page.
+  defp latest_trees(editions, site_id, visitor) do
     ids = Enum.map(editions, & &1.id)
 
     latest =
       PageSource.versions()
-      |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
+      |> Ash.Query.for_read(:public_list, %{}, actor: visitor, tenant: site_id)
       |> Ash.Query.filter(workspace_id in ^ids)
-      |> Ash.read(actor: nil, tenant: site_id, page: false)
+      |> Ash.read(actor: visitor, tenant: site_id, page: false)
       |> rows()
       |> Enum.group_by(& &1.workspace_id)
       |> Map.new(fn {id, versions} -> {id, Address.version_shown(versions, nil)} end)
@@ -205,19 +227,19 @@ defmodule MishkaDocument.Plugins.PageFrame do
       latest
       |> Map.values()
       |> Enum.map(& &1.id)
-      |> pages_of(site_id)
+      |> pages_of(site_id, visitor)
       |> Enum.group_by(& &1.workspace_version_id)
 
     Map.new(latest, fn {id, version} -> {id, Map.get(pages, version.id, [])} end)
   end
 
-  defp pages_of([], _site_id), do: []
+  defp pages_of([], _site_id, _visitor), do: []
 
-  defp pages_of(version_ids, site_id) do
+  defp pages_of(version_ids, site_id, visitor) do
     PageSource.pages()
-    |> Ash.Query.for_read(:public_list, %{}, actor: nil, tenant: site_id)
+    |> Ash.Query.for_read(:public_list, %{}, actor: visitor, tenant: site_id)
     |> Ash.Query.filter(workspace_version_id in ^version_ids)
-    |> Ash.read(actor: nil, tenant: site_id, page: false)
+    |> Ash.read(actor: visitor, tenant: site_id, page: false)
     |> rows()
   end
 
@@ -265,8 +287,14 @@ defmodule MishkaDocument.Plugins.PageFrame do
   # The bar
   # ---------------------------------------------------------------------------
 
-  defp library_bar(%{language: language, site_id: site_id}),
-    do: %{title: gettext("Docs"), title_path: library(language, site_id)}
+  defp library_bar(%{language: language, site_id: site_id} = frame),
+    do: %{title: word(frame), title_path: library(language, site_id)}
+
+  defp word(%{site_id: site_id, language: language}),
+    do: TranslationsState.lookup(site_id, language, @title) || @title
+
+  # The signed-in visitor, or `nil` for a guest.
+  defp visitor(frame), do: Map.get(frame, :current_user)
 
   # DOCS IS THE BAR'S TITLE, so the trail starts at the document: the library, the document and the
   # page are one line, and listing the library again would draw it twice. The version menu is the
@@ -274,7 +302,7 @@ defmodule MishkaDocument.Plugins.PageFrame do
   # it builds the address of every version from — a document at an address of its own is read there.
   defp bar(%{site_id: site_id} = frame, workspace, shown) do
     %{
-      title: gettext("Docs"),
+      title: word(frame),
       title_path: library(workspace.language, site_id),
       crumbs: crumbs(workspace, shown, site_id),
       component: @switcher,
@@ -292,10 +320,11 @@ defmodule MishkaDocument.Plugins.PageFrame do
   defp crumbs(workspace, _front_page_or_none, site_id),
     do: [%{label: workspace.name, path: address(workspace, [], site_id)}]
 
-  defp switcher(%{params: params, language: language}) do
+  defp switcher(%{params: params, language: language} = frame) do
     %{
       id: @switcher_id,
       lang: language,
+      current_user: visitor(frame),
       doc_base: Provision.docs_base(),
       params: Map.delete(params, Languages.capture()),
       version_text: ""

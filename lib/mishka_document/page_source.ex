@@ -16,8 +16,9 @@ defmodule MishkaDocument.PageSource do
 
   READ AS THE SYSTEM. What is read is the lock `MishkaCmsWeb.RuntimeLive` admits the visitor by:
   read as a visitor who may not open it, a locked document or page is no record at all, and the
-  page is handed no permissions to refuse them with. Neither hook names the visitor either, and
-  what they build reaches only a visitor the page admitted.
+  page is handed no permissions to refuse them with. What either hook builds from it reaches only a
+  visitor the page admitted. `PageFrame`, which is handed the visitor, reads the OTHER editions of
+  the record as them (`MishkaCmsCore.Runtime.SiteLayout`'s `current_user`).
   """
 
   require Ash.Query

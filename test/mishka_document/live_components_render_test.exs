@@ -6876,7 +6876,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   # its end, the version menu — the block `MishkaDocument.Plugins.PageFrame` names, drawn from the
   # assigns it hands it. The languages are the header's.
   describe "the section bar of a document's page" do
-    defp bar_for(site, params, record \\ "docs:page") do
+    defp bar_for(site, params, record \\ "docs:page", visitor \\ nil) do
       given =
         SiteLayout.given(
           %{
@@ -6886,6 +6886,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
             section: "document"
           },
           site_id: site.id,
+          current_user: visitor,
           extra: %{"record" => record},
           params: Map.put(params, "lang", "en")
         )
@@ -6931,6 +6932,41 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
              ]
 
       assert text_of(view, ~s([data-role="doc-switcher-versions-summary"])) == ["v1.0.0 · latest"]
+    end
+
+    # THE MENU READS THE PAGES OF EVERY VERSION AS THE VISITOR THE BAR NAMES: the page locked to
+    # members in 0.9.0 is not that version's page to a guest, who is sent to the version's front page,
+    # and is to a member.
+    test "links each version's page as the visitor may open it", %{site: site} do
+      %{document: document, pages: [_start, installation | _rest]} = manual!(site)
+      member = create_user_with_permissions!(["members:read"], site_id: site.id)
+
+      older =
+        version!(site, document, version_number: "0.9.0", published_at: ~U[2025-01-01 00:00:00Z])
+
+      page!(site, older,
+        title: "Installation",
+        slug: "installation",
+        order_position: 1,
+        section_lineage_id: installation.section_lineage_id,
+        permissions: ["members:read"]
+      )
+
+      params = %{"workspace" => "mishka-cms", "section" => "installation"}
+
+      {:ok, guest, _html} = mount_bar(site, bar_for(site, params))
+
+      assert hrefs(guest, ~s([data-role="doc-switcher-version"])) == [
+               "/docs/mishka-cms/installation",
+               "/docs/mishka-cms?v=0.9.0"
+             ]
+
+      {:ok, reader, _html} = mount_bar(site, bar_for(site, params, "docs:page", member))
+
+      assert hrefs(reader, ~s([data-role="doc-switcher-version"])) == [
+               "/docs/mishka-cms/installation",
+               "/docs/mishka-cms/installation?v=0.9.0"
+             ]
     end
 
     test "draws the version being read, and the way back from an older one", %{site: site} do

@@ -72,6 +72,12 @@ defmodule MishkaDocument.Application do
     MishkaDocument.Plugins.PageFrame
   ]
 
+  # Names the words the bar under the header looks up in a site's translations, so "Remove unused"
+  # keeps them (a `runtime:translations:used_keys` plugin) — `MishkaCmsCore.Runtime.Translations`.
+  @translation_plugins [
+    MishkaDocument.Plugins.UsedTranslationKeys
+  ]
+
   # Each code block of a page being written is lexed in a task of its own under this supervisor — see
   # `MishkaDocument.Resources.Changes.HighlightCode`.
   @highlight_supervisor {Task.Supervisor, name: MishkaDocument.HighlightSupervisor}
@@ -86,7 +92,8 @@ defmodule MishkaDocument.Application do
       @dashboard_widgets ++
         @settings_plugins ++
         @sidebar_menus ++
-        @provision_plugins ++ @seo_plugins ++ @share_card_plugins ++ @runtime_plugins
+        @provision_plugins ++
+        @seo_plugins ++ @share_card_plugins ++ @runtime_plugins ++ @translation_plugins
 
   @impl true
   def start(_type, _args) do

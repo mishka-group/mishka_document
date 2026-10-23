@@ -42,25 +42,38 @@ defmodule MishkaDocument.Provision do
       because a page an admin archived is an answer, not an absence.
     * **The snippet.** Only when nothing of that name is saved for this site's page editor.
 
-  Nothing is ever updated, so nothing an author touched can be lost. What a site that was set up
-  months ago does about the sample pages having moved on since is
+  Nothing an author touched is ever written over. The run adds what is missing and, after it, brings
+  up to date only what it can prove nobody changed:
+
+    * **The pages of the older design.** A site set up before the pages drew into the layout's column
+      has the library and the document pages with a 1280 pixel wrapper, a header and language pills
+      of their own, and `doc-switcher` as their bar. Hung on `site-main` they would draw a second
+      bar inside the column, so a page whose stored template is EXACTLY what the release in
+      production wrote (`MishkaDocument.EarlierPages`, compared character for character) is given
+      the template written here, and is reported in `upgraded_pages`. A page with any edit in it, or
+      on a layout the admin chose, is left as it is.
+    * **The components that are behind.** `MishkaCmsCore.Runtime.Handlers.UiKitUpgrade`'s safe
+      update: the rows still byte for byte what an older bundle installed, and no other. A row an
+      admin edited, or one that carries no fingerprint of what wrote it, is named in
+      `components_waiting` and left for the "Documentation components" card on the document
+      dashboard, which asks by name.
+    * **The bar's words**, registered in the site's translations (`MishkaDocument.Plugins.PageFrame.words/0`),
+      where a row that is there is left as it is.
+
+  What a site that was set up months ago does about a page it has edited is
   `MishkaCmsCore.Runtime.PageSamples`, behind the same card as the component update: it offers each
   outdated page as a DRAFT of itself, which the admin previews in the builder and publishes when
   they want it. `sample_pages/1` is what both read the pages from.
 
-  WHICH MEANS A SITE PROVISIONED TODAY CAN GET PAGES NEWER THAN ITS COMPONENTS. The pages below are
-  written against the bundle in this checkout, and a site that already has the components keeps the
-  ones it has — so an attribute added to a component since that site was seeded reaches a row that
-  does not declare it, and `MishkaCmsCore.Runtime.Compilers.ComponentCompiler` sweeps every
+  A PAGE IS NEVER WRITTEN BEFORE THE COMPONENTS IT DRAWS. The pages below are written against the
+  bundle in this checkout, and an attribute added to a component since a site was seeded reaches a
+  row that does not declare it, and `MishkaCmsCore.Runtime.Compilers.ComponentCompiler` sweeps every
   undeclared key into the component's global attr: it is rendered onto the element as an HTML
-  attribute, read by nothing, and the behaviour the page asked for is silently the old one. Such a
-  site takes the newer components from the "Documentation components" card on the document
-  dashboard, which is `MishkaCmsCore.Runtime.Handlers.UiKitUpgrade`: it says which rows are behind
-  the bundle and which of them carry an edit, and writes only the ones the admin chooses. What it
-  does NOT do is what `MishkaDocument.Kit.install!/1` does — upsert every component the bundle ships
-  over whatever is there — and neither does the button here, because an admin asking for pages has
-  not asked to lose an edit. `MishkaDocument.ProvisionTest` holds the templates and the bundle
-  together; no test can see a row installed months ago.
+  attribute, read by nothing, and the behaviour the page asked for is silently the old one. So the
+  components that are behind are updated first, and a row that carries an edit is what keeps a
+  page on the older behaviour — `components_waiting` says which. What none of this does is what
+  `MishkaDocument.Kit.install!/1` does, upsert every component the bundle ships over whatever is
+  there. `MishkaDocument.ProvisionTest` holds the templates and the bundle together.
 
   ## The pages, and why they look the way they do
 
@@ -146,10 +159,15 @@ defmodule MishkaDocument.Provision do
 
   require Ash.Query
 
-  alias MishkaCmsCore.Runtime.{ExtensionProvision, SiteLayout}
-  alias MishkaDocument.Kit
+  alias MishkaCmsCore.Runtime.ExtensionProvision
+  alias MishkaCmsCore.Runtime.Handlers.UiKitUpgrade
+  alias MishkaCmsCore.Runtime.{Page, PageProvision, Site, SiteLayout, Translations}
+  alias MishkaDocument.{EarlierPages, Kit}
+  alias MishkaDocument.Plugins.PageFrame
 
+  @app :mishka_document
   @section "document"
+  @package %{page_code: :package}
   @snippet_name "Latest documents"
 
   # THE DOCUMENTATION'S ADDRESSES, WRITTEN ONCE. A page's path, the base a block builds links to it
@@ -164,8 +182,24 @@ defmodule MishkaDocument.Provision do
   @document "#{@docs}/:workspace"
   @document_page "#{@document}/*section"
 
-  @typedoc "See `MishkaCmsCore.Runtime.ExtensionProvision.report/0`."
-  @type report :: ExtensionProvision.report()
+  @typedoc """
+  See `MishkaCmsCore.Runtime.ExtensionProvision.report/0`, which this adds `upgraded_pages`,
+  `upgraded_components` and `components_waiting` to.
+  """
+  @type report :: %{
+          version: String.t() | nil,
+          permissions: [String.t()],
+          components: [String.t()],
+          pages: [String.t()],
+          snippets: [String.t()],
+          renamed_pages: [PageProvision.renamed()],
+          skipped_pages: [PageProvision.held()],
+          upgraded: MishkaCmsCore.Install.StarterContent.upgraded(),
+          adopted_pages: [String.t()],
+          upgraded_pages: [String.t()],
+          upgraded_components: [String.t()],
+          components_waiting: [String.t()]
+        }
 
   # THE DOCUMENTATION'S OWN AREAS, created when it is installed — with its components and its
   # pages, not with the core's names — so a site that never installs it has none to grant.
@@ -191,7 +225,7 @@ defmodule MishkaDocument.Provision do
   @spec manifest() :: ExtensionProvision.manifest()
   def manifest do
     %{
-      app: :mishka_document,
+      app: @app,
       bundle_path: Kit.bundle_path(),
       section: @section,
       pages: &page_attrs_for/1,
@@ -203,13 +237,19 @@ defmodule MishkaDocument.Provision do
   @doc """
   Gives `site` everything the documentation ships and it is missing, and returns what happened as
   `%{permissions: names, components: names, pages: paths, snippets: names, renamed_pages: renamed,
-  skipped_pages: held, upgraded: names, adopted_pages: paths}` — `permissions` empty once any site
+  skipped_pages: held, upgraded: names, adopted_pages: paths, upgraded_pages: paths,
+  upgraded_components: names, components_waiting: names}` — `permissions` empty once any site
   has installed it, the next three empty on a site that already has it all, `renamed_pages`
   naming every sample page written under a name of its own because the one it asked for was taken,
   and `skipped_pages` naming every one something already there holds, so the caller can say which
   rather than leave it to the logs. `upgraded` names the starter rows brought up to date for the
   pages to be drawn in, and `adopted_pages` the pages of the documentation a site had with no
   layout, now hung on its `site-main` (`MishkaCmsCore.Runtime.SiteLayout.adopt_pages/3`).
+
+  `upgraded_pages` names the pages found exactly as the older design wrote them and now written in
+  the new one — those are among `skipped_pages` too, since nothing new was created at their path —
+  `upgraded_components` the components the kit's safe update wrote, and `components_waiting` the
+  ones it left, an edit or a row of unknown origin. See "Idempotent" above.
 
   Takes the site record the hook is handed, or its id. Raises when the site is not there, or when a
   write is refused for any reason but a page being taken.
@@ -221,8 +261,11 @@ defmodule MishkaDocument.Provision do
   session behind them. See `MishkaCmsCore.Runtime.ExtensionProvision.ensure!/4`.
   """
   @spec ensure!(map() | String.t(), map(), keyword()) :: report()
-  def ensure!(site, answers \\ %{}, opts \\ []),
-    do: ExtensionProvision.ensure!(manifest(), site, answers, opts)
+  def ensure!(site, answers \\ %{}, opts \\ []) do
+    manifest()
+    |> ExtensionProvision.ensure!(site, answers, opts)
+    |> brought_up_to_date(site, opts)
+  end
 
   @doc """
   Creates the documentation's permission names that are not stored yet, and returns the ones it created —
@@ -274,9 +317,15 @@ defmodule MishkaDocument.Provision do
         renamed_pages: [],
         skipped_pages: paths,
         upgraded: [],
-        adopted_pages: []
+        adopted_pages: [],
+        upgraded_pages: [],
+        upgraded_components: [],
+        components_waiting: []
       },
-      else: ExtensionProvision.ensure!(address_manifest(address), site, %{}, opts)
+      else:
+        address_manifest(address)
+        |> ExtensionProvision.ensure!(site, %{}, opts)
+        |> brought_up_to_date(site, opts)
   end
 
   @doc """
@@ -317,7 +366,7 @@ defmodule MishkaDocument.Provision do
 
   defp address_manifest(address) do
     %{
-      app: :mishka_document,
+      app: @app,
       bundle_path: Kit.bundle_path(),
       section: @section,
       pages: &address_page_attrs_for(&1, address)
@@ -352,6 +401,117 @@ defmodule MishkaDocument.Provision do
         }
       ],
       &Map.merge(&1, layout)
+    )
+  end
+
+  # ---------------------------------------------------------------------------
+  # Bringing an older site up to date
+  # ---------------------------------------------------------------------------
+
+  # WHAT A RUN HAS TO DO AFTER THE PAGES ARE WRITTEN, for a site that had them before: the words of
+  # the bar the site's translations hold, the components that are behind, and the pages of the older
+  # design nobody changed. In that order, so a page never draws an attribute its component does not
+  # declare yet. Each step is idempotent, and none writes over anything an author touched.
+  defp brought_up_to_date(report, site, opts) do
+    actor = Keyword.get(opts, :actor)
+    %{id: site_id} = site = site!(site)
+
+    :ok = Translations.register(site_id, PageFrame.words())
+
+    %{updated: updated, added: added, left: left} = upgrade_components!(site_id, actor)
+
+    Map.merge(report, %{
+      upgraded_components: updated ++ added,
+      components_waiting: left,
+      upgraded_pages: upgrade_pages(site, actor)
+    })
+  end
+
+  defp site!(%{id: _id, name: _name} = site), do: site
+
+  defp site!(site_id) when is_binary(site_id) do
+    Site
+    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+    |> Ash.Query.filter(id == ^site_id)
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  # THE KIT'S SAFE UPDATE, which writes a row only while it is still what the bundle that installed it
+  # wrote. Run by the same actor, so each row is written through the action their own role may use.
+  defp upgrade_components!(site_id, actor) do
+    case UiKitUpgrade.upgrade!(Kit.bundle_path(), site_id, actor: actor) do
+      {:ok, report} ->
+        report
+
+      {:error, reason} ->
+        raise ArgumentError,
+              "the documentation components could not be brought up to date: #{inspect(reason)}"
+    end
+  end
+
+  # THE PAGES OF THE OLDER DESIGN, found by their text: a page whose stored template is exactly one
+  # `MishkaDocument.EarlierPages` holds, for this site, is written as the new design has it. Only
+  # pages of the documentation's section on the site's `site-main`: a site without that layout has
+  # nothing to draw the header and the bar for the new design, and a page an admin moved to another
+  # layout is theirs. A page this extension did not write is not touched either.
+  defp upgrade_pages(%{id: site_id, name: site_name}, actor) do
+    case SiteLayout.layout_id(site_id) do
+      nil ->
+        []
+
+      layout_id ->
+        for page <- pages_in(site_id, layout_id),
+            PageProvision.provisioned_by(page) in [nil, to_string(@app)],
+            {:ok, template} <- [rewritten(page.template, site_name)] do
+          write_template!(page, template, site_id, actor)
+          page.path
+        end
+    end
+  end
+
+  defp pages_in(site_id, layout_id) do
+    Page
+    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+    |> Ash.Query.filter(site_id == ^site_id and section == ^@section and layout_id == ^layout_id)
+    |> Ash.Query.sort(:path)
+    |> Ash.read!(authorize?: false, page: false)
+  end
+
+  # The template this page has now, for one that is an earlier text of it.
+  defp rewritten(template, site_name) do
+    case EarlierPages.recognise(template, site_name) do
+      :library -> {:ok, index(site_name)}
+      {:document, address} -> {:ok, document(site_name, address)}
+      nil -> :unchanged
+    end
+  end
+
+  # THE TEMPLATE AND THE VERSION THE PAGE IS NOW WRITTEN AGAINST, and nothing else of the page.
+  defp write_template!(page, template, site_id, actor) do
+    attrs = %{
+      template: template,
+      extra: PageProvision.stamp(%{extra: page.extra}, @app, bundle_version()).extra
+    }
+
+    page |> template_update(attrs, site_id, actor) |> Ash.update!()
+  end
+
+  # THE THREE ANSWERS `ExtensionProvision` WRITES BY: nobody is the system, a master writes the
+  # master action, a site's admin their own site's under its tenant. The write says it is a
+  # package's, as the provision's page writes do.
+  defp template_update(page, attrs, _site_id, nil) do
+    Ash.Changeset.for_update(page, :master_update, attrs, authorize?: false, context: @package)
+  end
+
+  defp template_update(page, attrs, _site_id, %{site_id: nil} = actor) do
+    Ash.Changeset.for_update(page, :master_update, attrs, actor: actor, context: @package)
+  end
+
+  defp template_update(page, attrs, site_id, actor) do
+    Ash.Changeset.for_update(page, :update, attrs,
+      actor: actor,
+      tenant: site_id,
+      context: @package
     )
   end
 

@@ -48,7 +48,7 @@ Mishka Document is installed with [Mishka CMS](https://github.com/mishka-group/m
 
 Mishka CMS registers it in three places: `MishkaDocument` in `ash_domains` and `MishkaDocumentWeb` in the core's `extensions` list, both in `config/config.exs`, and `MishkaDocument` in the domains of the JSON:API router.
 
-Then install the documentation onto a site. Tick Documentation in the install wizard, or open the Documents dashboard of a site that does not have it yet and press Set up. Either way the site gets the eleven components, the three sample pages and a snippet that lists the latest documents. Running it again adds only what is missing and leaves anything you edited.
+Then install the documentation onto a site. Tick Documentation in the install wizard, or open the Documents dashboard of a site that does not have it yet and press Set up. Either way the site gets the eleven components, the three sample pages and a snippet that lists the latest documents. Running it again adds what is missing and brings up to date the sample pages and components an older release wrote that nobody has edited. Anything you edited is left as it is, and a component you edited waits for your choice on the Documentation components card.
 
 For sample documents, versions and issues in development, run `mix run priv/repo/dev_seeds.exs` in `mishka_cms`.
 

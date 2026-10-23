@@ -16,7 +16,7 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
   use MishkaDocument.DataCase, async: false
 
   alias MishkaCmsCore.Runtime.{Languages, SiteLayout}
-  alias MishkaCmsCore.Runtime.States.SettingsState
+  alias MishkaCmsCore.Runtime.States.{SettingsState, TranslationsState}
   alias MishkaCmsCore.Settings
   alias MishkaDocument.Plugins.PageFrame
   alias MishkaDocument.Provision
@@ -44,11 +44,13 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
   defp english("prefix_all", path), do: "/en" <> path
 
   # The map the layout hands the plugins for a request to the documentation page at `path`, which
-  # shows `record`, with `params`; the page's own editions are what core would offer without it.
-  defp given(site, path, record, params, language \\ "en") do
+  # shows `record`, with `params`, from `visitor` (a guest where there is none); the page's own
+  # editions are what core would offer without it.
+  defp given(site, path, record, params, language \\ "en", visitor \\ nil) do
     SiteLayout.given(
       %{title: "Document", path: path, language: language, section: "document"},
       site_id: site.id,
+      current_user: visitor,
       extra: (record && %{"record" => record}) || %{},
       params: params,
       translations: [
@@ -58,11 +60,15 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
     )
   end
 
-  defp document(site, kind, params, language \\ "en") do
+  defp document(site, kind, params, language \\ "en", visitor \\ nil) do
     path = Provision.item_paths()[kind]
     record = %{workspace: "docs:document", section: "docs:page"}[kind]
-    given(site, path, record, Map.put(params, "lang", language), language)
+    given(site, path, record, Map.put(params, "lang", language), language, visitor)
   end
+
+  # A reader of `site` holding `permissions`: none is a signed-in reader who holds nothing.
+  defp reader!(site, permissions \\ []),
+    do: create_user_with_permissions!(permissions, site_id: site.id)
 
   # What the plugin returns, and what the layout makes of it.
   defp answer(given) do
@@ -136,18 +142,19 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
 
     install = page!(site, en, "install", title: "Install", order_position: 0)
 
-    page!(site, fa, "nasb",
-      title: "نصب",
-      language: "fa",
-      order_position: 0,
-      language_group_id: install.language_group_id
-    )
+    nasb =
+      page!(site, fa, "nasb",
+        title: "نصب",
+        language: "fa",
+        order_position: 0,
+        language_group_id: install.language_group_id
+      )
 
     page!(site, en, "upgrading", title: "Upgrading", order_position: 1)
     page!(site, fa, "upgrading", title: "ارتقا", language: "fa", order_position: 1)
     page!(site, en, "english-only", title: "English only", order_position: 2)
 
-    %{english: english, persian: persian, en: en, fa: fa, install: install}
+    %{english: english, persian: persian, en: en, fa: fa, install: install, nasb: nasb}
   end
 
   defp page_params(slug, extra \\ %{}),
@@ -219,15 +226,70 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
       assert frame.translations == []
     end
 
-    # THE FRAME HANDS THE PLUGIN NO VISITOR, so the other editions are read as one who is not signed
-    # in: an edition locked to a permission is not named to someone who may not open it. The edition
-    # being read was admitted by the page, and is among the languages.
-    test "does not name an edition only some readers may open", %{site: site} do
+    # THE OTHER EDITIONS ARE READ AS THE VISITOR THE FRAME NAMES: an edition locked to a permission is
+    # not named to someone who may not open it, and is to someone who may. The edition being read was
+    # admitted by the page, and is among the languages.
+    test "does not name an edition only some readers may open to a guest", %{site: site} do
       handbook!(site, [], permissions: ["docs:editors"])
 
       frame = framed(document(site, :workspace, %{"workspace" => "handbook"}))
 
       assert frame.translations == []
+    end
+
+    test "does not name it to a signed-in reader who holds none of its permissions", %{site: site} do
+      handbook!(site, [], permissions: ["docs:editors"])
+
+      for visitor <- [reader!(site), reader!(site, ["members:read"])] do
+        frame = framed(document(site, :workspace, %{"workspace" => "handbook"}, "en", visitor))
+
+        assert frame.translations == []
+      end
+    end
+
+    test "names it to a reader who holds one of its permissions", %{site: site} do
+      handbook!(site, [], permissions: ["docs:editors", "docs:staff"])
+      editor = reader!(site, ["docs:editors"])
+
+      frame = framed(document(site, :workspace, %{"workspace" => "handbook"}, "en", editor))
+
+      assert offered(frame) == [
+               {"en", "/docs/handbook", "Handbook"},
+               {"fa", "/fa/docs/rahnama", "راهنما"}
+             ]
+    end
+
+    test "offers the same reader each edition as it opens for them, and a guest what opens", %{
+      site: site
+    } do
+      %{english: english} = handbook!(site, [], permissions: ["docs:editors"])
+
+      arabic =
+        document!(site,
+          name: "الدليل",
+          slug: "aldalil",
+          language: "ar",
+          language_group_id: english.language_group_id
+        )
+
+      version!(site, arabic)
+      {:ok, _} = Settings.put("site.languages", ["en", "fa", "ar"], site_id: site.id)
+
+      guest = framed(document(site, :workspace, %{"workspace" => "handbook"}))
+
+      editor =
+        framed(
+          document(
+            site,
+            :workspace,
+            %{"workspace" => "handbook"},
+            "en",
+            reader!(site, ["docs:editors"])
+          )
+        )
+
+      assert Enum.map(guest.translations, & &1.language) == ["en", "ar"]
+      assert Enum.map(editor.translations, & &1.language) == ["en", "fa", "ar"]
     end
 
     test "keeps the edition being read when it is the locked one", %{site: site} do
@@ -341,6 +403,29 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
       frame = framed(document(site, :section, page_params("english-only")))
 
       assert frame.translations == []
+    end
+
+    # THE PAGE OF AN EDITION IS READ AS THE VISITOR TOO: the Persian `nasb` locked to a permission is
+    # not the Persian edition of `install` to a reader who cannot open it.
+    test "leaves out an edition whose page is locked to a reader who may not open it", %{
+      site: site
+    } do
+      %{nasb: nasb} = handbook!(site)
+      Ash.Seed.update!(nasb, %{permissions: ["docs:editors"]})
+      english = [{"en", "/docs/handbook/install", "Install"}]
+
+      assert [] == framed(document(site, :section, page_params("install"))).translations
+
+      for visitor <- [reader!(site), reader!(site, ["members:read"])] do
+        frame = framed(document(site, :section, page_params("install"), "en", visitor))
+
+        assert frame.translations == []
+      end
+
+      editor = reader!(site, ["docs:editors"])
+      frame = framed(document(site, :section, page_params("install"), "en", editor))
+
+      assert offered(frame) == english ++ [{"fa", "/fa/docs/rahnama/nasb", "نصب"}]
     end
 
     # EDITIONS NUMBER THEIR VERSIONS ON THEIR OWN, so a `?v=` of this edition's never crosses to
@@ -499,6 +584,37 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
              ]
     end
 
+    # THE BAR'S WORDS ARE THE SITE'S OWN TRANSLATIONS, as the blog's are: the key itself where nobody
+    # has written one, and what a translator wrote in the language of the response.
+    test "says Docs in the site's translations, and in English where nobody wrote them", %{
+      site: site
+    } do
+      handbook!(site)
+
+      title = fn language, params ->
+        framed(document(site, :section, params, language)).section_bar.title
+      end
+
+      assert title.("fa", %{"workspace" => "rahnama", "section" => "nasb"}) == "Docs"
+
+      :ok = TranslationsState.put(site.id, "fa", "Docs", "مستندات")
+
+      assert title.("fa", %{"workspace" => "rahnama", "section" => "nasb"}) == "مستندات"
+      assert title.("en", page_params("install")) == "Docs"
+
+      library = framed(given(site, "/:lang/docs", nil, %{"lang" => "fa"}, "fa"))
+      assert library.section_bar.title == "مستندات"
+    end
+
+    test "asks the site's translations for the one word it says", %{site: site} do
+      assert PageFrame.words() == ["Docs"]
+
+      handbook!(site)
+      %{section_bar: bar} = framed(document(site, :workspace, %{"workspace" => "handbook"}))
+
+      assert bar.title in PageFrame.words()
+    end
+
     # THE VERSION MENU IS THE KIT'S `doc-switcher`, a block with state of its own, so the bar gives it
     # an id, and the page's own URL keys — the document, the page, the version — and the base it
     # builds every version's address from. The language is the page's, not a key of the URL.
@@ -513,10 +629,30 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
       assert given == %{
                id: "doc-version",
                lang: "en",
+               current_user: nil,
                doc_base: "/:lang/docs",
                params: params,
                version_text: ""
              }
+    end
+
+    # THE MENU READS THE VERSIONS AND THEIR PAGES AS THE VISITOR, so the bar names the one the frame
+    # does: a guest is `nil`, a signed-in reader is who they are.
+    test "hands the version menu the visitor it reads as", %{site: site} do
+      handbook!(site)
+      editor = reader!(site, ["docs:editors"])
+
+      for visitor <- [nil, editor] do
+        %{section_bar: %{assigns: given}} =
+          framed(document(site, :section, page_params("install"), "en", visitor))
+
+        assert given.current_user == visitor
+      end
+
+      %{section_bar: %{assigns: given}} =
+        framed(document(site, :workspace, %{"workspace" => "handbook"}, "en", editor))
+
+      assert given.current_user == editor
     end
 
     test "tells the version menu a document at an address of its own is read there", %{site: site} do
