@@ -21,10 +21,10 @@ defmodule MishkaDocument.Plugins.PageFrame do
   The header's language switcher is the only one the documentation has. On a document's pages it
   lists the languages THAT record is written in, each at the address of its own edition, which is
   what `language_group_id` says: the editions of a document are the documents sharing it, and the
-  edition of a page is the page of the other document's latest version that shares its own group
-  (`doc-switcher` did the same with the slug as the fallback for a translation nobody linked, and so
-  does this). The core's default would offer this same path in every language, and an edition's
-  slugs are its own: the Persian edition of `/docs/handbook/install` is `/fa/docs/rahnama/nasb`.
+  edition of a page is the page of the other document's latest version that shares its own group,
+  else the one with the same slug, for a translation nobody linked. The core's default would offer
+  this same path in every language, and an edition's slugs are its own: the Persian edition of
+  `/docs/handbook/install` is `/fa/docs/rahnama/nasb`.
 
     * a document's front page: each edition of the document, titled with its name;
     * a page: each edition that has the page, titled with the page's title there. An edition that

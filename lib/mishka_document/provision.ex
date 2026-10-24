@@ -807,15 +807,15 @@ defmodule MishkaDocument.Provision do
     """
   end
 
-  # The block an author drops on a home page — the TODO's "last documents", which is this same
-  # component cut to the few most recently changed. `lang={@page.language}` and a `params` map the
-  # language has been taken out of, which is the SAME rule the three pages above follow, and it holds
-  # here for the reason it holds there: `@page.language` is the `:lang` capture where the author's
-  # page has one and the page row's own language where it has none — see
-  # `MishkaCmsCore.Runtime.PageEditions.language/3` — so there is no page this block can land on
-  # whose language it has to guess at. A `?lang=` left to decide instead would list English documents
-  # on a Persian page, whose shell is drawn `<html lang="fa" dir="rtl">` from that same row.
-  # `doc_base` carries the capture, so every card still links under its own document's language.
+  # The block an author drops on a home page: this same component cut to the few most recently
+  # changed. `lang={@page.language}` and a `params` map the language has been taken out of, which
+  # is the SAME rule the three pages above follow, and it holds here for the reason it holds there:
+  # `@page.language` is the `:lang` capture where the author's page has one and the page row's own
+  # language where it has none — see `MishkaCmsCore.Runtime.PageEditions.language/3` — so there is
+  # no page this block can land on whose language it has to guess at. A `?lang=` left to decide
+  # instead would list English documents on a Persian page, whose shell is drawn
+  # `<html lang="fa" dir="rtl">` from that same row. `doc_base` carries the capture, so every card
+  # still links under its own document's language.
   defp latest_documents(site) do
     """
     <section data-role="doc-latest" class="rounded-[24px] border border-edge bg-surface p-5 sm:p-7 dark:border-edge-dark dark:bg-surface-dark">

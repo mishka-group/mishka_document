@@ -76,8 +76,9 @@ defmodule MishkaDocument.Kit do
       an older one. It is drawn by the bar under the site's header
       (`MishkaDocument.Plugins.PageFrame`), at the end of the trail the bar draws itself, and has no
       trail and no languages of its own: the header's language switcher lists the languages the
-      page is in. The bar hands it no `current_user`, so it reads as a guest: a version of a page
-      only some readers may open leads to the document's front page.
+      page is in. The bar hands it the visitor as `current_user` and the page's rows as
+      `page_source`, so it reads each version's pages as the visitor: a version whose page this
+      reader may not open leads to the document's front page.
     * `doc-section` draws a document's overview — its tile, its version and how many pages, its name
       and summary, the first `start_count` pages as numbered cards with the start of their text, and
       every page under the heading it is filed under — and a page with its trail, its title, its text
