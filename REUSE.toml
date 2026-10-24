@@ -6,7 +6,6 @@ path = [
   "**/*.json",
   "**/*.lock",
   "priv/**",
-  "test/fixtures/**",
   "**/*.png",
   "**/*.jpg",
   "**/*.jpeg",

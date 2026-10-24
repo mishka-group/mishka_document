@@ -20,17 +20,24 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   ## What is read
 
-  One read, through `:public_list` as `doc-section` reads it, on the page's site, as the system: the
-  active document whose own address the page is at, else the one the `workspace` capture names, in
-  the page's language. A slug names only a document with no address of its own: one that has an
-  address is read there and nowhere else, so `/docs/<its slug>` names nothing. It brings the
-  document's published versions, and the approved pages of the one shown as a tree — the version
-  shown is the one `?v=` names, else the one marked latest, else the newest published, and no other
-  version's pages are read. The page is the one at the address the `section` capture holds —
-  `headless/switch` — read once more for its own text and lock. A version's front page is at the
-  document's own address and nowhere under it (`MishkaDocument.Address`), so a `section` naming its
-  slug names nothing; a group is only a heading in the contents, and nothing is named at its slug
-  either — unless it has a page of its own (`group_page`), which is named there as any page is.
+  Nothing, on a page a visitor reads: `MishkaCmsWeb.RuntimeLive` hands it the rows the page read
+  once for its head, its frame and its blocks, as the visitor (`source`,
+  `MishkaDocument.PageSource`): the active document whose own address the page is at, else the one
+  the `workspace` capture names, in the page's language; its published versions; the approved pages
+  of the one shown — the version shown is the one `?v=` names, else the one marked latest, else the
+  newest published — and the page at the address the `section` capture holds, `headless/switch`,
+  with its own text and lock. A slug names only a document with no address of its own: one that
+  has an address is read there and nowhere else, so `/docs/<its slug>` names nothing. A version's
+  front page is at the document's own address and nowhere under it (`MishkaDocument.Address`), so a
+  `section` naming its slug names nothing; a group is only a heading in the contents, and nothing is
+  named at its slug either — unless it has a page of its own (`group_page`), which is named there
+  as any page is.
+
+  A document or a page the visitor's own read left out is answered with its lock alone, read as the
+  system, so the address answers them 404 and nothing of it reaches them.
+
+  An editor's preview and a share card hand no rows, and the same document, versions and page are
+  read here, once, through `:public_list` as the system (`MishkaDocument.PageSource.workspace/3`).
 
   ## What it returns
 
@@ -72,8 +79,8 @@ defmodule MishkaDocument.Plugins.PageSeo do
   own, else its nearest parent page's, else its document's
   (`MishkaDocument.Resources.Calculations.EffectivePermissions`). `MishkaCmsWeb.RuntimeLive` opens
   the address only for whoever holds one of them, after the page's own, and the head keeps it out
-  of an index. That is why the read is the system's: a read as the visitor would leave a locked
-  record out for exactly the visitor the page has to refuse.
+  of an index. That is why a record the visitor's read left out has its lock read as the system: a
+  read as the visitor leaves a locked record out for exactly the visitor the page has to refuse.
 
   ## What plugins add to it
 
@@ -138,7 +145,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
 
   alias MishkaCmsCore.Runtime.{Languages, PageEditions, Seo}
   alias MishkaCmsCore.Settings
-  alias MishkaDocument.{Address, ContentText, Provision, Section, Workspace, WorkspaceVersion}
+  alias MishkaDocument.{Address, ContentText, PageSource, Provision, Section, Workspace}
   alias MishkaInstaller.Event.Hook
 
   @workspace_fields [
@@ -153,15 +160,6 @@ defmodule MishkaDocument.Plugins.PageSeo do
     :permissions,
     :inserted_at,
     :updated_at
-  ]
-
-  @version_fields [
-    :id,
-    :workspace_id,
-    :version_number,
-    :is_latest_for_version,
-    :published_at,
-    :inserted_at
   ]
 
   @section_fields [
@@ -193,29 +191,74 @@ defmodule MishkaDocument.Plugins.PageSeo do
   @spec event() :: String.t()
   def event, do: @event
 
+  # THE PAGE'S OWN ROWS, read once for it as its visitor (`MishkaDocument.PageSource`), when
+  # `MishkaCmsWeb.RuntimeLive` hands them over; a read of its own, as the system, for an editor's
+  # preview and a share card, which hand none.
+  defp front_page(%{source: %PageSource{} = source} = seo) do
+    seo = %{seo | var_docs: docs()}
+
+    case source do
+      %{workspace: %Workspace{} = workspace, open?: true} ->
+        front_answer(seo, workspace, source.version, source.pages)
+
+      %{workspace: %Workspace{} = workspace} ->
+        refused(seo, workspace.permissions)
+
+      _named_nothing ->
+        named_nothing(seo)
+    end
+  end
+
   defp front_page(%{params: params} = seo) do
     seo = %{seo | var_docs: docs()}
 
-    case read(seo, versions: versions()) do
+    case PageSource.workspace(seo, @workspace_fields, versions: PageSource.versions()) do
       %Workspace{} = workspace ->
-        {version, tree} = shown(workspace.versions, params["v"], seo.site_id) || {nil, []}
+        {version, tree} =
+          PageSource.shown(workspace.versions, params["v"], seo.site_id) || {nil, []}
 
-        answer(seo, workspace, %{
-          page?: false,
-          segments: [],
-          page: nil,
-          tree: tree,
-          title: workspace.name,
-          description: workspace.description,
-          version: version && version.version_number,
-          published: workspace.inserted_at,
-          modified: workspace.updated_at,
-          seo_tags: workspace.seo_tags,
-          schema: workspace.schema,
-          permissions: workspace.permissions
-        })
+        front_answer(seo, workspace, version, tree)
 
       nil ->
+        named_nothing(seo)
+    end
+  end
+
+  defp front_answer(seo, workspace, version, tree) do
+    answer(seo, workspace, %{
+      page?: false,
+      segments: [],
+      page: nil,
+      tree: tree,
+      title: workspace.name,
+      description: workspace.description,
+      version: version && version.version_number,
+      published: workspace.inserted_at,
+      modified: workspace.updated_at,
+      seo_tags: workspace.seo_tags,
+      schema: workspace.schema,
+      permissions: workspace.permissions
+    })
+  end
+
+  defp document_page(%{source: %PageSource{} = source, params: params} = seo) do
+    seo = %{seo | var_docs: docs()}
+
+    case {params["section"], source} do
+      {wanted, %{workspace: %Workspace{} = workspace, page: %{} = page, body: %Section{} = body}}
+      when is_binary(wanted) and wanted != "" ->
+        page_answer(seo, workspace, source.version, source.pages, page, body, source.lock)
+
+      # A PAGE THE VISITOR MAY NOT OPEN, of a document there is: its lock is read as the system, and
+      # the lock is all that is taken from that read, for `MishkaCmsWeb.RuntimeLive` to refuse them
+      # with. Nothing else of the page reaches a visitor it was kept from.
+      {wanted, %{workspace: %Workspace{}}} when is_binary(wanted) and wanted != "" ->
+        case document_page(%{seo | source: nil}) do
+          %{permissions: lock, card: %{}} -> refused(seo, lock)
+          _named_nothing -> named_nothing(seo)
+        end
+
+      _named_nothing ->
         named_nothing(seo)
     end
   end
@@ -224,28 +267,50 @@ defmodule MishkaDocument.Plugins.PageSeo do
     seo = %{seo | var_docs: docs()}
 
     with wanted when is_binary(wanted) and wanted != "" <- params["section"],
-         %Workspace{} = workspace <- read(seo, versions: versions()),
-         {version, tree} <- shown(workspace.versions, params["v"], seo.site_id),
+         %Workspace{} = workspace <-
+           PageSource.workspace(seo, @workspace_fields, versions: PageSource.versions()),
+         {version, tree} <- PageSource.shown(workspace.versions, params["v"], seo.site_id),
          %{id: id} = page <- Address.page_at(tree, wanted),
-         lock =
-           lock_above(page.permissions, page.parent_section_id, Map.new(tree, &{&1.id, &1}), []),
+         lock = PageSource.lock_of(page, tree),
          %Section{} = section <- section(id, seo.site_id, lock) do
-      answer(seo, workspace, %{
-        page?: true,
-        segments: Map.get(Address.paths(tree), page.id, []),
-        page: page,
-        tree: tree,
-        title: section.title,
-        description: summary(section.content),
-        version: version.version_number,
-        published: version.published_at || section.inserted_at,
-        modified: section.last_modified_at,
-        seo_tags: page_tags(section.seo_tags, workspace.seo_tags),
-        schema: section.schema,
-        permissions: opens_with(lock, section, workspace)
-      })
+      page_answer(
+        seo,
+        workspace,
+        version,
+        tree,
+        page,
+        section,
+        PageSource.opens_with(lock, section, workspace)
+      )
     else
       _nothing_shown -> named_nothing(seo)
+    end
+  end
+
+  defp page_answer(seo, workspace, version, tree, page, section, lock) do
+    answer(seo, workspace, %{
+      page?: true,
+      segments: Map.get(Address.paths(tree), page.id, []),
+      page: page,
+      tree: tree,
+      title: section.title,
+      description: summary(section.content),
+      version: version.version_number,
+      published: version.published_at || section.inserted_at,
+      modified: section.last_modified_at,
+      seo_tags: page_tags(section.seo_tags, workspace.seo_tags),
+      schema: section.schema,
+      permissions: lock
+    })
+  end
+
+  # A RECORD THE VISITOR'S OWN READ LEFT OUT opens with its lock, so the address answers them 404. One
+  # whose lock names nothing was left out for a reason the lock does not say, and opens for whoever
+  # holds `*`, as a record whose lock could not be read does (`MishkaCmsCore.Runtime.Seo`).
+  defp refused(seo, lock) do
+    case List.wrap(lock) do
+      [] -> %{seo | permissions: ["*"], card: false}
+      named -> %{seo | permissions: named, card: false}
     end
   end
 
@@ -254,87 +319,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
   # none for it.
   defp named_nothing(seo), do: Map.put(seo, :card, false)
 
-  # The document whose own address the page is at, else the one with no address of its own the
-  # `workspace` capture names, in the page's language, on the page's site; `nil` when the request
-  # names none or none is shown. Read as the system, because what it reads is the lock
-  # `MishkaCmsWeb.RuntimeLive` admits the visitor by: read as a visitor who may not open it, a locked
-  # document or page is no record at all, and the page is handed no permissions to refuse them with.
-  # The hook names no visitor either, and the head built here reaches only a visitor the page
-  # admitted.
-  defp read(%{site_id: site_id} = seo, loads) when is_binary(site_id),
-    do: Enum.find_value(own_address(seo) ++ by_slug(seo), &read(&1, seo, loads))
-
-  defp read(_seo, _loads), do: nil
-
-  defp own_address(%{page: %{path: path}}) do
-    case Address.of_page(path) do
-      nil -> []
-      address -> [{:path, address}]
-    end
-  end
-
-  defp own_address(_seo), do: []
-
-  defp by_slug(%{params: %{"workspace" => slug}}) when is_binary(slug) and slug != "",
-    do: [{:slug, slug}]
-
-  defp by_slug(_seo), do: []
-
-  defp read(named, %{site_id: site_id} = seo, loads) do
-    Workspace
-    |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
-    |> named_by(named)
-    |> in_language(seo.language)
-    |> Ash.Query.select(@workspace_fields)
-    |> Ash.Query.load(loads)
-    |> Ash.read(tenant: site_id, authorize?: false, page: [limit: 1])
-    |> case do
-      {:ok, %{results: [workspace | _rest]}} -> workspace
-      _none -> nil
-    end
-  end
-
-  defp named_by(query, {:slug, slug}),
-    do: Ash.Query.filter(query, slug == ^slug and is_nil(path))
-
-  defp named_by(query, {:path, address}), do: Ash.Query.filter(query, path == ^address)
-
-  defp in_language(query, language) when is_binary(language) and language != "",
-    do: Ash.Query.filter(query, language == ^language)
-
-  defp in_language(query, _no_language), do: query
-
-  # Every published version, without its pages: which one is shown is told from the versions alone.
-  defp versions, do: Ash.Query.select(WorkspaceVersion, @version_fields)
-
-  # The version a reader is shown (`MishkaDocument.Address.version_shown/2`) and its approved pages
-  # as a tree — what a page's address is followed through (`MishkaDocument.Address.page_at/2`),
-  # read for that version alone; `nil` when there is none.
-  defp shown(versions, asked, site_id) do
-    with %WorkspaceVersion{} = version <- Address.version_shown(versions, asked),
-         {:ok, %WorkspaceVersion{sections: pages} = shown} when is_list(pages) <-
-           Ash.load(version, [sections: pages()], tenant: site_id, authorize?: false) do
-      {shown, pages}
-    else
-      _none -> nil
-    end
-  end
-
-  defp pages do
-    Ash.Query.select(Section, [
-      :id,
-      :title,
-      :slug,
-      :order_position,
-      :parent_section_id,
-      :front_page,
-      :group_heading,
-      :group_page,
-      :permissions
-    ])
-  end
-
-  # The page shown, with its text and its lock, read as the system for the reason `read/3` gives.
+  # The page shown, with its text and its lock, read as the system, for a caller handed no source.
   defp section(id, site_id, lock) do
     Section
     |> Ash.Query.for_read(:public_list, %{}, tenant: site_id, authorize?: false)
@@ -348,33 +333,10 @@ defmodule MishkaDocument.Plugins.PageSeo do
     end
   end
 
-  # WHAT THE PAGE OPENS WITH, by the rule `MishkaDocument.Resources.Calculations.EffectivePermissions`
-  # gives: its own lock, else the nearest page above it that names one, else its document's. The
-  # pages read with the version already hold the answer where the page and every page above it are
-  # among them; where one is not — a page in review, or archived — `EffectivePermissions` is asked
-  # with the page.
+  # What the page opens with is `MishkaDocument.PageSource.lock_of/2`'s; `EffectivePermissions` is
+  # asked with the page only where the pages read with the version cannot say.
   defp loads({:ok, _lock}), do: :last_modified_at
   defp loads(:unknown), do: [:effective_permissions, :last_modified_at]
-
-  defp opens_with({:ok, []}, _section, workspace), do: List.wrap(workspace.permissions)
-  defp opens_with({:ok, lock}, _section, _workspace), do: lock
-  defp opens_with(:unknown, section, _workspace), do: section.effective_permissions
-
-  defp lock_above([_ | _] = own, _parent_id, _by_id, _seen), do: {:ok, own}
-  defp lock_above(_none, nil, _by_id, _seen), do: {:ok, []}
-
-  defp lock_above(_none, parent_id, by_id, seen) do
-    cond do
-      parent_id in seen ->
-        {:ok, []}
-
-      parent = Map.get(by_id, parent_id) ->
-        lock_above(parent.permissions, parent.parent_section_id, by_id, [parent_id | seen])
-
-      true ->
-        :unknown
-    end
-  end
 
   # What a share card (`MishkaCmsCore.Runtime.ShareCard`) shows of it: "Documentation" above a
   # document's front page, the document's name above one of its pages — and the group it is filed

@@ -1708,6 +1708,19 @@ defmodule MishkaDocument.Workspace do
       description "Published stable versions of this workspace (public access)"
     end
 
+    # THE OTHER EDITIONS OF THE DOCUMENT AS ITS READER MAY OPEN THEM: the documents of its group of
+    # translations, through the public read, so one locked to permissions the reader does not hold,
+    # or whose page is closed to them, is not among them. Loaded with the document a page reads
+    # (`MishkaDocument.PageSource`), as that page's visitor.
+    has_many :editions, MishkaDocument.Workspace do
+      public? false
+      source_attribute :language_group_id
+      destination_attribute :language_group_id
+      read_action :public_list
+      filter expr(id != parent(id))
+      description "The other published editions of this workspace, as the reader may open them"
+    end
+
     # Relationship - for admin users with tenant
     has_many :tenant_versions, MishkaDocument.WorkspaceVersion do
       public? true
@@ -2060,6 +2073,54 @@ defmodule MishkaDocument.Workspace do
       public? true
       uniq? true
       description "Names of every tag on this workspace's sections (master access, bypass tenant)"
+    end
+
+    # WHAT A CARD IN THE LIBRARY SAYS OF ITS DOCUMENT, in the statement that lists the documents
+    # rather than a read per card or per kind: the languages of its other editions, and the version
+    # a reader lands on without a `?v=` — the one an editor marked latest, else the newest published.
+    # Each is read through the public read of what it reaches (`editions`, `versions`), which runs
+    # `OpenToActor` for the reader the list is read for, so an edition or a version they may not
+    # open is not named.
+    list :edition_languages, :editions, :language do
+      public? true
+      uniq? true
+      description "The languages of this workspace's other editions, as the reader may open them"
+    end
+
+    first :current_version_id, :versions, :id do
+      public? true
+
+      sort is_latest_for_version: :desc,
+           dated?: :desc,
+           published_at: :desc,
+           inserted_at: :desc,
+           id: :desc
+
+      description "The version a reader lands on: the one marked latest, else the newest published"
+    end
+
+    first :current_version_number, :versions, :version_number do
+      public? true
+
+      sort is_latest_for_version: :desc,
+           dated?: :desc,
+           published_at: :desc,
+           inserted_at: :desc,
+           id: :desc
+
+      description "The number of the version a reader lands on"
+    end
+
+    first :current_version_published_at, :versions, :published_at do
+      public? true
+
+      sort is_latest_for_version: :desc,
+           dated?: :desc,
+           published_at: :desc,
+           inserted_at: :desc,
+           id: :desc
+
+      description "When the version a reader lands on was published"
     end
   end
 

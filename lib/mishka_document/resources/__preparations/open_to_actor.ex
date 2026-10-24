@@ -163,18 +163,27 @@ defmodule MishkaDocument.Resources.Preparations.OpenToActor do
     Ash.Query.after_action(query, fn query, records -> admit(query, records, kind, actor) end)
   end
 
+  # A QUERY PREPARED FOR ITS SITE IS KEPT AT ONCE, in its own filter, and so is everything computed
+  # from it: `Ash.count/2` and the other aggregates of a read run none of its `before_action` hooks,
+  # so a count of a list kept only there counted the records the reader may not open — a guest was
+  # told how many locked documents there are. One whose site arrives with the read is kept as it
+  # runs.
+  defp keep(%{tenant: site_id} = query, kind, actor) when is_binary(site_id),
+    do: kept(query, kind, site_id, actor)
+
   defp keep(query, kind, actor) do
     Ash.Query.before_action(query, fn
-      %{tenant: site_id} = query when is_binary(site_id) ->
-        actor = AccessPermissions.with_permissions(actor)
-
-        query
-        |> Ash.Query.filter(^visible(kind, site_id, actor))
-        |> Ash.Query.filter(^served(kind, site_id, actor))
-
-      query ->
-        query
+      %{tenant: site_id} = query when is_binary(site_id) -> kept(query, kind, site_id, actor)
+      query -> query
     end)
+  end
+
+  defp kept(query, kind, site_id, actor) do
+    actor = AccessPermissions.with_permissions(actor)
+
+    query
+    |> Ash.Query.filter(^visible(kind, site_id, actor))
+    |> Ash.Query.filter(^served(kind, site_id, actor))
   end
 
   # ---------------------------------------------------------------------------

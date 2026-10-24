@@ -854,6 +854,10 @@ defmodule MishkaDocument.Test.WorkspaceVersionCloneTest do
       {:ok, copy} = clone(source, admin)
       master = create_user_with_permissions!(["admin:dashboard:*"])
 
+      # The copy as a master loads it: the one the clone returns keeps the site it was made under
+      # (Ash 3.37), and a master action is refused a changeset that has a tenant.
+      copy = Ash.get!(WorkspaceVersion, copy.id, action: :master_get, authorize?: false)
+
       assert {:ok, %{source_version_id: nil}} = detach(copy, master, :master_detach, nil)
       assert Enum.all?(pages_of(copy, site), &is_nil(&1.source_section_id))
     end

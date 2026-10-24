@@ -38,7 +38,6 @@ defmodule MishkaDocument.Plugins.Installer do
       ]
     }
 
-  require Ash.Query
   require Logger
 
   alias MishkaCmsCore.Install
@@ -54,21 +53,11 @@ defmodule MishkaDocument.Plugins.Installer do
   event sees every call: replying with the report would make the next plugin's payload a report.
   """
   @impl true
-  # IS IT ALREADY HERE? Asked of every site that carries no record of an install — every site that
-  # existed before there was an installer. Only this extension knows what its own pages are called,
-  # so core asks rather than guessing, and a site already running them is sent to its dashboard.
-  def call(%{key: @key, site_id: site_id, ask: :status, reports: reports} = payload)
-      when is_binary(site_id) do
-    installed? = pages_present?(site_id)
-
-    # A SITE FOUND ALREADY SET UP is recorded as installed without a run, so the names a run would
-    # have created are created here.
-    if installed?, do: Provision.ensure_permissions()
-
-    {:reply, %{payload | reports: reports ++ [%{installed?: installed?}]}}
-  end
-
-  def call(%{key: @key, site_id: site_id, reports: reports} = payload)
+  # ONLY AN INSTALL IS ANSWERED. A site this extension was installed on carries the record core writes
+  # after the run (`MishkaCmsCore.Install.Extensions.installed?/2`), so core's `ask: :status`, asked of
+  # a site with no record, is of a site that has never had it: handed back untouched, it reads as
+  # not installed.
+  def call(%{key: @key, site_id: site_id, ask: :install, reports: reports} = payload)
       when is_binary(site_id) do
     answers = Map.get(payload, :answers, %{})
 
@@ -115,22 +104,6 @@ defmodule MishkaDocument.Plugins.Installer do
   end
 
   defp missing(actor), do: ExtensionProvision.missing(Provision.manifest(), actor)
-
-  # ANY OF THEM, not all. A site an admin has pruned still has this extension; a site that has never
-  # had it has none of them.
-  defp pages_present?(site_id) do
-    paths = Provision.page_paths()
-
-    MishkaCmsCore.Runtime.Page
-    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
-    |> Ash.Query.filter(site_id == ^site_id and path in ^paths)
-    |> Ash.Query.select([:id])
-    |> Ash.read(authorize?: false, page: [limit: 1])
-    |> case do
-      {:ok, %{results: rows}} -> rows != []
-      {:error, _unreadable} -> false
-    end
-  end
 
   defp install_failed_message do
     gettext("The install did not finish. Press Install again; details are in the server log.")

@@ -22,10 +22,11 @@ defmodule MishkaDocument.Kit do
   ### The five pieces, which are function components
 
   `doc-workspace-card`, `doc-pager`, `doc-notice`, `doc-callout` and `doc-example`. These hold
-  nothing and read nothing: they draw what they are handed. The notice is drawn by all six blocks —
-  it is every skeleton but the list's own, every empty line and every failed read in this kit — and the card is what
-  `doc-workspace-list` draws a document with unless the author names a card of their own in its
-  `card` attribute. The callout and the example are placed by an author inside a page's text, with
+  nothing and read nothing: they draw what they are handed. The notice is drawn by five of the six
+  blocks — it is every skeleton but the list's own, every empty line and every failed read in this
+  kit, bar the switcher's, which draws a small skeleton and error of its own to fit the bar it sits
+  in — and the card is what `doc-workspace-list` draws a document with unless the author names a
+  card of their own in its `card` attribute. The callout and the example are placed by an author inside a page's text, with
   the content editor — `[[component doc-callout tone="tip"]]…[[/component]]` — and drawn by
   `doc-section`'s `rich_content`, which names them for the site's stylesheet.
 
@@ -50,6 +51,41 @@ defmodule MishkaDocument.Kit do
   `doc-cards-items`, `doc-cards-item`, `doc-cards-link`, `doc-cards-title`, `doc-cards-badges`,
   `doc-cards-badge` (`data-tone`), `doc-cards-description`, `doc-cards-empty`, `doc-cards-loading`
   and `doc-cards-error`.
+
+  ### The design they are drawn in
+
+  Every block is drawn in the starter theme's tokens — `text-fg dark:text-fg-dark`, `border-edge
+  dark:border-edge-dark`, `bg-surface dark:bg-surface-dark` and the rest — and in the three
+  typefaces it names, so the site's dark mode turns the whole documentation. A colour the theme has
+  no token for is written as a value with its `dark:` twin beside it. A site that was installed with
+  no starter content has no such theme, and draws these blocks in the browser's colours until it
+  has one.
+
+    * `doc-workspace-list` draws a document as a card — its tile, how many pages and which version,
+      its name, its summary, the languages it is published in and the way in — or, as one line of a
+      list, as a row. `show_search` draws a search box over the list that narrows it to the documents
+      whose name or summary carries the words, read from `search_param` of the page's own query
+      string (`q`) and written back there, so a search has an address of its own; `split_featured`
+      draws the documents flagged Featured as cards and every other one as a row under
+      `others_heading`, the featured ones first. A document only some readers may open carries
+      `locked_text`, and one that asks search engines to leave it out `unlisted_text`. Its tile is
+      the first letter of its name — without a leading `Mishka ` — on one of six tints picked from
+      the document (`doc-workspace-card`).
+    * `doc-switcher` draws the version being read in a menu of the document's versions, each
+      leading to the same page in it, and a line saying so, with the way to the latest, when it is
+      an older one. It is drawn by the bar under the site's header
+      (`MishkaDocument.Plugins.PageFrame`), at the end of the trail the bar draws itself, and has no
+      trail and no languages of its own: the header's language switcher lists the languages the
+      page is in. The bar hands it the visitor as `current_user` and the page's rows as
+      `page_source`, so it reads each version's pages as the visitor: a version whose page this
+      reader may not open leads to the document's front page.
+    * `doc-section` draws a document's overview — its tile, its version and how many pages, its name
+      and summary, the first `start_count` pages as numbered cards with the start of their text, and
+      every page under the heading it is filed under — and a page with its trail, its title, its text
+      and the pages either side. The first paragraph of a page's text is its lead. A callout
+      (`doc-callout`) has six tones, each with its own mark.
+    * `doc-toc` is the list of what is on the page; its `doc-toc-spy` hook marks the entry the reader
+      has scrolled to.
 
   ### The version in a page's text
 
@@ -137,8 +173,8 @@ defmodule MishkaDocument.Kit do
   `doc-workspace-list` lists the documents a site publishes. `doc-section` draws one page of one of
   them — its body, its notes, the trail above it and the pages either side. `doc-sidebar` draws that
   document's whole contents as a tree, `doc-toc` draws what is on the page being read, and
-  `doc-switcher` offers the document's other versions and its other languages, each leading back to
-  the same page. `doc-section-cards` draws the pages filed under one page as cards.
+  `doc-switcher` offers the document's versions, each leading to the same page in it.
+  `doc-section-cards` draws the pages filed under one page as cards.
 
   A version may mark one page at its top as its front page: every block reads that page at the
   document's own address, in place of the landing, links to it there, and files the pages under it
@@ -204,8 +240,8 @@ defmodule MishkaDocument.Kit do
       the document it holds does not have — one published since — reads the document again.
     * `doc-toc` reads the page's text, for its headings, and its notes, and keeps the entries drawn
       until the new ones arrive.
-    * `doc-switcher` reads nothing: it makes the links of the version switch, the banner and the
-      languages again for the new page, from the pages of every version it read for the document.
+    * `doc-switcher` reads nothing: it makes the links of the version menu and the banner again for
+      the new page, from the pages of every version it read for the document.
 
   The `doc-sidebar-scroll` and `doc-page-scroll` hooks (below) keep the contents in place and bring the
   new page's top into view. `doc-sidebar`'s `link_click` is a JS command run when one of its links is
@@ -402,7 +438,7 @@ defmodule MishkaDocument.Kit do
   a draft version out of a URL somebody typed.
 
   What a block reads is what it draws. `doc-switcher` reads the approved pages of every version it
-  offers in one read, and of the version shown alone when it offers none; `doc-section` reads a
+  offers in one read; `doc-section` reads a
   page's notes with their text only when it draws them, and the two aggregates behind
   `last_modified_at` only for a page that is not the front page, which is dated by its document;
   `doc-toc` reads a page's text only to list its headings and the page at all only to list its
@@ -459,14 +495,22 @@ defmodule MishkaDocument.Kit do
 
   `doc-workspace-list` with `show_details` also says, for each document, the version a reader lands
   on — the one marked latest, else the newest published — how many of its pages the visitor may
-  read there, a group with no page of its own left out, every language it is published in, and when
-  it last changed: the latest of the document, that version and those pages, a page by when it last
-  changed as above. Two more reads for the whole page of documents, both as the visitor.
-  `doc-workspace-card` draws them as
-  `doc-list-meta`, holding `doc-list-version`, `doc-list-pages`, `doc-list-language-codes` (only
-  where no language chips are drawn) and `doc-list-updated`; a card an author named in `card` is
-  handed them as `details`, a map of `version`, `pages`, `languages` and `updated_at`, which it
-  declares as an attribute of its own.
+  read there, a group with no page of its own left out, every language it is published in on this
+  site, and when it last changed: the latest of the document, that version and those pages, a page by
+  when it last changed as above. The version and the other editions' languages are aggregates of the
+  read that lists the documents (`MishkaDocument.Workspace`'s `current_version_*` and
+  `edition_languages`), and the pages one more read for the whole page of documents, all as the
+  visitor. `doc-workspace-card` draws them as
+  `doc-list-meta`, holding `doc-list-version`, `doc-list-pages` and `doc-list-updated`, and, beside
+  the way in, `doc-list-language-codes`; a card an author named in `card` is handed them as
+  `details`, a map of `version`, `pages`, `languages` and `updated_at`, which it declares as an
+  attribute of its own.
+
+  THE LANGUAGES ARE WORDS, NEVER LINKS. The header's language menu is the one place a reader changes
+  language, so a card has no chip leading to another edition: `languages` lists the languages the
+  document has an edition in that the site publishes, in the site's own order, and the card draws
+  them as plain badges only when there are two or more, since one language named on every card of a
+  site that publishes in one says nothing.
 
   `doc-workspace-list` streams its rows, and says `phx-update="stream"` only where there is a socket
   to stream from — `@myself` is nil in a cold render, and a stream container is one the client never

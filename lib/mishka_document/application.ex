@@ -62,11 +62,23 @@ defmodule MishkaDocument.Application do
 
   # Names the components the site's documentation draws in its text, the icons it names and the
   # classes it writes, so its stylesheet carries them (a `runtime:compile:content_components`
-  # plugin), and tells a page whether its reader came by a live navigation (a
-  # `RuntimeLive.OnMount.AfterCompile` plugin).
+  # plugin), tells a page whether its reader came by a live navigation (a
+  # `RuntimeLive.OnMount.AfterCompile` plugin), reads the rows a document's page shows once for its
+  # head, its frame and its blocks (a `runtime:page:source` plugin) —
+  # `MishkaCmsCore.Runtime.PageSource` — and gives the site's layout what only a documentation page
+  # knows: the languages its document or page is written in, and the bar under the header (a
+  # `runtime:page:frame` plugin) — `MishkaCmsCore.Runtime.SiteLayout`.
   @runtime_plugins [
     MishkaDocument.Plugins.ContentComponents,
-    MishkaDocument.Plugins.LiveVisit
+    MishkaDocument.Plugins.LiveVisit,
+    MishkaDocument.Plugins.PageSource,
+    MishkaDocument.Plugins.PageFrame
+  ]
+
+  # Names the words the bar under the header looks up in a site's translations, so "Remove unused"
+  # keeps them (a `runtime:translations:used_keys` plugin) — `MishkaCmsCore.Runtime.Translations`.
+  @translation_plugins [
+    MishkaDocument.Plugins.UsedTranslationKeys
   ]
 
   # Each code block of a page being written is lexed in a task of its own under this supervisor — see
@@ -83,7 +95,8 @@ defmodule MishkaDocument.Application do
       @dashboard_widgets ++
         @settings_plugins ++
         @sidebar_menus ++
-        @provision_plugins ++ @seo_plugins ++ @share_card_plugins ++ @runtime_plugins
+        @provision_plugins ++
+        @seo_plugins ++ @share_card_plugins ++ @runtime_plugins ++ @translation_plugins
 
   @impl true
   def start(_type, _args) do

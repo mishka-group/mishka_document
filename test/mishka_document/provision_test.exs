@@ -32,7 +32,8 @@ defmodule MishkaDocument.ProvisionTest do
   alias MishkaCmsCore.Runtime.PageProvision
   alias MishkaCmsCore.Runtime.Snippet
   alias MishkaCmsCore.Runtime.States.SiteState
-  alias MishkaDocument.Plugins.Installer
+  alias MishkaCmsCore.Runtime.Translation
+  alias MishkaDocument.Plugins.{Installer, PageFrame}
   alias MishkaDocument.Provision
   alias MishkaInstaller.Event.EventHandler
 
@@ -180,6 +181,203 @@ defmodule MishkaDocument.ProvisionTest do
         assert found.section == "document"
         assert found.site_id == site.id
         assert found.active == true
+      end
+    end
+
+    # THE HEADER, THE FOOTER AND THE LANGUAGE SWITCHER ARE THE LAYOUT'S. The templates draw what the
+    # design shows between the two, so a page written with no layout is a page with neither — and the
+    # site's `site-main` is the one its home page hangs on, which is the layout a page is given when
+    # the site has it.
+    test "hangs every page on the site's site-main layout, which gives it a header and a footer",
+         %{site: site} do
+      layout = create_layout!(site_id: site.id, name: "site-main")
+
+      Provision.ensure!(site)
+
+      for path <- Provision.page_paths() do
+        assert page(site, path).layout_id == layout.id, "#{path} is not drawn in site-main"
+      end
+    end
+
+    test "writes no layout where the site has none, and none of another site's", %{site: site} do
+      elsewhere = create_site!()
+      create_layout!(site_id: elsewhere.id, name: "site-main")
+      create_layout!(site_id: site.id, name: "something-else")
+
+      Provision.ensure!(site)
+
+      for path <- Provision.page_paths() do
+        assert page(site, path).layout_id == nil
+      end
+    end
+
+    test "hangs a document's own address on the layout too", %{site: site} do
+      layout = create_layout!(site_id: site.id, name: "site-main")
+
+      report = Provision.ensure_address!(site, "/handbook/docs")
+
+      assert Enum.sort(report.pages) == ["/handbook/docs", "/handbook/docs/*section"]
+
+      for path <- report.pages do
+        assert page(site, path).layout_id == layout.id
+      end
+    end
+
+    test "draws no header and no footer of its own, and no hand-written colour", %{site: site} do
+      Provision.ensure!(site)
+
+      for found <- pages(site) do
+        refute found.template =~ "<header", "#{found.path} draws a header the layout owns"
+        refute found.template =~ "<footer", "#{found.path} draws a footer the layout owns"
+        refute found.template =~ ~r/\bstyle=/, "#{found.path} writes a style attribute"
+
+        refute found.template =~ "text-[#1b1a18]",
+               "#{found.path} still writes the old page's colours"
+
+        refute found.template =~ ~r/\[#[0-9a-fA-F]{3,6}\]/,
+               "#{found.path} writes a colour the theme has a token for"
+      end
+    end
+
+    # THE LIBRARY IS THE DESIGN'S: a hero over the search, the featured documents as cards and the rest
+    # as rows. Its words are the design's, and the list is told to draw all of it.
+    test "draws the library with its hero, its search and its two lists", %{site: site} do
+      Provision.ensure!(site)
+      template = page(site, "/:lang/docs").template
+
+      assert template =~ "DOCUMENTATION"
+      assert template =~ "written down"
+
+      assert template =~
+               "Guides, references and handbooks — versioned and available in several languages."
+
+      [{"doc-workspace-list", given}] = component_calls(template)
+      given = Map.new(given)
+
+      assert given["show_search"] == {:expression, "true"}
+      assert given["split_featured"] == {:expression, "true"}
+      assert given["show_details"] == {:expression, "true"}
+      refute Map.has_key?(given, "show_languages"), "the library asks for a row of language pills"
+      assert given["read_text"] == {:literal, "Open"}
+      assert given["params"] == {:expression, ~S|Map.drop(@query_params, ["lang"])|}
+    end
+
+    # THE BAR UNDER THE HEADER IS THE LAYOUT'S, filled by `MishkaDocument.Plugins.PageFrame` with
+    # where the reader is and the version being read, so the page draws the contents, the page and the
+    # list of its headings and nothing above them.
+    test "draws a document's pages as the contents, the page and the list of its headings", %{
+      site: site
+    } do
+      Provision.ensure!(site)
+
+      for path <- Provision.item_paths() |> Map.values() do
+        template = page(site, path).template
+
+        assert Enum.map(component_calls(template), &elem(&1, 0)) ==
+                 ["doc-sidebar", "doc-section", "doc-toc"]
+
+        section = template |> component_calls() |> Enum.at(1) |> elem(1) |> Map.new()
+        assert section["crumb_current"] == {:expression, "true"}
+      end
+    end
+
+    # THE HEADER'S LANGUAGE DROPDOWN IS THE ONLY LANGUAGE SWITCH. The pages used to carry a second
+    # one, `doc-switcher`'s row of language pills, in a bar of their own, and the library's cards a
+    # third, a pill per edition of each document.
+    test "draws no language pills and no switcher of its own", %{site: site} do
+      Provision.ensure!(site)
+      Provision.ensure_address!(site, "/handbook/docs")
+
+      for {name, template} <- templates(site) do
+        refute template =~ "doc-switcher", "#{name} still draws the switcher"
+        refute template =~ ~r/\bshow_crumb=|\bshow="(both|language)"/, "#{name} asks for pills"
+        refute template =~ ~r/\bshow_languages\b/, "#{name} asks for a pill per edition"
+        refute template =~ ~r/data-role="doc-switcher/, "#{name} draws a switcher's part"
+      end
+    end
+
+    # UNDER 880 PIXELS THE CONTENTS ARE A CLOSED DISCLOSURE, because a list of thirty pages above the
+    # article puts the article below the first screen of a phone. The design has no phone, so this is
+    # the page's own: a `<details>` that is not open, holding the contents and nothing else, before
+    # the page in the markup — and the on-this-page list after it, where it cannot push it down.
+    # From 880 pixels the summary is not drawn and the contents are shown whether it is open or not.
+    test "draws the contents as a closed disclosure above the page, and the page outside it", %{
+      site: site
+    } do
+      Provision.ensure!(site)
+      Provision.ensure_address!(site, "/handbook/docs")
+
+      document_pages =
+        Enum.filter(pages(site), fn found ->
+          found.path in Map.values(Provision.item_paths()) or
+            String.starts_with?(found.path, "/handbook")
+        end)
+
+      assert length(document_pages) == 4
+
+      for %{path: path, template: template} <- document_pages do
+        assert [disclosure] = Regex.run(~r{<details\b.*?</details>}s, template),
+               "#{path} has no disclosure for the contents"
+
+        [opening] = Regex.run(~r/<details\b[^>]*>/, disclosure)
+        refute opening =~ ~r/\bopen\b/, "#{path} draws the contents open"
+
+        assert [summary] = Regex.run(~r{<summary\b.*?</summary>}s, disclosure)
+        assert summary =~ ~r/>\s*Pages\s*</, "#{path}'s summary does not say what is in it"
+
+        assert Enum.map(component_calls(disclosure), &elem(&1, 0)) == ["doc-sidebar"],
+               "#{path}'s disclosure holds something other than the contents"
+
+        {opened_at, _} = :binary.match(template, "<details")
+        {page_at, _} = :binary.match(template, ~s(component_name="doc-section"))
+        {headings_at, _} = :binary.match(template, ~s(component_name="doc-toc"))
+
+        assert opened_at < page_at, "#{path} draws the page before its contents"
+        assert page_at < headings_at, "#{path} draws the headings above the page"
+
+        assert opened_at + byte_size(disclosure) < page_at,
+               "#{path} draws the page in the contents"
+
+        # From 880px: no summary, and the contents shown though the element is closed.
+        assert opening =~ "min-[880px]:details-content:[content-visibility:visible]"
+        assert summary =~ "min-[880px]:supports-[selector(::details-content)]:hidden"
+
+        # A press on a page of the contents closes it again, the way the sidebar offers.
+        sidebar = disclosure |> component_calls() |> hd() |> elem(1) |> Map.new()
+        [_whole, id] = Regex.run(~r/<details\s+id="([^"]+)"/, disclosure)
+
+        assert sidebar["link_click"] ==
+                 {:expression, ~s|Phoenix.LiveView.JS.remove_attribute("open", to: "##{id}")|}
+      end
+    end
+
+    # THE LAYOUT'S COLUMN IS THE PAGE'S WIDTH: 1160 pixels with its gutters, so a page that wraps
+    # itself in a container of its own doubles the gutters and widens the page past the header and the
+    # footer. What each page draws is its sections straight into the column.
+    test "draws no outer container: the layout's column is the width", %{site: site} do
+      Provision.ensure!(site)
+      Provision.ensure_address!(site, "/handbook/docs")
+
+      pages =
+        Enum.filter(pages(site), fn found ->
+          found.path in Provision.page_paths() or String.starts_with?(found.path, "/handbook")
+        end)
+
+      assert length(pages) == 5
+
+      for found <- pages do
+        refute found.template =~ "max-w-[1280px]", "#{found.path} still uses the 1280 column"
+        refute found.template =~ "max-w-[1160px]", "#{found.path} draws the layout's column again"
+
+        # The elements at the root of the template: none is a centred, side-padded or capped box.
+        roots = Regex.scan(~r/^<[a-z][a-z0-9]*\b[^>]*?\bclass="([^"]*)"/m, found.template)
+
+        assert roots != [], "#{found.path} has no element at its root"
+
+        for [_tag, classes] <- roots, class <- String.split(classes) do
+          refute class == "mx-auto", "#{found.path} centres its whole page"
+          refute class =~ ~r/^(max-w-|px-|container$)/, "#{found.path} wraps its page in #{class}"
+        end
       end
     end
 
@@ -383,7 +581,11 @@ defmodule MishkaDocument.ProvisionTest do
             uniq: true,
             do: piece
 
-      assert Enum.sort(Enum.uniq(on_a_page ++ drawn_by_a_block)) ==
+      # AND THE ONE THE BAR UNDER THE HEADER DRAWS, which no page names:
+      # `MishkaDocument.Plugins.PageFrame` hands it to the layout.
+      drawn_by_the_bar = MishkaDocument.Plugins.PageFrame.bar_components()
+
+      assert Enum.sort(Enum.uniq(on_a_page ++ drawn_by_a_block ++ drawn_by_the_bar)) ==
                Enum.sort(Provision.component_names())
     end
 
@@ -509,6 +711,68 @@ defmodule MishkaDocument.ProvisionTest do
 
       refute component(site, "doc-toc"), "an archived component came back as a new row"
       assert Enum.any?(archived_components(site), &(&1.name == "doc-toc"))
+    end
+  end
+
+  # THE BAR'S WORDS ARE THE SITE'S TRANSLATIONS, as the blog's are: the bar asks for them from a plugin
+  # (`MishkaDocument.Plugins.PageFrame`), not from a template that saving a page could register them
+  # from, so setting a site up registers them for a translator to find.
+  describe "the documentation's words" do
+    setup %{site: site} do
+      on_exit(fn ->
+        MishkaCmsCore.Runtime.States.SettingsState.delete(site.id, "site.languages")
+      end)
+
+      {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["en", "fa"], site_id: site.id)
+      :ok
+    end
+
+    defp registered(site, words) do
+      Translation
+      |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+      |> Ash.Query.filter(key in ^words and site_id == ^site.id)
+      |> Ash.read!(authorize?: false, page: false)
+      |> Enum.map(&{&1.key, &1.language})
+      |> Enum.sort()
+    end
+
+    test "are registered in each language of the site, and a translator's value is kept", %{
+      site: site
+    } do
+      words = PageFrame.words()
+
+      assert words == ["Docs"]
+      assert registered(site, words) == []
+
+      Provision.ensure!(site)
+
+      assert registered(site, words) == [{"Docs", "en"}, {"Docs", "fa"}]
+
+      {:ok, _} =
+        Translation
+        |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+        |> Ash.Query.filter(key == "Docs" and language == "fa" and site_id == ^site.id)
+        |> Ash.read_one!(authorize?: false)
+        |> Ash.Changeset.for_update(:update, %{value: "مستندات"}, authorize?: false)
+        |> Ash.update(authorize?: false)
+
+      Provision.ensure!(site)
+
+      assert registered(site, words) == [{"Docs", "en"}, {"Docs", "fa"}]
+
+      assert Ash.read_one!(
+               Ash.Query.filter(
+                 Translation,
+                 key == "Docs" and language == "fa" and site_id == ^site.id
+               ),
+               authorize?: false
+             ).value == "مستندات"
+    end
+
+    test "are registered by a document's own address too", %{site: site} do
+      Provision.ensure_address!(site, "/handbook/docs")
+
+      assert registered(site, PageFrame.words()) == [{"Docs", "en"}, {"Docs", "fa"}]
     end
   end
 
@@ -749,21 +1013,15 @@ defmodule MishkaDocument.ProvisionTest do
       assert components(site) == []
     end
 
-    # ANY OF THE PAGES IS ENOUGH, and a page of another site is not this site's.
-    test "a site holding one of the pages counts as installed, and one holding none does not", %{
+    # ONLY AN INSTALL IS ANSWERED. Core asks a site carrying no record of an install whether the
+    # documentation is already there; the answer is no, and asking writes nothing.
+    test "a site it was never installed on is not installed, and asking sets nothing up", %{
       site: site
     } do
       refute Extensions.installed?(site.id, :mishka_document)
-
-      other = create_site!(active: true)
-      create_page!(site_id: other.id, path: hd(Provision.page_paths()), active: true)
-
-      refute Extensions.installed?(site.id, :mishka_document),
-             "a page of another site made this site look set up"
-
-      create_page!(site_id: site.id, path: hd(Provision.page_paths()), active: true)
-
-      assert Extensions.installed?(site.id, :mishka_document)
+      assert components(site) == []
+      assert pages(site) == []
+      assert Extensions.installed_version(site.id, :mishka_document) == nil
     end
 
     # A SITE IS NEVER SET UP BEHIND SOMEBODY'S BACK. Creating one used to queue this work; it does
@@ -871,7 +1129,8 @@ defmodule MishkaDocument.ProvisionTest do
 
       assert Install.installed?()
       assert Extensions.installed?(first.id, :mishka_document)
-      assert length(components(first)) == length(Provision.component_names())
+      # The site's own header and footer are components too, written by the wizard beside them.
+      assert Provision.component_names() -- Enum.map(components(first), & &1.name) == []
       assert Provision.page_paths() -- Enum.map(pages(first), & &1.path) == []
 
       assert {:error, {:extension_failed, _message}} =
@@ -909,26 +1168,6 @@ defmodule MishkaDocument.ProvisionTest do
     |> Ash.read!(authorize?: false, page: [limit: 100])
     |> Map.fetch!(:results)
     |> Enum.filter(&(&1.path in paths))
-  end
-
-  # A SITE FOUND ALREADY SET UP is recorded without a run, so the names a run would have created
-  # come from the answer to "is it already here?".
-  describe "a site found already set up" do
-    test "gets the documentation's permission names it is missing", %{site: site} do
-      assert {:ok, _report} = Extensions.install(site.id, "mishka_document")
-      names = Enum.map(Provision.manifest().permissions, &elem(&1, 0))
-
-      MishkaCmsCore.Accounts.Permission
-      |> Ash.Query.filter(name in ^names)
-      |> Ash.read!(authorize?: false, page: false)
-      |> Enum.each(&Ash.destroy!(&1, authorize?: false))
-
-      {:ok, _} = MishkaCmsCore.Settings.put("mishka_document.installed", "", site_id: site.id)
-      assert stored_permissions(names) == []
-
-      assert Extensions.installed?(site.id, :mishka_document)
-      assert Enum.sort(stored_permissions(names)) == Enum.sort(names)
-    end
   end
 
   defp stored_permissions(names) do

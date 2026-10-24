@@ -74,15 +74,15 @@ defmodule MishkaDocument.MixProject do
   defp deps do
     [
       {:decimal, "~> 3.2", override: true},
-      {:sourceror, "~> 1.12", only: [:dev, :test]},
+      {:sourceror, "~> 1.13", only: [:dev, :test]},
       {:lazy_html, "~> 0.1", only: :test},
       {:open_api_spex, "~> 3.22"},
       {:ash_paper_trail, "~> 0.8"},
       {:ash_archival, "~> 2.0"},
-      {:ash_postgres, "~> 2.14"},
+      {:ash_postgres, "~> 2.15"},
       {:ash_json_api, "~> 1.7"},
       {:ash_phoenix, "~> 2.3"},
-      {:ash, "~> 3.36"},
+      {:ash, "~> 3.37"},
       {:ash_slug, "~> 0.2"},
       {:html_sanitize_ex, "~> 1.5"},
       {:makeup, "~> 1.2"},

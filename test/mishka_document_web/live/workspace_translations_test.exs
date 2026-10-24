@@ -296,6 +296,10 @@ defmodule MishkaDocumentWeb.Test.WorkspaceTranslationsTest do
       admin: admin
     } do
       fa = translate!(site, master, "fa")
+
+      # The translation as a master loads it: the one the factory returns keeps the site it was made
+      # under (Ash 3.37), and a master action is refused a changeset that has a tenant.
+      fa = Ash.get!(@resource, fa.id, action: :master_get, authorize?: false)
       :ok = Ash.destroy(fa, action: :master_destroy, actor: admin)
       view = open_workspaces(conn)
 

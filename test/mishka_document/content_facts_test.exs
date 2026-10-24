@@ -266,7 +266,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
                  icons: []
                })
 
-      assert Enum.sort(names) == ["badge", "callout", "kept", "tip-box"]
+      assert Enum.sort(names) == ["badge", "callout", "doc-switcher", "kept", "tip-box"]
     end
 
     test "are asked of this extension by the site's stylesheet build", ctx do
@@ -294,7 +294,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
                  meta: %{site: ctx.site.name}
                )
 
-      assert names == ["callout"]
+      assert names == ["callout", "doc-switcher"]
     end
 
     test "come from a plugin this extension's supervisor starts" do
@@ -371,7 +371,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
                })
 
       assert Enum.sort(classes) == ["bg-[#282828]", "kept", "p-2", "size-4"]
-      assert components == ["tip-box"]
+      assert components == ["tip-box", "doc-switcher"]
     end
 
     test "are not asked of a build that asks for none, which still hears the names", ctx do
@@ -385,7 +385,7 @@ defmodule MishkaDocument.Test.ContentFactsTest do
                  icons: []
                })
 
-      assert answer.components == ["callout"]
+      assert answer.components == ["callout", "doc-switcher"]
       refute Map.has_key?(answer, :classes)
     end
   end

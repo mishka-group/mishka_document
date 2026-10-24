@@ -32,6 +32,7 @@ Mishka Document is an extension of [Mishka CMS](https://mishka.tools/cms), an op
 - Tags for pages, an event log of who changed which record and when, and dashboard widgets for open issues, recent documents, version activity and a summary of documents.
 - For readers: bookmarks on pages, follows for documents, and a count of unique views for each page.
 - Eleven page components (six blocks that run their own reads and five smaller pieces, including a callout and a live code example) and three sample pages: the documentation index, a document and a document page.
+- Drawn in the site's own layout: the sample pages sit between the site's header and footer, in its content column. The header's language switcher lists the languages the document or the page exists in, each at its own address, and a bar under the header holds the trail (Docs, the document, the page) and the version menu.
 - SEO for each document and page: its own head, `TechArticle` and breadcrumb JSON-LD, a canonical address, `sitemap.xml` entries and share cards.
 - A JSON:API for admins at `/api/json/v1/master/admin/mishka-document/…` and `/api/json/v1/tenant/admin/mishka-document/…`, and one for readers at `/api/json/v1/user/mishka-document/…`, described in the CMS's OpenAPI spec.
 - Permissions `admin:dashboard:document:workspace` and `admin:dashboard:document:section`, with `admin:api:` twins for the API.
@@ -47,7 +48,7 @@ Mishka Document is installed with [Mishka CMS](https://github.com/mishka-group/m
 
 Mishka CMS registers it in three places: `MishkaDocument` in `ash_domains` and `MishkaDocumentWeb` in the core's `extensions` list, both in `config/config.exs`, and `MishkaDocument` in the domains of the JSON:API router.
 
-Then install the documentation onto a site. Tick Documentation in the install wizard, or open the Documents dashboard of a site that does not have it yet and press Set up. Either way the site gets the eleven components, the three sample pages and a snippet that lists the latest documents. Running it again adds only what is missing and leaves anything you edited.
+Then install the documentation onto a site. Tick Documentation in the install wizard, or open the Documents dashboard of a site that does not have it yet and press Set up. Either way the site gets the eleven components, the three sample pages and a snippet that lists the latest documents. Running it again adds only what is missing and leaves anything you edited. Newer components and sample pages are offered on the Documentation components card, and only the ones you choose are written.
 
 For sample documents, versions and issues in development, run `mix run priv/repo/dev_seeds.exs` in `mishka_cms`.
 

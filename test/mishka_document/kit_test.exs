@@ -26,8 +26,8 @@ defmodule MishkaDocument.KitTest do
 
   import ExUnit.CaptureLog, only: [with_log: 1]
 
-  alias MishkaCmsCore.Runtime.{Component, JsHook, Stylesheet}
   alias MishkaCmsCore.Runtime.Compilers.CssClosure
+  alias MishkaCmsCore.Runtime.{Component, JsHook, Stylesheet}
   alias MishkaCmsCore.Runtime.Handlers.BootHandler
 
   require Ash.Query
@@ -61,10 +61,10 @@ defmodule MishkaDocument.KitTest do
   @frame_reads ~w(workspace_row versions_of version_of document_of)
   @frame_resources ~w(Workspace WorkspaceVersion)
 
-  # A read as the stored code writes it, in BOTH shapes it is written in: piped into `for_read/4`,
-  # and called with the resource as its first argument — which is what a helper does when it has to
-  # keep hold of the query to add a clause to it. Recognising only the first shape left
-  # `doc-switcher`'s `translated_slugs` unchecked by every test below that reads this.
+  # A read as the stored code may write it, in BOTH shapes: piped into `for_read/4`, and called with
+  # the resource as its first argument — which is what a helper does when it has to keep hold of the
+  # query to add a clause to it. Recognising only the first shape would leave a read written the
+  # second way unchecked by every test below that reads this.
   @read_calls [
     ~r/MishkaDocument\.(\w+)\s*\|>\s*Ash\.Query\.for_read\(\s*:(\w+)/,
     ~r/Ash\.Query\.for_read\(\s*MishkaDocument\.(\w+),\s*:(\w+)/
@@ -633,6 +633,32 @@ defmodule MishkaDocument.KitTest do
       end
     end
 
+    # THE HEADER'S MENU IS THE ONLY LANGUAGE SELECTOR. A card says which languages a document is in
+    # as plain words, so neither the list nor the card has a way left to draw a pill that leads to
+    # an edition — or one that says the site cannot serve it, which is a pill all the same.
+    test "and has no way to draw a link to another language's edition" do
+      [list, card] =
+        for name <- ~w(doc-workspace-list doc-workspace-card),
+            do: Enum.find(components(), &(&1["name"] == name))
+
+      for component <- [list, card], attr <- ~w(show_languages editions unavailable_text) do
+        refute Enum.any?(component["attrs"], &(&1["name"] == attr)),
+               "#{component["name"]} still declares #{attr}"
+      end
+
+      for helper <- ~w(edition_links editions_for) do
+        refute Enum.any?(list["helpers"], &(&1["name"] == helper)), "#{helper} is still there"
+      end
+
+      refute card["template"] =~ ~s(data-role="doc-list-languages")
+      refute card["template"] =~ ~s(data-role="doc-list-language")
+
+      [badges] = Regex.run(~r{data-role="doc-list-language-codes".*?</div>}s, card["template"])
+
+      refute badges =~ ~r/<\.link|href=|navigate=|patch=|phx-click/,
+             "the languages of a card are words, and a card leads to its own document alone"
+    end
+
     # AND IT HAS TO TRAVEL. `MishkaDocument.Kit.bundle_path/0` reads the file out of
     # `:code.priv_dir/1`, and `priv` used to be left out of the package's `files` — so a hex install
     # of this extension would point at a path that does not exist and give that site no document
@@ -645,14 +671,15 @@ defmodule MishkaDocument.KitTest do
              "the bundle's directory is not in the package, so a hex install has nothing to read"
     end
 
-    test "ships exactly five hooks: the code windows', the examples', the contents', the tabs' and the page's" do
+    test "ships exactly six hooks: the code windows', the examples', the contents', the tabs', the page's and the page list's" do
       assert Enum.map(bundle()["js_hooks"], & &1["name"]) ==
                [
                  "doc-code-copy",
                  "doc-example",
                  "doc-sidebar-scroll",
                  "doc-tabs",
-                 "doc-page-scroll"
+                 "doc-page-scroll",
+                 "doc-toc-spy"
                ]
     end
 
@@ -1191,7 +1218,7 @@ defmodule MishkaDocument.KitTest do
 
       assert sheet, "the stylesheet was not installed"
       assert sheet.kind == :base
-      assert sheet.content =~ "background-color: #272822"
+      assert sheet.content =~ "background-color: #1c1b22"
 
       monokai = Makeup.stylesheet(:monokai_style, "highlight")
       classes = Regex.scan(~r/^\.highlight \.([\w-]+) \{/m, monokai, capture: :all_but_first)
