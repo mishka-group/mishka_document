@@ -482,9 +482,32 @@ defmodule MishkaDocument.Provision do
     case EarlierPages.recognise(template, site_name) do
       :library -> {:ok, index(site_name)}
       {:document, address} -> {:ok, document(site_name, address)}
-      nil -> :unchanged
+      nil -> before_source(template, site_name)
     end
   end
+
+  # THE DESIGN'S OWN DOCUMENT PAGE BEFORE ITS BLOCKS WERE HANDED THE PAGE'S ROWS: the text this module
+  # writes now without the `page_source` line on each block, for the address the page names, if any.
+  # A page that holds exactly that was written by this provision and edited by nobody, and takes the
+  # line; one edited anywhere keeps reading for itself, as it did.
+  defp before_source(template, site_name) when is_binary(template) do
+    address =
+      case Regex.run(~r/^\s+path="([^"]+)" lang_param=""$/m, template) do
+        [_line, address] -> address
+        nil -> nil
+      end
+
+    now = document(site_name, address)
+
+    if String.trim(template) == String.trim(without_source(now)),
+      do: {:ok, now},
+      else: :unchanged
+  end
+
+  defp before_source(_template, _site_name), do: :unchanged
+
+  defp without_source(template),
+    do: String.replace(template, ~r/\n *page_source=\{assigns\[:page_source\]\}/, "")
 
   # THE TEMPLATE AND THE VERSION THE PAGE IS NOW WRITTEN AGAINST, and nothing else of the page.
   defp write_template!(page, template, site_id, actor) do
@@ -685,6 +708,10 @@ defmodule MishkaDocument.Provision do
   # by name out of that one map. The language is the one key taken out of it, for the reason the
   # moduledoc gives.
   #
+  # `page_source` IS WHAT THE PAGE READ FOR THIS ADDRESS, once, as the visitor
+  # (`MishkaDocument.PageSource`): the document, its versions, the pages of the version shown and the
+  # page with its notes. The three blocks take those rows from it rather than each reading them again.
+  #
   # THE FLEX ROW WRAPS RATHER THAN SWITCHING AT A BREAKPOINT, as the design's does: the contents
   # take 240px and the page 520px or more, so the contents sit above the page wherever the two do
   # not fit, and the on-this-page list beside the page wherever 200px more do. An empty list takes
@@ -735,6 +762,7 @@ defmodule MishkaDocument.Provision do
               site="#{site}"
               id="doc-contents"
               current_user={assigns[:current_user]}#{serves(address, 14)}
+              page_source={assigns[:page_source]}
               heading=""
               lang={@page.language}
               doc_base="#{@docs}"
@@ -753,6 +781,7 @@ defmodule MishkaDocument.Provision do
             site="#{site}"
             id="doc-page"
             current_user={assigns[:current_user]}#{serves(address, 8)}
+            page_source={assigns[:page_source]}
             crumb_current={true}
             lang={@page.language}
             doc_base="#{@docs}"
@@ -766,6 +795,7 @@ defmodule MishkaDocument.Provision do
             site="#{site}"
             id="doc-on-this-page"
             current_user={assigns[:current_user]}#{serves(address, 8)}
+            page_source={assigns[:page_source]}
             heading="ON THIS PAGE"
             lang={@page.language}
             doc_base="#{@docs}"

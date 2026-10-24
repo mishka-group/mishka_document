@@ -975,6 +975,45 @@ defmodule MishkaDocument.ProvisionTest do
       for found <- pages(site), do: refute(found.template =~ "<header", found.path)
     end
 
+    # THE DESIGN'S OWN TEXT BEFORE ITS BLOCKS WERE HANDED THE PAGE'S ROWS is recognised as written by
+    # this provision, and takes the `page_source` line; the same text edited by an admin keeps
+    # reading for itself.
+    test "hands the page's rows to the blocks of a document page it wrote before it did", %{
+      site: site
+    } do
+      master_pages!(site, address: true)
+      Provision.ensure!(site)
+
+      before = &String.replace(&1, ~r/\n *page_source=\{assigns\[:page_source\]\}/, "")
+      [document_path, section_path] = Enum.filter(Provision.page_paths(), &(&1 != "/:lang/docs"))
+      untouched = [document_path, @address, @address <> "/*section"]
+
+      for path <- untouched do
+        found = page(site, path)
+        Ash.Seed.update!(found, %{template: before.(found.template)})
+      end
+
+      edited = before.(page(site, section_path).template) <> "\n<p>my own note</p>"
+      Ash.Seed.update!(page(site, section_path), %{template: edited})
+
+      refute page(site, document_path).template =~ "page_source"
+
+      report = Provision.ensure!(site)
+
+      assert Enum.sort(report.upgraded_pages) == Enum.sort(untouched)
+      assert page(site, document_path).template == new_design(site)[document_path]
+      assert page(site, section_path).template == edited
+
+      for path <- [@address, @address <> "/*section"] do
+        found = page(site, path).template
+
+        assert found =~ ~s(path="#{@address}" lang_param="")
+        assert length(Regex.scan(~r/page_source=\{assigns\[:page_source\]\}/, found)) == 3
+      end
+
+      assert Provision.ensure!(site).upgraded_pages == []
+    end
+
     test "leaves a page an admin edited as it is, and upgrades the rest", %{
       site: site,
       layout: layout
