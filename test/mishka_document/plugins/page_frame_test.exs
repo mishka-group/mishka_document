@@ -15,6 +15,8 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
   """
   use MishkaDocument.DataCase, async: false
 
+  import Phoenix.LiveViewTest, only: [render_component: 2]
+
   alias MishkaCmsCore.Runtime.{Languages, SiteLayout}
   alias MishkaCmsCore.Runtime.States.{SettingsState, TranslationsState}
   alias MishkaCmsCore.Settings
@@ -682,6 +684,26 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
              }
 
       assert frame.translations == given.translations
+    end
+
+    # A BAR WITH NOTHING BUT A TITLE IS STILL A BAR. The layout drops one only when it holds no
+    # title, no link, no crumb and no component, so the library has the "Docs" bar under the header
+    # as the blog's index has its own — and the title is the way back to the library.
+    test "of the library is drawn by the layout, as a title that links to the library", %{
+      site: site
+    } do
+      frame = framed(given(site, "/:lang/docs", nil, %{"lang" => "en"}))
+
+      drawn =
+        (&SiteLayout.section_bar/1)
+        |> render_component(bar: frame.section_bar, site: site.name)
+        |> LazyHTML.from_fragment()
+
+      assert [bar] = drawn |> LazyHTML.query(~s([data-role="site-section-bar"])) |> Enum.to_list()
+      assert [title] = bar |> LazyHTML.query("a") |> Enum.to_list()
+      assert title |> LazyHTML.text() |> String.trim() == "Docs"
+      assert title |> LazyHTML.attribute("href") == ["/docs"]
+      assert Enum.empty?(LazyHTML.query(bar, "nav")), "a bar of a title alone draws no trail"
     end
 
     test "is drawn on a page of the documentation's section whatever it shows", %{site: site} do
