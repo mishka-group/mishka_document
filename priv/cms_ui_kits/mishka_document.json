@@ -485,12 +485,12 @@
         {
           "name": "documents_page",
           "args": "asked",
-          "code": "require Ash.Query\n\nasked\n|> documents_query()\n|> featured_first(asked.split_featured)\n|> sorted(asked.sort)\n|> Ash.Query.select([\n  :id,\n  :name,\n  :slug,\n  :path,\n  :description,\n  :language,\n  :language_group_id,\n  :featured,\n  :permissions,\n  :seo_tags,\n  :display_order,\n  :updated_at\n])\n|> Ash.read(\n  tenant: site_id(),\n  page: [limit: asked.per_page, offset: (asked.page - 1) * asked.per_page, count: false]\n)\n|> paged()\n"
+          "code": "require Ash.Query\n\nasked\n|> documents_query()\n|> featured_first(asked.split_featured)\n|> sorted(asked.sort)\n|> Ash.Query.select([\n  :id,\n  :name,\n  :slug,\n  :path,\n  :description,\n  :language,\n  :featured,\n  :permissions,\n  :seo_tags,\n  :display_order,\n  :updated_at\n])\n|> with_details(asked.show_details)\n|> Ash.read(\n  tenant: site_id(),\n  page: [limit: asked.per_page, offset: (asked.page - 1) * asked.per_page, count: false]\n)\n|> paged()\n"
         },
         {
-          "name": "editions_of",
-          "args": "documents, visitor",
-          "code": "# THE LANGUAGES EVERY DOCUMENT ON THIS PAGE IS WRITTEN IN, IN ONE READ. A card's languages are a read\n# per card otherwise, and a page of twenty documents would pay for twenty-one. Only the two columns\n# that say which edition is in which language are read.\nrequire Ash.Query\n\ngroups =\n  documents\n  |> Enum.map(& &1.language_group_id)\n  |> Enum.reject(&is_nil/1)\n  |> Enum.uniq()\n\ncase groups do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Workspace\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(language_group_id in ^wanted)\n    |> Ash.Query.select([:language, :language_group_id])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.group_by(& &1.language_group_id)\nend\n"
+          "name": "with_details",
+          "args": "query, show?",
+          "code": "# WHAT A CARD SAYS OF ITS DOCUMENT, read in the statement that lists the documents: the languages of\n# its other editions and the version a reader lands on, each through the public read of what it\n# reaches, as the visitor — an edition or a version they may not open is not named.\nrequire Ash.Query\n\ncase show? do\n  true ->\n    Ash.Query.load(query, [\n      :edition_languages,\n      :current_version_id,\n      :current_version_number,\n      :current_version_published_at\n    ])\n\n  false ->\n    query\nend\n"
         },
         {
           "name": "handle_event",
@@ -525,7 +525,7 @@
         {
           "name": "fetch",
           "args": "asked",
-          "code": "# THE ROWS, AND NOTHING THE PAGE ALREADY KNOWS. Run in a task on a live visit, so nothing here may\n# touch the socket, and answered in the shape `stream_async` takes: `{:ok, rows, opts}` or\n# `{:error, reason}`. `reset` replaces the cards of the page the reader was on with these.\nwith {:ok, %{rows: documents}} <- documents_page(asked) do\n  editions = (asked.show_details && editions_of(documents, asked.visitor)) || %{}\n\n  details = (asked.show_details && details_of(documents, editions, asked.visitor)) || %{}\n\n  {:ok, rowed(asked, documents, details), reset: true}\nend\n"
+          "code": "# THE ROWS, AND NOTHING THE PAGE ALREADY KNOWS. Run in a task on a live visit, so nothing here may\n# touch the socket, and answered in the shape `stream_async` takes: `{:ok, rows, opts}` or\n# `{:error, reason}`. `reset` replaces the cards of the page the reader was on with these.\nwith {:ok, %{rows: documents}} <- documents_page(asked) do\n  details = (asked.show_details && details_of(documents, asked.visitor)) || %{}\n\n  {:ok, rowed(asked, documents, details), reset: true}\nend\n"
         },
         {
           "name": "arrived",
@@ -569,43 +569,23 @@
         },
         {
           "name": "details_of",
-          "args": "documents, editions, visitor",
-          "code": "# WHAT EACH CARD SAYS ABOUT ITS DOCUMENT, keyed by the document's id: the version a reader lands\n# on, the pages of it the visitor may read, the languages it is published in on this site and when\n# it last changed — the latest of the document, its version and those pages. Two reads for the whole\n# page of documents, whatever its size.\nversions = current_versions(documents, visitor)\ncounted = pages_of(Map.values(versions), visitor)\npublished = MishkaCmsCore.Runtime.Languages.site(site_id())\n\nMap.new(documents, fn document ->\n  version = Map.get(versions, document.id)\n  pages = (version && Map.get(counted, version.id)) || %{count: 0, updated_at: nil}\n\n  {document.id,\n   %{\n     version: version && version.version_number,\n     pages: pages.count,\n     languages: languages_of(editions, document, published),\n     updated_at:\n       newest([document.updated_at, version && version.published_at, pages.updated_at])\n   }}\nend)\n"
-        },
-        {
-          "name": "current_versions",
           "args": "documents, visitor",
-          "code": "# THE VERSION EACH DOCUMENT IS READ AT WITHOUT A ?v=: the one an editor marked latest, else the\n# newest published — the version its own pages open on.\nrequire Ash.Query\n\ncase Enum.map(documents, & &1.id) do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.WorkspaceVersion\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_id in ^wanted)\n    |> Ash.Query.select([\n      :id,\n      :workspace_id,\n      :version_number,\n      :is_latest_for_version,\n      :published_at,\n      :inserted_at\n    ])\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.group_by(& &1.workspace_id)\n    |> Map.new(fn {workspace_id, found} -> {workspace_id, latest_of(newest_first(found))} end)\nend\n"
+          "code": "# WHAT EACH CARD SAYS ABOUT ITS DOCUMENT, keyed by the document's id: the version a reader lands\n# on, the pages of it the visitor may read, the languages it is published in on this site and when\n# it last changed — the latest of the document, its version and those pages. The documents carry\n# their version and their editions' languages (`with_details/2`), so the pages of every version on\n# the page are the one read this adds, whatever the number of documents.\ncounted =\n  documents\n  |> Enum.map(& &1.current_version_id)\n  |> Enum.reject(&is_nil/1)\n  |> pages_of(visitor)\n\npublished = MishkaCmsCore.Runtime.Languages.site(site_id())\n\nMap.new(documents, fn document ->\n  version = document.current_version_id\n  pages = (version && Map.get(counted, version)) || %{count: 0, updated_at: nil}\n\n  {document.id,\n   %{\n     version: document.current_version_number,\n     pages: pages.count,\n     languages: languages_of(document, published),\n     updated_at:\n       newest([\n         document.updated_at,\n         version && document.current_version_published_at,\n         pages.updated_at\n       ])\n   }}\nend)\n"
         },
         {
           "name": "pages_of",
-          "args": "versions, visitor",
-          "code": "# HOW MANY PAGES EACH VERSION HOLDS FOR THIS VISITOR, and when the latest of them changed. A group\n# with no page of its own is only a heading, so it is not counted.\nrequire Ash.Query\n\ncase Enum.map(versions, & &1.id) do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([:workspace_version_id, :group_heading, :group_page])\n    |> Ash.Query.load(:last_modified_at)\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.reject(&(&1.group_heading == true and &1.group_page != true))\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Map.new(fn {version_id, pages} ->\n      {version_id,\n       %{count: length(pages), updated_at: newest(Enum.map(pages, & &1.last_modified_at))}}\n    end)\nend\n"
+          "args": "version_ids, visitor",
+          "code": "# HOW MANY PAGES EACH OF THESE VERSIONS HOLDS FOR THIS VISITOR, and when the latest of them changed,\n# by the version's id, in one read. A group with no page of its own is only a heading, so it is not\n# counted.\nrequire Ash.Query\n\ncase version_ids do\n  [] ->\n    %{}\n\n  wanted ->\n    MishkaDocument.Section\n    |> Ash.Query.for_read(:public_list, %{}, read_as(visitor))\n    |> Ash.Query.filter(workspace_version_id in ^wanted)\n    |> Ash.Query.select([:workspace_version_id, :group_heading, :group_page])\n    |> Ash.Query.load(:last_modified_at)\n    |> Ash.read(tenant: site_id(), page: false)\n    |> rows()\n    |> Enum.reject(&(&1.group_heading == true and &1.group_page != true))\n    |> Enum.group_by(& &1.workspace_version_id)\n    |> Map.new(fn {version_id, pages} ->\n      {version_id,\n       %{count: length(pages), updated_at: newest(Enum.map(pages, & &1.last_modified_at))}}\n    end)\nend\n"
         },
         {
           "name": "languages_of",
-          "args": "editions, document, published",
-          "code": "# EVERY LANGUAGE THE DOCUMENT IS PUBLISHED IN ON THIS SITE, which is all a card says of them: the\n# languages it has an edition in that the site publishes, in the site's own order, its first language\n# first. An edition in a language the site does not publish has no address here, so naming it would\n# name a page nobody can open, and the header's menu — which lists the languages a page is in — is\n# the only way between them.\nwritten =\n  case Map.get(editions, document.language_group_id) do\n    nil -> [document.language]\n    found -> Enum.map(found, & &1.language)\n  end\n\nEnum.filter(published, &(&1 in written))\n"
-        },
-        {
-          "name": "newest_first",
-          "args": "versions",
-          "code": "Enum.sort_by(versions, &{moment(&1.published_at), moment(&1.inserted_at), &1.id}, :desc)\n"
-        },
-        {
-          "name": "latest_of",
-          "args": "versions",
-          "code": "# VERSION NUMBERS ARE TEXT, so \"0.0.10\" sorts under \"0.0.9\" and the newest is whichever one an\n# editor marked latest — falling back to the most recently published when nobody has.\nEnum.find(versions, & &1.is_latest_for_version) || List.first(versions)\n"
+          "args": "document, published",
+          "code": "# EVERY LANGUAGE THE DOCUMENT IS PUBLISHED IN ON THIS SITE, which is all a card says of them: the\n# languages it has an edition in that the site publishes, in the site's own order, its first language\n# first. An edition in a language the site does not publish has no address here, so naming it would\n# name a page nobody can open, and the header's menu — which lists the languages a page is in — is\n# the only way between them.\nwritten =\n  case document.edition_languages do\n    others when is_list(others) -> [document.language | others]\n    _not_loaded -> [document.language]\n  end\n\nEnum.filter(published, &(&1 in written))\n"
         },
         {
           "name": "newest",
           "args": "moments",
-          "code": "# THE LATEST OF SOME TIMES, nil when none of them is one.\ncase Enum.filter(moments, &match?(%DateTime{}, &1)) do\n  [] -> nil\n  found -> Enum.max_by(found, &moment/1)\nend\n"
-        },
-        {
-          "name": "moment",
-          "args": "value",
-          "code": "# A TIME AS A NUMBER, because these are sorted in memory and two `%DateTime{}` structs compare by\n# Erlang term order rather than by when they happened. A version nobody published sorts oldest.\ncase value do\n  %DateTime{} = at -> DateTime.to_unix(at, :microsecond)\n  _never -> 0\nend\n"
+          "code": "# THE LATEST OF SOME TIMES, nil when none of them is one. Compared as numbers, because two\n# `%DateTime{}` structs compare by Erlang term order rather than by when they happened.\ncase Enum.filter(moments, &match?(%DateTime{}, &1)) do\n  [] -> nil\n  found -> Enum.max_by(found, &DateTime.to_unix(&1, :microsecond))\nend\n"
         },
         {
           "name": "no_match",

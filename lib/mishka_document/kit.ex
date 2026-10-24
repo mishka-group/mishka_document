@@ -497,8 +497,10 @@ defmodule MishkaDocument.Kit do
   on — the one marked latest, else the newest published — how many of its pages the visitor may
   read there, a group with no page of its own left out, every language it is published in on this
   site, and when it last changed: the latest of the document, that version and those pages, a page by
-  when it last changed as above. Two more reads for the whole page of documents, both as the visitor.
-  `doc-workspace-card` draws them as
+  when it last changed as above. The version and the other editions' languages are aggregates of the
+  read that lists the documents (`MishkaDocument.Workspace`'s `current_version_*` and
+  `edition_languages`), and the pages one more read for the whole page of documents, all as the
+  visitor. `doc-workspace-card` draws them as
   `doc-list-meta`, holding `doc-list-version`, `doc-list-pages` and `doc-list-updated`, and, beside
   the way in, `doc-list-language-codes`; a card an author named in `card` is handed them as
   `details`, a map of `version`, `pages`, `languages` and `updated_at`, which it declares as an

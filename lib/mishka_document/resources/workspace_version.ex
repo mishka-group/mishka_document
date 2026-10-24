@@ -1306,6 +1306,11 @@ defmodule MishkaDocument.WorkspaceVersion do
     # Who may open the version: its document's permissions.
     calculate :effective_permissions, {:array, :string}, expr(workspace.permissions)
 
+    # Whether the version carries a publishing time: what a document's `current_version_*` sort the
+    # versions without one under the rest by. ash_sql 0.8 draws a `:desc_nils_last` sort inside an
+    # aggregate as a stray parameter, so the order is written as this, then `published_at`.
+    calculate :dated?, :boolean, expr(not is_nil(published_at))
+
     # What deleting the version deletes with it: the versions cloned from it, however deep.
     calculate :clone_numbers,
               {:array, :string},

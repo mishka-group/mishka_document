@@ -3666,6 +3666,33 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       refute other =~ "text-brand"
     end
 
+    # AN EDITION THE VISITOR MAY NOT OPEN IS NOT A LANGUAGE OF THEIRS. The card's languages are read
+    # with the documents, through the editions' public read, as the visitor.
+    test "names a locked edition's language only to a reader holding its lock", %{site: site} do
+      {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["en", "fa"], site_id: site.id)
+      %{document: document} = manual!(site)
+
+      document!(site,
+        name: "میشکا",
+        slug: "mishka-cms-fa",
+        language: "fa",
+        language_group_id: document.language_group_id,
+        permissions: ["members:read"]
+      )
+
+      member = create_user_with_permissions!(["members:read"], site_id: site.id)
+      badges = ~s([id$="-doc-#{document.id}"] [data-role="doc-list-language-codes"] > span)
+      asked = %{per_page: 10, show_details: true, language: "en"}
+
+      {:ok, guest, _html} = mount_page(site, "doc-workspace-list", asked)
+      assert text_of(guest, badges) == []
+
+      {:ok, shown, _html} =
+        mount_page(site, "doc-workspace-list", Map.put(asked, :current_user, member))
+
+      assert text_of(shown, badges) == ["en", "fa"]
+    end
+
     # A LANGUAGE THE SITE DOES NOT PUBLISH HAS NO PAGE ON IT, so a card that named it would name
     # something a reader can never open; and one the document has no edition in is no language of it.
     test "names only the languages both the document has and the site publishes", %{site: site} do
