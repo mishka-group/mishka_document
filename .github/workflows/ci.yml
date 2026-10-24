@@ -10,6 +10,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # TEMPORARY: OTP 29.0.5, not the 29.1.x of .tool-versions, in every job and every cache key
+  # below. From OTP 29.0.6 on, :httpc stops at 10240 bytes of response headers by default, and the
+  # redirect GitHub answers a release download with now carries about 10.8 KB of them, so precompiled
+  # NIFs and binaries downloaded through :httpc (elixir_make, cc_precompiler, rustler_precompiled,
+  # tailwind) fail with {:header_too_long, {:max, 10240}}. Move back to the latest OTP, with
+  # `version-file: .tool-versions` and .tool-versions in the cache keys again, once a fixed OTP
+  # release or fixed libraries are out.
+  OTP_VERSION: "29.0.5"
+  ELIXIR_VERSION: "1.20.4-otp-29"
+
 jobs:
   # Compiled once; the jobs below start from this build.
   #
@@ -47,7 +58,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          version-file: mishka_document/.tool-versions
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
           version-type: strict
 
       - uses: actions/cache@v6
@@ -55,8 +67,8 @@ jobs:
           path: |
             mishka_document/deps
             mishka_document/_build
-          key: ${{ runner.os }}-mix-${{ hashFiles('mishka_document/mix.lock', 'mishka_document/.tool-versions') }}-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-mix-${{ hashFiles('mishka_document/mix.lock', 'mishka_document/.tool-versions') }}-
+          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-
 
       - run: mix deps.get
 
@@ -95,7 +107,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          version-file: mishka_document/.tool-versions
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
           version-type: strict
 
       - uses: actions/cache/restore@v6
@@ -103,7 +116,7 @@ jobs:
           path: |
             mishka_document/deps
             mishka_document/_build
-          key: ${{ runner.os }}-mix-${{ hashFiles('mishka_document/mix.lock', 'mishka_document/.tool-versions') }}-${{ github.sha }}
+          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       # The formatter takes the DSL's paren-free calls (`table "pages"`, `reference :site, ...`)
@@ -165,7 +178,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          version-file: mishka_document/.tool-versions
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
           version-type: strict
 
       - uses: actions/cache/restore@v6
@@ -173,7 +187,7 @@ jobs:
           path: |
             mishka_document/deps
             mishka_document/_build
-          key: ${{ runner.os }}-mix-${{ hashFiles('mishka_document/mix.lock', 'mishka_document/.tool-versions') }}-${{ github.sha }}
+          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       # The migrations are generated, not in git: generate them before the test alias's `ash.setup`
