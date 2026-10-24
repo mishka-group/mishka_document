@@ -62,7 +62,7 @@ defmodule MishkaDocument.Kit do
   has one.
 
     * `doc-workspace-list` draws a document as a card — its tile, how many pages and which version,
-      its name, its summary, the editions it is published in and the way in — or, as one line of a
+      its name, its summary, the languages it is published in and the way in — or, as one line of a
       list, as a row. `show_search` draws a search box over the list that narrows it to the documents
       whose name or summary carries the words, read from `search_param` of the page's own query
       string (`q`) and written back there, so a search has an address of its own; `split_featured`
@@ -494,14 +494,20 @@ defmodule MishkaDocument.Kit do
 
   `doc-workspace-list` with `show_details` also says, for each document, the version a reader lands
   on — the one marked latest, else the newest published — how many of its pages the visitor may
-  read there, a group with no page of its own left out, every language it is published in, and when
-  it last changed: the latest of the document, that version and those pages, a page by when it last
-  changed as above. Two more reads for the whole page of documents, both as the visitor.
+  read there, a group with no page of its own left out, every language it is published in on this
+  site, and when it last changed: the latest of the document, that version and those pages, a page by
+  when it last changed as above. Two more reads for the whole page of documents, both as the visitor.
   `doc-workspace-card` draws them as
-  `doc-list-meta`, holding `doc-list-version`, `doc-list-pages`, `doc-list-language-codes` (only
-  where no language chips are drawn) and `doc-list-updated`; a card an author named in `card` is
-  handed them as `details`, a map of `version`, `pages`, `languages` and `updated_at`, which it
-  declares as an attribute of its own.
+  `doc-list-meta`, holding `doc-list-version`, `doc-list-pages` and `doc-list-updated`, and, beside
+  the way in, `doc-list-language-codes`; a card an author named in `card` is handed them as
+  `details`, a map of `version`, `pages`, `languages` and `updated_at`, which it declares as an
+  attribute of its own.
+
+  THE LANGUAGES ARE WORDS, NEVER LINKS. The header's language menu is the one place a reader changes
+  language, so a card has no chip leading to another edition: `languages` lists the languages the
+  document has an edition in that the site publishes, in the site's own order, and the card draws
+  them as plain badges only when there are two or more, since one language named on every card of a
+  site that publishes in one says nothing.
 
   `doc-workspace-list` streams its rows, and says `phx-update="stream"` only where there is a socket
   to stream from — `@myself` is nil in a cold render, and a stream container is one the client never

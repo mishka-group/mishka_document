@@ -628,8 +628,10 @@ defmodule MishkaDocument.Provision do
   # an address of its own.
   #
   # `featured_text` is empty because the cards ARE the featured ones here, which is all the badge
-  # would say; the language links are the layout's `site-header`, which `@page_languages` is right
-  # for on this path.
+  # would say. There is no language link on a card: the language dropdown of the layout's
+  # `site-header`, which `@page_languages` is right for on this path, is the only way between
+  # languages. What a card says of the languages is plain badges, in the languages the site publishes
+  # and the document is written in, `show_details` among the facts it draws.
   defp index(site) do
     """
     <section class="flex flex-col items-center gap-4 pt-[72px] text-center">
@@ -655,7 +657,6 @@ defmodule MishkaDocument.Provision do
       per_page={12}
       sort="order"
       show_description={true}
-      show_languages={true}
       show_details={true}
       show_search={true}
       split_featured={true}

@@ -3318,9 +3318,6 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {_view, full} = mount_raw(site, list_block(%{live_visit: true, show_details: true}))
       {_view, bare} = mount_raw(site, list_block(%{live_visit: true, show_description: false}))
 
-      {_view, chips} =
-        mount_raw(site, list_block(%{live_visit: true, show_languages: true}))
-
       lines = fn html ->
         html
         |> LazyHTML.from_fragment()
@@ -3333,9 +3330,17 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert lines.(plain) == 2, "a description of two lines"
       assert lines.(full) == 3, "and the line of facts under it"
       assert lines.(bare) == 0, "and none when the card draws no description"
+    end
 
-      assert roles(chips, "doc-list-skeleton") == 2
-      assert chips =~ "uppercase", "the language chips were left out of the skeleton"
+    # A CARD HAS NO LANGUAGE ROW OF ITS OWN TO HOLD A PLACE FOR: the badges are drawn only where a
+    # document is in two languages of the site, so the skeleton is the footer's height and no more.
+    test "a skeleton holds no place for a language chip", %{site: site} do
+      for attrs <- [%{}, %{show_details: true}] do
+        {_view, skeleton} = mount_raw(site, list_block(Map.put(attrs, :live_visit, true)))
+
+        assert roles(skeleton, "doc-list-skeleton") == 2
+        refute skeleton =~ "uppercase", "a skeleton drew a language chip"
+      end
     end
 
     # A CARD OF THE AUTHOR'S OWN IS A SIZE THE BLOCK CANNOT KNOW, so its skeleton is theirs too.
@@ -3484,7 +3489,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert Enum.empty?(drawn(view, ~s([data-role="doc-list-meta"])))
     end
 
-    test "draws each document's version, pages, language and last change", %{site: site} do
+    test "draws each document's version, pages and last change", %{site: site} do
       %{document: document, pages: pages} = manual!(site)
 
       {:ok, view, _html} =
@@ -3492,7 +3497,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(view, ~s([data-role="doc-list-version"])) == ["v1.0.0"]
       assert text_of(view, ~s([data-role="doc-list-pages"])) == ["4 pages"]
-      assert text_of(view, ~s([data-role="doc-list-language-codes"])) == ["en"]
+
+      assert Enum.empty?(drawn(view, ~s([data-role="doc-list-language-codes"]))),
+             "a document in the one language the site publishes named it"
 
       document =
         Ash.get!(MishkaDocument.Workspace, document.id, action: :master_get, authorize?: false)
@@ -3596,7 +3603,11 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert text_of(view, ~s([data-role="doc-list-version"])) == ["Version 0.1.0"]
     end
 
-    test "names every language a document is published in", %{site: site} do
+    # THE LANGUAGES ARE WORDS, NEVER LINKS. The header's menu is the only way between languages, so a
+    # card says which ones a document is in — the ones the site publishes — and leads to none of them.
+    test "names every language a document is published in on this site, as plain badges", %{
+      site: site
+    } do
       {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["en", "fa"], site_id: site.id)
       %{document: document} = manual!(site)
 
@@ -3628,16 +3639,64 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert text_of(custom, ~s([data-role="languages"])) == ["en fa"]
 
-      # The chips already name them, so the card does not say them twice.
-      {:ok, chips, _html} =
-        mount_page(site, "doc-workspace-list", %{
-          per_page: 10,
-          show_details: true,
-          show_languages: true
-        })
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, show_details: true})
 
-      assert Enum.empty?(drawn(chips, ~s([data-role="doc-list-language-codes"])))
-      assert Enum.sort(text_of(chips, ~s([data-role="doc-list-language"]))) == ["en", "fa"]
+      badges = ~s([data-role="doc-list-language-codes"] > span)
+
+      assert text_of(view, badges) == ["en", "fa"]
+      assert Enum.empty?(drawn(view, ~s([data-role="doc-list-language-codes"] a)))
+      assert Enum.empty?(drawn(view, ~s([data-role="doc-list-languages"])))
+      assert Enum.empty?(drawn(view, ~s([data-role="doc-list-language"])))
+
+      classes = view |> drawn(badges) |> Enum.map(&(&1 |> LazyHTML.attribute("class") |> hd()))
+
+      assert [own, other] = classes
+      assert own =~ "text-brand", "the language the document is written in was not marked"
+      refute other =~ "text-brand"
+    end
+
+    # A LANGUAGE THE SITE DOES NOT PUBLISH HAS NO PAGE ON IT, so a card that named it would name
+    # something a reader can never open; and one the document has no edition in is no language of it.
+    test "names only the languages both the document has and the site publishes", %{site: site} do
+      {:ok, _} =
+        MishkaCmsCore.Settings.put("site.languages", ["en", "fa", "fr"], site_id: site.id)
+
+      shared = document!(site, name: "Shared", slug: "shared", display_order: 0)
+
+      document!(site,
+        name: "مشترک",
+        slug: "shared-fa",
+        language: "fa",
+        language_group_id: shared.language_group_id
+      )
+
+      wide = document!(site, name: "Wide", slug: "wide", display_order: 1)
+
+      for code <- ~w(fr ar) do
+        document!(site,
+          name: "Wide #{code}",
+          slug: "wide-#{code}",
+          language: code,
+          language_group_id: wide.language_group_id
+        )
+      end
+
+      {:ok, view, _html} =
+        mount_page(site, "doc-workspace-list", %{per_page: 10, show_details: true})
+
+      assert text_of(
+               view,
+               ~s([id$="-doc-#{shared.id}"] [data-role="doc-list-language-codes"] > span)
+             ) ==
+               ["en", "fa"]
+
+      assert text_of(
+               view,
+               ~s([id$="-doc-#{wide.id}"] [data-role="doc-list-language-codes"] > span)
+             ) ==
+               ["en", "fr"],
+             "ar is written but not published here, and fa is published but not written"
     end
 
     test "hands them to the author's own card", %{site: site} do
@@ -3751,59 +3810,84 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       assert directions == ["rtl"]
     end
 
+    # THE HEADER'S MENU IS THE ONLY LANGUAGE SELECTOR, so a card links to nothing but its own
+    # document: no pill leads to another edition, in either URL mode, and a card never names the
+    # address of a language the site does not answer — it would be a 404.
     for mode <- ~w(prefix_others prefix_all) do
-      test "and the chips lead to the other editions, in #{mode}", %{site: site} do
+      test "and a card leads only to its own document, never to another edition, in #{mode}", %{
+        site: site
+      } do
         url_mode!(site, unquote(mode))
 
         {:ok, view, _html} =
           mount_page(site, "doc-workspace-list", %{
             per_page: 10,
-            show_languages: true,
+            show_details: true,
             doc_base: "/:lang/docs"
           })
 
-        assert Enum.sort(hrefs(view, ~s([data-role="doc-list-language"]))) ==
-                 Enum.sort([english(unquote(mode), "/docs/mishka-cms"), "/fa/docs/mishka-cms-fa"])
+        assert Enum.uniq(hrefs(view, ~s([data-role="doc-card"] a))) ==
+                 [english(unquote(mode), "/docs/mishka-cms")]
+
+        assert Enum.empty?(drawn(view, ~s([data-role="doc-list-languages"]))),
+               "the card drew a row of language pills"
+
+        assert Enum.empty?(drawn(view, ~s([data-role="doc-list-language"])))
       end
     end
 
-    # AND SAYS SO AS A WORD where the site cannot serve that language. The translation was written
-    # and the chip row is what says so; a link to a URL the site does not answer would not.
-    test "and says so as a word where the site does not publish that language", %{site: site} do
+    test "and no link on the page leads to a language the site does not publish", %{site: site} do
       {:ok, _} = MishkaCmsCore.Settings.put("site.languages", ["en"], site_id: site.id)
 
       {:ok, view, _html} =
         mount_page(site, "doc-workspace-list", %{
           per_page: 10,
-          show_languages: true,
+          show_details: true,
+          lang: "all",
           doc_base: "/:lang/docs"
         })
 
-      assert hrefs(view, ~s([data-role="doc-list-language"])) == ["/docs/mishka-cms"]
-      assert Enum.sort(text_of(view, ~s([data-role="doc-list-language"]))) == ["en", "fa"]
+      assert Enum.sort(text_of(view, ~s([data-role="doc-list-title"]))) == ["Mishka CMS", "میشکا"]
+
+      links = hrefs(view, ~s(a))
+
+      refute links == [], "nothing was linked, so this asserts nothing"
+
+      for link <- links do
+        refute link =~ ~r{^/fa(/|$)},
+               "a card linked #{link}, a language this site does not publish"
+      end
+
+      assert Enum.empty?(drawn(view, ~s([data-role="doc-list-language-codes"]))),
+             "a document in one language of the site named it"
+
+      assert Enum.empty?(drawn(view, ~s([data-language="fa"])))
     end
 
-    # AND NO CHIPS AT ALL UNDER A DOCUMENT NOBODY TRANSLATED. Every document written through the CMS
-    # is the master of a group holding itself — `SetLanguageGroupId` fills the group with the row's
-    # own id — so a chip row drawn from the group puts a lone "en" under every card on a site that
-    # publishes in one language.
+    # AND NO BADGES UNDER A DOCUMENT NOBODY TRANSLATED. Every document written through the CMS is the
+    # master of a group holding itself — `SetLanguageGroupId` fills the group with the row's own id —
+    # so a row drawn from the group puts a lone "en" under every card on a site that publishes in
+    # one language.
     test "and a document with one edition gets none", %{site: site} do
       alone = document!(site, name: "Alone", slug: "alone")
 
       {:ok, view, _html} =
         mount_page(site, "doc-workspace-list", %{
           per_page: 10,
-          show_languages: true,
+          show_details: true,
           doc_base: "/:lang/docs"
         })
 
       assert text_of(view, ~s([data-role="doc-list-title"])) == ["Alone", "Mishka CMS"]
 
-      assert text_of(view, ~s(#one-doc-#{alone.id} [data-role="doc-list-language"])) == [],
-             "a document with one edition offered the language it is already written in"
+      assert [_card] = view |> drawn(~s([id$="-doc-#{alone.id}"])) |> Enum.to_list()
 
-      assert text_of(view, ~s([data-role="doc-list-language"])) == ["en", "fa"],
-             "the document that does have two editions lost its chips"
+      assert text_of(view, ~s([id$="-doc-#{alone.id}"] [data-role="doc-list-language-codes"])) ==
+               [],
+             "a document with one edition named the language it is already written in"
+
+      assert text_of(view, ~s([data-role="doc-list-language-codes"] > span)) == ["en", "fa"],
+             "the document that does have two editions lost its badges"
     end
   end
 

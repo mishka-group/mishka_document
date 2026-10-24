@@ -293,6 +293,7 @@ defmodule MishkaDocument.ProvisionTest do
       assert given["show_search"] == {:expression, "true"}
       assert given["split_featured"] == {:expression, "true"}
       assert given["show_details"] == {:expression, "true"}
+      refute Map.has_key?(given, "show_languages"), "the library asks for a row of language pills"
       assert given["read_text"] == {:literal, "Open"}
       assert given["params"] == {:expression, ~S|Map.drop(@query_params, ["lang"])|}
     end
@@ -317,7 +318,8 @@ defmodule MishkaDocument.ProvisionTest do
     end
 
     # THE HEADER'S LANGUAGE DROPDOWN IS THE ONLY LANGUAGE SWITCH. The pages used to carry a second
-    # one, `doc-switcher`'s row of language pills, in a bar of their own.
+    # one, `doc-switcher`'s row of language pills, in a bar of their own, and the library's cards a
+    # third, a pill per edition of each document.
     test "draws no language pills and no switcher of its own", %{site: site} do
       Provision.ensure!(site)
       Provision.ensure_address!(site, "/handbook/docs")
@@ -325,6 +327,7 @@ defmodule MishkaDocument.ProvisionTest do
       for {name, template} <- templates(site) do
         refute template =~ "doc-switcher", "#{name} still draws the switcher"
         refute template =~ ~r/\bshow_crumb=|\bshow="(both|language)"/, "#{name} asks for pills"
+        refute template =~ ~r/\bshow_languages\b/, "#{name} asks for a pill per edition"
         refute template =~ ~r/data-role="doc-switcher/, "#{name} draws a switcher's part"
       end
     end
