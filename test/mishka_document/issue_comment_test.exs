@@ -762,8 +762,14 @@ defmodule MishkaDocument.Test.IssueCommentTest do
       end
     end
 
+    # The comment as a master loads it. A record keeps the tenant it was made or loaded under, and
+    # a changeset built from it takes that tenant (Ash 3.37 sets it on a create's result too), so
+    # the one `create_issue_comment!` returns would be refused by every master action.
     defp comment_by!(%{site: site, issue: issue}, author) do
-      create_issue_comment!(site_id: site.id, issue_id: issue.id, contributor_id: author.id)
+      comment =
+        create_issue_comment!(site_id: site.id, issue_id: issue.id, contributor_id: author.id)
+
+      Ash.get!(IssueComment, comment.id, action: :master_get, authorize?: false)
     end
 
     defp prepared!(comment, action) when action in [:unarchive, :master_unarchive] do
