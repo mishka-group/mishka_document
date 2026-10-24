@@ -332,6 +332,61 @@ defmodule MishkaDocument.ProvisionTest do
       end
     end
 
+    # UNDER 880 PIXELS THE CONTENTS ARE A CLOSED DISCLOSURE, because a list of thirty pages above the
+    # article puts the article below the first screen of a phone. The design has no phone, so this is
+    # the page's own: a `<details>` that is not open, holding the contents and nothing else, before
+    # the page in the markup — and the on-this-page list after it, where it cannot push it down.
+    # From 880 pixels the summary is not drawn and the contents are shown whether it is open or not.
+    test "draws the contents as a closed disclosure above the page, and the page outside it", %{
+      site: site
+    } do
+      Provision.ensure!(site)
+      Provision.ensure_address!(site, "/handbook/docs")
+
+      document_pages =
+        Enum.filter(pages(site), fn found ->
+          found.path in Map.values(Provision.item_paths()) or
+            String.starts_with?(found.path, "/handbook")
+        end)
+
+      assert length(document_pages) == 4
+
+      for %{path: path, template: template} <- document_pages do
+        assert [disclosure] = Regex.run(~r{<details\b.*?</details>}s, template),
+               "#{path} has no disclosure for the contents"
+
+        [opening] = Regex.run(~r/<details\b[^>]*>/, disclosure)
+        refute opening =~ ~r/\bopen\b/, "#{path} draws the contents open"
+
+        assert [summary] = Regex.run(~r{<summary\b.*?</summary>}s, disclosure)
+        assert summary =~ ~r/>\s*Pages\s*</, "#{path}'s summary does not say what is in it"
+
+        assert Enum.map(component_calls(disclosure), &elem(&1, 0)) == ["doc-sidebar"],
+               "#{path}'s disclosure holds something other than the contents"
+
+        {opened_at, _} = :binary.match(template, "<details")
+        {page_at, _} = :binary.match(template, ~s(component_name="doc-section"))
+        {headings_at, _} = :binary.match(template, ~s(component_name="doc-toc"))
+
+        assert opened_at < page_at, "#{path} draws the page before its contents"
+        assert page_at < headings_at, "#{path} draws the headings above the page"
+
+        assert opened_at + byte_size(disclosure) < page_at,
+               "#{path} draws the page in the contents"
+
+        # From 880px: no summary, and the contents shown though the element is closed.
+        assert opening =~ "min-[880px]:details-content:[content-visibility:visible]"
+        assert summary =~ "min-[880px]:supports-[selector(::details-content)]:hidden"
+
+        # A press on a page of the contents closes it again, the way the sidebar offers.
+        sidebar = disclosure |> component_calls() |> hd() |> elem(1) |> Map.new()
+        [_whole, id] = Regex.run(~r/<details\s+id="([^"]+)"/, disclosure)
+
+        assert sidebar["link_click"] ==
+                 {:expression, ~s|Phoenix.LiveView.JS.remove_attribute("open", to: "##{id}")|}
+      end
+    end
+
     # THE LAYOUT'S COLUMN IS THE PAGE'S WIDTH: 1160 pixels with its gutters, so a page that wraps
     # itself in a container of its own doubles the gutters and widens the page past the header and the
     # footer. What each page draws is its sections straight into the column.

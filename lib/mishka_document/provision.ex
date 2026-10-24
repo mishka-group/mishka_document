@@ -686,24 +686,64 @@ defmodule MishkaDocument.Provision do
   # moduledoc gives.
   #
   # THE FLEX ROW WRAPS RATHER THAN SWITCHING AT A BREAKPOINT, as the design's does: the contents
-  # take 240px and the page 520px or more, so the contents sit above the page wherever the two
-  # do not fit, and the on-this-page list beside the page wherever 200px more do. An empty list
-  # takes no room: `doc-toc` draws nothing under two entries, and its wrapper is hidden then.
+  # take 240px and the page 520px or more, so the contents sit above the page wherever the two do
+  # not fit, and the on-this-page list beside the page wherever 200px more do. An empty list takes
+  # no room: `doc-toc` draws nothing under two entries, and its wrapper is hidden then.
+  #
+  # WHERE THE CONTENTS SIT ABOVE THE PAGE THEY ARE A CLOSED DISCLOSURE. The design has no phone, and
+  # a list of thirty pages above the article would put the article below the first screen, so under
+  # 880px — the width at which the row stops wrapping, which is also where the contents stop being
+  # sticky — they are a `<details>` called "Pages" that the reader opens, and a press on one of its
+  # links closes it again. From 880px the same markup is the sticky column it always was: the
+  # summary is not drawn and the contents are shown whether the element is open or not
+  # (`::details-content`), and a browser that has no such thing keeps the summary, so the contents
+  # are never out of reach. The on-this-page list follows the page wherever the two wrap, so it never
+  # pushes the page down.
   defp document(site, address \\ nil) do
     """
     <div class="flex flex-wrap items-start gap-12 pt-10">
-      <aside class="max-h-[calc(100vh-3rem)] max-w-full flex-[0_0_240px] overflow-y-auto pb-6 min-[880px]:sticky min-[880px]:top-6">
-        <.component
-          component_name="doc-sidebar"
-          site="#{site}"
-          id="doc-contents"
-          current_user={assigns[:current_user]}#{serves(address, 6)}
-          heading=""
-          lang={@page.language}
-          doc_base="#{@docs}"
-          params={Map.drop(@query_params, ["lang"])}
-          show_filter={true}
-        />
+      <aside class="w-full max-w-full min-[880px]:sticky min-[880px]:top-6 min-[880px]:max-h-[calc(100vh-3rem)] min-[880px]:w-auto min-[880px]:flex-[0_0_240px] min-[880px]:overflow-y-auto min-[880px]:pb-6">
+        <details
+          id="doc-pages"
+          data-role="doc-pages"
+          class="group max-[880px]:rounded-[16px] max-[880px]:border max-[880px]:border-edge max-[880px]:bg-surface max-[880px]:dark:border-edge-dark max-[880px]:dark:bg-surface-dark min-[880px]:details-content:[content-visibility:visible]"
+        >
+          <summary
+            data-role="doc-pages-summary"
+            class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-[14px] font-medium text-fg min-[880px]:supports-[selector(::details-content)]:hidden dark:text-fg-dark"
+          >
+            Pages
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              class="shrink-0 text-faint transition-transform group-open:rotate-180 dark:text-faint-dark"
+            >
+              <path d="M6 9l6 6 6-6"></path>
+            </svg>
+          </summary>
+
+          <div class="max-[880px]:px-3 max-[880px]:pb-3">
+            <.component
+              component_name="doc-sidebar"
+              site="#{site}"
+              id="doc-contents"
+              current_user={assigns[:current_user]}#{serves(address, 14)}
+              heading=""
+              lang={@page.language}
+              doc_base="#{@docs}"
+              params={Map.drop(@query_params, ["lang"])}
+              show_filter={true}
+              link_click={Phoenix.LiveView.JS.remove_attribute("open", to: "#doc-pages")}
+            />
+          </div>
+        </details>
       </aside>
 
       <div class="flex min-w-0 flex-[1_1_520px] flex-wrap items-start gap-12">
