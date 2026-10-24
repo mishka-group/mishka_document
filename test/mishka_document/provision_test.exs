@@ -1013,21 +1013,15 @@ defmodule MishkaDocument.ProvisionTest do
       assert components(site) == []
     end
 
-    # ANY OF THE PAGES IS ENOUGH, and a page of another site is not this site's.
-    test "a site holding one of the pages counts as installed, and one holding none does not", %{
+    # ONLY AN INSTALL IS ANSWERED. Core asks a site carrying no record of an install whether the
+    # documentation is already there; the answer is no, and asking writes nothing.
+    test "a site it was never installed on is not installed, and asking sets nothing up", %{
       site: site
     } do
       refute Extensions.installed?(site.id, :mishka_document)
-
-      other = create_site!(active: true)
-      create_page!(site_id: other.id, path: hd(Provision.page_paths()), active: true)
-
-      refute Extensions.installed?(site.id, :mishka_document),
-             "a page of another site made this site look set up"
-
-      create_page!(site_id: site.id, path: hd(Provision.page_paths()), active: true)
-
-      assert Extensions.installed?(site.id, :mishka_document)
+      assert components(site) == []
+      assert pages(site) == []
+      assert Extensions.installed_version(site.id, :mishka_document) == nil
     end
 
     # A SITE IS NEVER SET UP BEHIND SOMEBODY'S BACK. Creating one used to queue this work; it does
@@ -1174,26 +1168,6 @@ defmodule MishkaDocument.ProvisionTest do
     |> Ash.read!(authorize?: false, page: [limit: 100])
     |> Map.fetch!(:results)
     |> Enum.filter(&(&1.path in paths))
-  end
-
-  # A SITE FOUND ALREADY SET UP is recorded without a run, so the names a run would have created
-  # come from the answer to "is it already here?".
-  describe "a site found already set up" do
-    test "gets the documentation's permission names it is missing", %{site: site} do
-      assert {:ok, _report} = Extensions.install(site.id, "mishka_document")
-      names = Enum.map(Provision.manifest().permissions, &elem(&1, 0))
-
-      MishkaCmsCore.Accounts.Permission
-      |> Ash.Query.filter(name in ^names)
-      |> Ash.read!(authorize?: false, page: false)
-      |> Enum.each(&Ash.destroy!(&1, authorize?: false))
-
-      {:ok, _} = MishkaCmsCore.Settings.put("mishka_document.installed", "", site_id: site.id)
-      assert stored_permissions(names) == []
-
-      assert Extensions.installed?(site.id, :mishka_document)
-      assert Enum.sort(stored_permissions(names)) == Enum.sort(names)
-    end
   end
 
   defp stored_permissions(names) do

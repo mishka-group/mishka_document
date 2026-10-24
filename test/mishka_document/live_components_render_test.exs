@@ -2513,7 +2513,8 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   # A DOCUMENTATION PAGE IS FOUR OF THESE SIDE BY SIDE, and the attributes that say which page it is
   # are written once and handed to all four. Every one of them declares `rest` as a global, so an
   # attribute one of them does not declare is not ignored — it is printed onto that block's root as
-  # an HTML attribute. `doc-toc` builds no links out of `doc_base` and declares it for this reason.
+  # an HTML attribute. `doc-toc` builds no links but anchors into the page, so it takes no
+  # `doc_base`, and the page hands that only to the three that link.
   describe "the four blocks of a documentation page" do
     test "take one set of attributes between them", %{site: site} do
       manual!(site)
@@ -2534,7 +2535,10 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       {:ok, view, _html} =
         mount_blocks(
           site,
-          for(name <- names, do: %{"name" => name, "id" => name, "attrs" => attrs})
+          for(
+            name <- names,
+            do: %{"name" => name, "id" => name, "attrs" => attrs_of(name, attrs)}
+          )
         )
 
       document = view |> render() |> LazyHTML.from_fragment()
@@ -2557,6 +2561,9 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
       end
     end
   end
+
+  defp attrs_of("doc-toc", attrs), do: Map.delete(attrs, :doc_base)
+  defp attrs_of(_name, attrs), do: attrs
 
   # WHAT A READER SEES WHILE A BLOCK IS READING, AND IF IT CANNOT. A documentation page is four
   # blocks side by side, each with reads of its own; before the split the page waited for all four

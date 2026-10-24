@@ -26,8 +26,8 @@ defmodule MishkaDocument.KitTest do
 
   import ExUnit.CaptureLog, only: [with_log: 1]
 
-  alias MishkaCmsCore.Runtime.{Component, JsHook, Stylesheet}
   alias MishkaCmsCore.Runtime.Compilers.CssClosure
+  alias MishkaCmsCore.Runtime.{Component, JsHook, Stylesheet}
   alias MishkaCmsCore.Runtime.Handlers.BootHandler
 
   require Ash.Query
@@ -61,10 +61,10 @@ defmodule MishkaDocument.KitTest do
   @frame_reads ~w(workspace_row versions_of version_of document_of)
   @frame_resources ~w(Workspace WorkspaceVersion)
 
-  # A read as the stored code writes it, in BOTH shapes it is written in: piped into `for_read/4`,
-  # and called with the resource as its first argument — which is what a helper does when it has to
-  # keep hold of the query to add a clause to it. Recognising only the first shape left
-  # `doc-switcher`'s `translated_slugs` unchecked by every test below that reads this.
+  # A read as the stored code may write it, in BOTH shapes: piped into `for_read/4`, and called with
+  # the resource as its first argument — which is what a helper does when it has to keep hold of the
+  # query to add a clause to it. Recognising only the first shape would leave a read written the
+  # second way unchecked by every test below that reads this.
   @read_calls [
     ~r/MishkaDocument\.(\w+)\s*\|>\s*Ash\.Query\.for_read\(\s*:(\w+)/,
     ~r/Ash\.Query\.for_read\(\s*MishkaDocument\.(\w+),\s*:(\w+)/

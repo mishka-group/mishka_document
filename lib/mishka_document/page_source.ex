@@ -30,11 +30,10 @@ defmodule MishkaDocument.PageSource do
   ## As the visitor
 
   Every row is read as the visitor, `current_user`, through the actions and policies the blocks read
-  with (`MishkaDocument.Resources.Preparations.OpenToActor`): `:public_list` of the document and of
-  its versions, `:public_list_at_workspace_version` of the pages and `:public_list` of the page and its
-  notes. What the visitor may not open is not among them: a locked document, a locked page or one
-  under a locked page, a page whose own page on the site is closed to them, a draft, a version that
-  is not published.
+  with (`MishkaDocument.Resources.Preparations.OpenToActor`): `:public_list` of the document, of its
+  versions, of the pages of the versions shown, and of the page and its notes. What the visitor may
+  not open is not among them: a locked document, a locked page or one under a locked page, a page
+  whose own page on the site is closed to them, a draft, a version that is not published.
 
   THE SYSTEM READS ONE ROW, AND ONLY WHEN THE VISITOR'S READ FOUND NO DOCUMENT: the document and its
   versions, as the blocks have always read them (`open?` says which read found it). Two things need

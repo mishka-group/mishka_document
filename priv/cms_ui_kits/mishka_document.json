@@ -2210,14 +2210,6 @@
           }
         },
         {
-          "name": "doc_base",
-          "type": "any",
-          "opts": {
-            "default": "/docs",
-            "doc": "Where documents with no address of their own live — /docs, say, under which a page is reached as /docs/<document>/<page>. Write the language into it as :lang — /:lang/docs — on a site whose language is a path segment, and every link is the address the site's URL mode gives the language it leads to. A document with an Address of its own is linked there instead, its pages under it."
-          }
-        },
-        {
           "name": "show_headings",
           "type": "boolean",
           "opts": {
@@ -2691,7 +2683,7 @@
           "name": "loading_text",
           "type": "string",
           "opts": {
-            "default": "Loading the other editions…",
+            "default": "Loading the other versions…",
             "doc": "What a screen reader is told while the read is running."
           }
         },
@@ -2699,7 +2691,7 @@
           "name": "error_text",
           "type": "string",
           "opts": {
-            "default": "The other editions could not be loaded.",
+            "default": "The other versions could not be loaded.",
             "doc": "What a reader is told when the read failed."
           }
         },

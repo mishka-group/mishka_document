@@ -226,13 +226,6 @@ defmodule MishkaDocument.Provision do
     |> with_words(site)
   end
 
-  @doc """
-  Creates the documentation's permission names that are not stored yet, and returns the ones it created —
-  for a site found already set up without a run (`MishkaCmsCore.Install.Extensions.installed?/2`).
-  """
-  @spec ensure_permissions() :: [String.t()]
-  def ensure_permissions, do: ExtensionProvision.ensure_permissions(manifest())
-
   @doc "The component names this extension's bundle ships, read off the bundle itself."
   @spec component_names() :: [String.t()]
   def component_names, do: ExtensionProvision.component_names(manifest())
@@ -623,7 +616,6 @@ defmodule MishkaDocument.Provision do
             page_source={assigns[:page_source]}
             heading="ON THIS PAGE"
             lang={@page.language}
-            doc_base="#{@docs}"
             params={Map.drop(@query_params, ["lang"])}
           />
         </div>
