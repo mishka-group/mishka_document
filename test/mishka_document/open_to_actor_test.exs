@@ -215,6 +215,40 @@ defmodule MishkaDocument.OpenToActorTest do
     end
   end
 
+  # A COUNT IS OF WHAT THE LIST HOLDS. `Ash.count/2` runs none of a read's `before_action` hooks, so
+  # a list kept to its reader only there counted the records the reader may not open: the library
+  # told a guest how many locked documents there are.
+  describe "a count of a list prepared for its site" do
+    setup do
+      site = create_site!()
+      open = document!(site, "open", [])
+      locked = document!(site, "locked", ["members:read"])
+      open_version = version!(site, open)
+      locked_version = version!(site, locked)
+      page!(site, open_version, "seen", [])
+      page!(site, open_version, "kept", ["members:read"])
+      page!(site, locked_version, "behind", [])
+
+      %{site: site, reader: user!(site, ["members:read"])}
+    end
+
+    test "counts what the reader may open, as the list lists it", ctx do
+      for {actor, documents, versions, pages} <- [{nil, 1, 1, 1}, {ctx.reader, 2, 2, 3}] do
+        as = [actor: actor, tenant: ctx.site.id]
+
+        assert count(Workspace, :public_list, as) == documents
+        assert count(WorkspaceVersion, :public_list, as) == versions
+        assert count(Section, :public_list, as) == pages
+
+        assert length(Ash.read!(Ash.Query.for_read(Workspace, :public_list, %{}, as), as)) ==
+                 documents
+      end
+    end
+  end
+
+  defp count(resource, action, as),
+    do: resource |> Ash.Query.for_read(action, %{}, as) |> Ash.count!(as)
+
   describe "while nothing is locked" do
     setup do
       site = create_site!()
