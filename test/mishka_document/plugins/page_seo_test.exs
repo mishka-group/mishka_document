@@ -897,6 +897,107 @@ defmodule MishkaDocument.Plugins.PageSeoTest do
     end
   end
 
+  # A PAGE A VISITOR READS IS HANDED ITS ROWS (`source`), read once for it as that visitor: the head
+  # takes the record from them and reads nothing. What the visitor's read left out is answered with
+  # its lock alone, read as the system, so the address answers 404 and nothing else of the record —
+  # not its name, not its description — is in the head.
+  describe "with the rows the page read for its visitor" do
+    setup %{site: site} do
+      document =
+        document!(site,
+          name: "Members",
+          slug: "members",
+          description: "For members.",
+          permissions: ["members:read"]
+        )
+
+      page!(site, version!(site, document, is_latest_for_version: true), "install",
+        title: "Install"
+      )
+
+      open =
+        version!(site, document!(site, slug: "open", name: "Open"), is_latest_for_version: true)
+
+      page!(site, open, "intro", title: "Intro")
+      page!(site, open, "billing", title: "Billing", permissions: ["billing:read"])
+
+      %{
+        members: create_user_with_permissions!(["members:read"], site_id: site.id),
+        billing: create_user_with_permissions!(["billing:read"], site_id: site.id)
+      }
+    end
+
+    defp sourced(site, kind, params, visitor) do
+      given = given(site, kind, params)
+      %{given | source: MishkaDocument.PageSource.read(Map.put(given, :current_user, visitor))}
+    end
+
+    test "takes the record from them and reads nothing", %{site: site} do
+      params = %{"lang" => "en", "workspace" => "open", "section" => "intro"}
+      given = sourced(site, :section, params, nil)
+
+      {answered, statements} = with_queries(fn -> answer(given) end)
+
+      assert answered.title == "Intro"
+      assert answered.permissions == []
+      assert %{"workspace.name" => "Open"} = answered.vars
+      refute Enum.any?(statements, &(&1 =~ "mishka_document_"))
+    end
+
+    test "answers a locked document with its lock alone to a guest, and in full to its reader", %{
+      site: site,
+      members: members
+    } do
+      params = %{"lang" => "en", "workspace" => "members"}
+
+      for visitor <- [nil, create_user_with_permissions!([], site_id: site.id)] do
+        refused = answer(sourced(site, :workspace, params, visitor))
+
+        assert refused.permissions == ["members:read"]
+        assert refused.card == false
+        assert refused.title == "Document page"
+        refute inspect(Map.take(refused, [:description, :vars, :schema, :tags])) =~ "Members"
+      end
+
+      read = answer(sourced(site, :workspace, params, members))
+
+      assert read.title == "Members"
+      assert read.permissions == ["members:read"]
+    end
+
+    test "answers a locked page of an open document with its lock alone to a guest", %{
+      site: site,
+      billing: billing
+    } do
+      params = %{"lang" => "en", "workspace" => "open", "section" => "billing"}
+
+      refused = answer(sourced(site, :section, params, nil))
+
+      assert refused.permissions == ["billing:read"]
+      assert refused.card == false
+      refute refused.title == "Billing"
+      refute inspect(refused.vars) =~ "Billing"
+
+      read = answer(sourced(site, :section, params, billing))
+
+      assert read.title == "Billing"
+      assert read.permissions == ["billing:read"]
+    end
+
+    test "answers a page of a locked document to a reader of the document", %{
+      site: site,
+      members: members
+    } do
+      params = %{"lang" => "en", "workspace" => "members", "section" => "install"}
+
+      assert answer(sourced(site, :section, params, nil)).permissions == ["members:read"]
+      assert answer(sourced(site, :section, params, nil)).title == "Document page"
+
+      read = answer(sourced(site, :section, params, members))
+      assert {read.title, read.permissions} == {"Install", ["members:read"]}
+    end
+  end
+
   describe "a page's robots meta" do
     setup %{site: site} do
       document = document!(site, slug: "hidden", seo_tags: [robots_meta("noindex")])

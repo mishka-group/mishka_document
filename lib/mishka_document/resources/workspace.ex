@@ -1708,6 +1708,19 @@ defmodule MishkaDocument.Workspace do
       description "Published stable versions of this workspace (public access)"
     end
 
+    # THE OTHER EDITIONS OF THE DOCUMENT AS ITS READER MAY OPEN THEM: the documents of its group of
+    # translations, through the public read, so one locked to permissions the reader does not hold,
+    # or whose page is closed to them, is not among them. Loaded with the document a page reads
+    # (`MishkaDocument.PageSource`), as that page's visitor.
+    has_many :editions, MishkaDocument.Workspace do
+      public? false
+      source_attribute :language_group_id
+      destination_attribute :language_group_id
+      read_action :public_list
+      filter expr(id != parent(id))
+      description "The other published editions of this workspace, as the reader may open them"
+    end
+
     # Relationship - for admin users with tenant
     has_many :tenant_versions, MishkaDocument.WorkspaceVersion do
       public? true

@@ -294,12 +294,36 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
       assert Enum.map(editor.translations, & &1.language) == ["en", "fa", "ar"]
     end
 
-    test "keeps the edition being read when it is the locked one", %{site: site} do
+    # THE EDITION BEING READ IS READ AS THE VISITOR TOO. A guest on the locked Persian edition is
+    # answered 404 by its page; the frame names no edition of it to them meanwhile, its own title
+    # least of all. A reader holding the lock is offered both.
+    test "offers no language of the edition being read to a visitor it is locked to", %{
+      site: site
+    } do
       handbook!(site, [], permissions: ["docs:editors"])
 
-      frame = framed(document(site, :workspace, %{"workspace" => "rahnama"}, "fa"))
+      guest = framed(document(site, :workspace, %{"workspace" => "rahnama"}, "fa"))
 
-      assert offered(frame) == [
+      outsider =
+        framed(document(site, :workspace, %{"workspace" => "rahnama"}, "fa", reader!(site)))
+
+      editor =
+        framed(
+          document(
+            site,
+            :workspace,
+            %{"workspace" => "rahnama"},
+            "fa",
+            reader!(site, ["docs:editors"])
+          )
+        )
+
+      assert guest.translations == []
+      assert outsider.translations == []
+      refute inspect(guest) =~ "راهنما"
+      assert guest.section_bar.crumbs == []
+
+      assert offered(editor) == [
                {"en", "/docs/handbook", "Handbook"},
                {"fa", "/fa/docs/rahnama", "راهنما"}
              ]
@@ -628,7 +652,7 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
       %{section_bar: %{component: "doc-switcher", assigns: given}} =
         framed(document(site, :section, params))
 
-      assert given == %{
+      assert Map.delete(given, :page_source) == %{
                id: "doc-version",
                lang: "en",
                current_user: nil,
@@ -636,6 +660,11 @@ defmodule MishkaDocument.Plugins.PageFrameTest do
                params: params,
                version_text: ""
              }
+
+      # AND THE ROWS THE PAGE READ, so the menu takes the document, its versions and the pages of the
+      # version shown from them rather than reading them again.
+      assert %MishkaDocument.PageSource{workspace: %{slug: "handbook"}, visitor: nil} =
+               given.page_source
     end
 
     # THE MENU READS THE VERSIONS AND THEIR PAGES AS THE VISITOR, so the bar names the one the frame

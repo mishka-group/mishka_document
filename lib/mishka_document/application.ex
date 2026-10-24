@@ -63,12 +63,15 @@ defmodule MishkaDocument.Application do
   # Names the components the site's documentation draws in its text, the icons it names and the
   # classes it writes, so its stylesheet carries them (a `runtime:compile:content_components`
   # plugin), tells a page whether its reader came by a live navigation (a
-  # `RuntimeLive.OnMount.AfterCompile` plugin), and gives the site's layout what only a
-  # documentation page knows: the languages its document or page is written in, and the bar under
-  # the header (a `runtime:page:frame` plugin) — `MishkaCmsCore.Runtime.SiteLayout`.
+  # `RuntimeLive.OnMount.AfterCompile` plugin), reads the rows a document's page shows once for its
+  # head, its frame and its blocks (a `runtime:page:source` plugin) —
+  # `MishkaCmsCore.Runtime.PageSource` — and gives the site's layout what only a documentation page
+  # knows: the languages its document or page is written in, and the bar under the header (a
+  # `runtime:page:frame` plugin) — `MishkaCmsCore.Runtime.SiteLayout`.
   @runtime_plugins [
     MishkaDocument.Plugins.ContentComponents,
     MishkaDocument.Plugins.LiveVisit,
+    MishkaDocument.Plugins.PageSource,
     MishkaDocument.Plugins.PageFrame
   ]
 
