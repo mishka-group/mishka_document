@@ -135,12 +135,15 @@ defmodule MishkaDocument.ContributorsBenchmarkTest do
         [section_ids, site_ids]
       )
 
+    # The middle of the five rounds.
+    median = micros |> Enum.sort() |> Enum.fetch!(2)
+
     IO.puts("""
 
     contributors_count over #{@pages} pages, #{total} events in the log
       statements on the event log per load: #{log_reads}
       load times (ms, 5 rounds): #{Enum.map_join(micros, ", ", &Float.round(&1 / 1000, 1))}
-      median: #{micros |> Enum.sort() |> Enum.at(2) |> Kernel./(1000) |> Float.round(1)} ms
+      median: #{Float.round(median / 1000, 1)} ms
       plan of the statement:
     #{Enum.map_join(plan, "\n", fn [line] -> "        " <> line end)}
     """)
