@@ -40,11 +40,13 @@ Mishka Document is an extension of [Mishka CMS](https://mishka.tools/cms), an op
 
 ## 🚀 Getting started
 
-Mishka Document is installed with [Mishka CMS](https://github.com/mishka-group/mishka_cms#-getting-started). The package is not on Hex. Mishka CMS loads it from `__extensions/mishka_document` when that folder exists, and otherwise from GitHub at the revision pinned in `mix.lock`:
+Mishka Document is installed with [Mishka CMS](https://github.com/mishka-group/mishka_cms#-getting-started). Add it from Hex:
 
 ```elixir
-{:mishka_document, github: "mishka-group/mishka_document", branch: "master", override: true}
+{:mishka_document, "~> 0.0.1"}
 ```
+
+Mishka CMS loads it from `__extensions/mishka_document` instead when that folder exists.
 
 Mishka CMS registers it in three places: `MishkaDocument` in `ash_domains` and `MishkaDocumentWeb` in the core's `extensions` list, both in `config/config.exs`, and `MishkaDocument` in the domains of the JSON:API router.
 
