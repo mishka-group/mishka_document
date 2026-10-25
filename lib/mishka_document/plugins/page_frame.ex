@@ -62,7 +62,7 @@ defmodule MishkaDocument.Plugins.PageFrame do
   registers them (`words/0`) when it sets a site up, and `MishkaDocument.Plugins.UsedTranslationKeys`
   names them to "Remove unused".
 
-  Registered in `MishkaDocument.Application`.
+  Registered in MishkaDocument.Application.
   """
 
   use MishkaInstaller.Event.Hook, event: "runtime:page:frame", initial: %{priority: 50}

@@ -26,7 +26,7 @@ defmodule MishkaDocumentWeb.SidebarMenu do
       on_mount {MishkaCmsCore.LiveUserAuth,
                 {:require_permission, MishkaDocumentWeb.SidebarMenu.permissions("document.issues")}}
 
-  Registered in `MishkaDocument.Application`.
+  Registered in MishkaDocument.Application.
   """
 
   use MishkaInstaller.Event.Hook, event: "sidebar:menus", initial: %{priority: 50}

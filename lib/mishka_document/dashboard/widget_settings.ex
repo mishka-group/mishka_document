@@ -9,14 +9,14 @@ defmodule MishkaDocument.Dashboard.WidgetSettings do
   **Documents** tab (`category: "document"`, group **Dashboard widgets**) alongside the rest of the
   extension's settings, instead of hiding inside the dashboard's per-user layout.
 
-  It walks `MishkaDocument.Application.dashboard_widgets/0` and asks each descriptor for its
+  It walks MishkaDocument.Application.dashboard_widgets/0 and asks each descriptor for its
   definitions (`MishkaCmsCore.Dashboard.Widget.settings_definitions/1`), which derives the key from
   `Widget.setting_key/2` — the same function the dashboard reads through. A widget that adds a
   setting is registered by declaring it; there is no second list to keep in step.
 
   Every definition is `scope: :user`: the value belongs to the admin reading the board, and both
   editors — the card's gear and this tab — write the same `Settings.put_user/3` row. Registered in
-  `MishkaDocument.Application`.
+  MishkaDocument.Application.
 
   See `MishkaBlog.Dashboard.WidgetSettings` for the identical blog-side plugin, and
   `MishkaCmsCore.Settings.define/3`.

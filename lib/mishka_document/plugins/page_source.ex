@@ -15,7 +15,7 @@ defmodule MishkaDocument.Plugins.PageSource do
   page is handed back untouched, before anything is read. What is read, and as whom, is
   `MishkaDocument.PageSource`'s.
 
-  Registered in `MishkaDocument.Application`.
+  Registered in MishkaDocument.Application.
   """
 
   use MishkaInstaller.Event.Hook, event: "runtime:page:source", initial: %{priority: 50}
