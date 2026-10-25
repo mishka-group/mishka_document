@@ -22,8 +22,8 @@ defmodule MishkaDocument.LockedPageRecordsTest do
   alias MishkaCmsCore.Runtime.{Languages, Page, PageEditions}
   alias MishkaCmsCore.Runtime.States.SettingsState
   alias MishkaCmsCore.Settings
-  alias MishkaDocument.{Section, Workspace, WorkspaceVersion, WorkspaceVersionLineage}
   alias MishkaDocument.Plugins.SitemapUrls
+  alias MishkaDocument.{Section, Workspace, WorkspaceVersion, WorkspaceVersionLineage}
 
   @moduletag :unit
 

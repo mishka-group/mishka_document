@@ -20,6 +20,11 @@ env:
   # release or fixed libraries are out.
   OTP_VERSION: "29.0.5"
   ELIXIR_VERSION: "1.20.4-otp-29"
+  # setup-beam installs Hex from builds.hex.pm, and one slow response there failed a whole run
+  # ("Could not mix hex from any hex.pm mirror"). It tries these in order.
+  HEXPM_MIRRORS: |
+    https://builds.hex.pm
+    https://cdn.jsdelivr.net/hex
 
 jobs:
   # Compiled once; the jobs below start from this build.
@@ -30,45 +35,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: mishka_document
-
     steps:
-      # mix.exs reaches its sibling packages by path (../mishka_cms_core, ../mishka_gervaz),
-      # so each one is checked out next to this repository, as on a developer's machine.
+      # Only this repository. mishka_cms_core and mishka_gervaz come from Hex, and mix.exs would use
+      # a ../<name> checkout over Hex if it found one, so no sibling is ever checked out here.
       - uses: actions/checkout@v7
-        with:
-          path: mishka_document
-
-      - uses: actions/checkout@v7
-        with:
-          repository: mishka-group/mishka_gervaz
-          ref: ${{ vars.GERVAZ_REF || 'master' }}
-          path: mishka_gervaz
-
-      # mishka_cms_core is private for now: the MISHKA_REPOS_TOKEN secret (a token that can read it)
-      # lets this job check it out. Once it is public, the job's own token is enough.
-      - uses: actions/checkout@v7
-        with:
-          repository: mishka-group/mishka_cms_core
-          ref: ${{ vars.CORE_REF || 'master' }}
-          token: ${{ secrets.MISHKA_REPOS_TOKEN || github.token }}
-          path: mishka_cms_core
 
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
           version-type: strict
+          hexpm-mirrors: ${{ env.HEXPM_MIRRORS }}
 
       - uses: actions/cache@v6
         with:
           path: |
-            mishka_document/deps
-            mishka_document/_build
-          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-
+            deps
+            _build
+          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mix.lock') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mix.lock') }}-
 
       - run: mix deps.get
 
@@ -79,44 +64,24 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: mishka_document
-
     steps:
-      # mix.exs reaches its sibling packages by path (../mishka_cms_core, ../mishka_gervaz),
-      # so each one is checked out next to this repository, as on a developer's machine.
+      # Only this repository. mishka_cms_core and mishka_gervaz come from Hex, and mix.exs would use
+      # a ../<name> checkout over Hex if it found one, so no sibling is ever checked out here.
       - uses: actions/checkout@v7
-        with:
-          path: mishka_document
-
-      - uses: actions/checkout@v7
-        with:
-          repository: mishka-group/mishka_gervaz
-          ref: ${{ vars.GERVAZ_REF || 'master' }}
-          path: mishka_gervaz
-
-      # mishka_cms_core is private for now: the MISHKA_REPOS_TOKEN secret (a token that can read it)
-      # lets this job check it out. Once it is public, the job's own token is enough.
-      - uses: actions/checkout@v7
-        with:
-          repository: mishka-group/mishka_cms_core
-          ref: ${{ vars.CORE_REF || 'master' }}
-          token: ${{ secrets.MISHKA_REPOS_TOKEN || github.token }}
-          path: mishka_cms_core
 
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
           version-type: strict
+          hexpm-mirrors: ${{ env.HEXPM_MIRRORS }}
 
       - uses: actions/cache/restore@v6
         with:
           path: |
-            mishka_document/deps
-            mishka_document/_build
-          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-${{ github.sha }}
+            deps
+            _build
+          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mix.lock') }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       # The formatter takes the DSL's paren-free calls (`table "pages"`, `reference :site, ...`)
@@ -150,44 +115,25 @@ jobs:
       POSTGRES_HOST: localhost
       MIX_TEST_PARTITION: ${{ matrix.partition }}
 
-    defaults:
-      run:
-        working-directory: mishka_document
 
     steps:
-      # mix.exs reaches its sibling packages by path (../mishka_cms_core, ../mishka_gervaz),
-      # so each one is checked out next to this repository, as on a developer's machine.
+      # Only this repository. mishka_cms_core and mishka_gervaz come from Hex, and mix.exs would use
+      # a ../<name> checkout over Hex if it found one, so no sibling is ever checked out here.
       - uses: actions/checkout@v7
-        with:
-          path: mishka_document
-
-      - uses: actions/checkout@v7
-        with:
-          repository: mishka-group/mishka_gervaz
-          ref: ${{ vars.GERVAZ_REF || 'master' }}
-          path: mishka_gervaz
-
-      # mishka_cms_core is private for now: the MISHKA_REPOS_TOKEN secret (a token that can read it)
-      # lets this job check it out. Once it is public, the job's own token is enough.
-      - uses: actions/checkout@v7
-        with:
-          repository: mishka-group/mishka_cms_core
-          ref: ${{ vars.CORE_REF || 'master' }}
-          token: ${{ secrets.MISHKA_REPOS_TOKEN || github.token }}
-          path: mishka_cms_core
 
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
           version-type: strict
+          hexpm-mirrors: ${{ env.HEXPM_MIRRORS }}
 
       - uses: actions/cache/restore@v6
         with:
           path: |
-            mishka_document/deps
-            mishka_document/_build
-          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mishka_document/mix.lock') }}-${{ github.sha }}
+            deps
+            _build
+          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-mix-${{ hashFiles('mix.lock') }}-${{ github.sha }}
           fail-on-cache-miss: true
 
       # The migrations are generated, not in git: generate them before the test alias's `ash.setup`

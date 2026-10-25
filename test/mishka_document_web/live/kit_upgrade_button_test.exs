@@ -75,6 +75,16 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
     {:ok, conn: conn, site: site}
   end
 
+  # THE SITE AS THE INSTALLER LEAVES IT: what the documentation ships, and the record core writes
+  # once the run is over. That record is the whole answer to whether a site has the documentation
+  # (`Extensions.installed?/2`) — a site holding every component and page and no record opens on the
+  # installer, and the modal this suite is about is not on that screen.
+  defp set_up!(site) do
+    report = Provision.ensure!(site)
+
+    :ok = Extensions.mark_installed!(site.id, :mishka_document, report.version)
+  end
+
   defp components(site) do
     Component
     |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
@@ -127,7 +137,7 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
 
   describe "a master who may edit the site's runtime" do
     setup %{conn: conn, site: site} do
-      Provision.ensure!(site)
+      set_up!(site)
 
       {:ok, conn: log_in(conn, admin_with!("dockit@example.com", "*"))}
     end
@@ -290,7 +300,7 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
 
   describe "a writer who may not" do
     setup %{site: site} do
-      Provision.ensure!(site)
+      set_up!(site)
       age!(site)
 
       :ok
@@ -322,7 +332,7 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
   # Settings, and a set-up site's dashboard says nothing about either until it is asked.
   describe "the header icon" do
     setup %{conn: conn, site: site} do
-      Provision.ensure!(site)
+      set_up!(site)
 
       {:ok, conn: log_in(conn, admin_with!("docicon@example.com", "*"))}
     end
@@ -480,7 +490,7 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
   # questions, which is exactly why the resource has to be asked.
   describe "the actor behind the update" do
     setup %{conn: conn, site: site} do
-      Provision.ensure!(site)
+      set_up!(site)
       age!(site)
 
       {:ok, conn: conn, admin: admin_with!("docactor@example.com", "*")}
@@ -489,7 +499,7 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
     test "is on every version the update writes", %{conn: conn, site: site, admin: admin} do
       {:ok, view, _html} = live(log_in(conn, admin), "/admin/dashboard/document")
 
-      # WHAT THIS CLICK WROTE, and not what the fixture did. `Provision.ensure!/1` and `age!/1` both
+      # WHAT THIS CLICK WROTE, and not what the fixture did. `set_up!/1` and `age!/1` both
       # ran with no actor — they are the system, as the seeds are — so their versions carry nobody
       # by design, and a test that swept them in would be asserting the opposite of the point.
       before = MapSet.new(component_versions(site), & &1.id)
