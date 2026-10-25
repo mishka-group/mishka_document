@@ -73,7 +73,7 @@ defmodule MishkaDocument.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:decimal, "~> 3.2", override: true},
+      {:decimal, "~> 3.2"},
       {:sourceror, "~> 1.13", only: [:dev, :test]},
       {:lazy_html, "~> 0.1", only: :test},
       {:open_api_spex, "~> 3.22"},
