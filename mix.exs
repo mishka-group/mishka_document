@@ -97,7 +97,7 @@ defmodule MishkaDocument.MixProject do
       {:makeup_css, "~> 0.2"},
       {:ash_events, "~> 0.8"},
       {:guarded_struct, "~> 0.1.4"},
-      {:mishka_installer, "~> 0.1.14"},
+      mishka_dep(:mishka_installer, "~> 0.1.14"),
       {:igniter, "~> 0.8", only: [:dev, :test]},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.16", only: [:dev, :test], runtime: false},
@@ -106,9 +106,23 @@ defmodule MishkaDocument.MixProject do
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:mishka_cms_core, path: "../mishka_cms_core"},
-      {:mishka_gervaz, "~> 0.0.1"}
+      mishka_dep(:mishka_cms_core, "~> 0.0.1"),
+      mishka_dep(:mishka_gervaz, "~> 0.0.1")
     ]
+  end
+
+  # A Mishka package is its sibling checkout `../<name>` when there is one, and its Hex release
+  # otherwise. Only a git checkout counts, so the copy Mix fetched into a host's `deps/` never does,
+  # and a `hex.*` task (`mix hex.build`, `mix hex.publish`) always takes Hex, as a package must.
+  defp mishka_dep(name, requirement) do
+    sibling? =
+      File.dir?(Path.expand("../#{name}/.git", __DIR__)) and
+        not Enum.any?(System.argv(), &String.starts_with?(&1, "hex."))
+
+    case sibling? do
+      true -> {name, path: "../#{name}"}
+      false -> {name, requirement}
+    end
   end
 
   defp aliases() do
