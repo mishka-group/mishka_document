@@ -37,3 +37,6 @@ MnesiaCore.*
 # Template files the CMS compiler writes while tests set up a site (priv/static/temp/runtime/<site>/…),
 # for Tailwind to scan. They are output, never a source; mishka_cms_core ignores the same folder.
 /priv/static/temp/
+
+# macOS Finder metadata
+.DS_Store
