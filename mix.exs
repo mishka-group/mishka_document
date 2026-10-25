@@ -107,7 +107,7 @@ defmodule MishkaDocument.MixProject do
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mishka_cms_core, path: "../mishka_cms_core"},
-      {:mishka_gervaz, path: "../mishka_gervaz"}
+      {:mishka_gervaz, "~> 0.0.1"}
     ]
   end
 
