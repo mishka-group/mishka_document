@@ -8,7 +8,7 @@ defmodule MishkaDocument.Plugins.SectionShareCard do
   master's twin alike), its share card is looked at in the background and drawn when what it shows
   changed (`MishkaCmsCore.Runtime.ShareCard.refresh/3`), so it is ready before the first reader.
   Only while it is approved and its document active (`MishkaDocument.ShareCards.target/1`). Registered in
-  `MishkaDocument.Application`.
+  MishkaDocument.Application.
   """
 
   alias MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook

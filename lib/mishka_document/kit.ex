@@ -453,8 +453,8 @@ defmodule MishkaDocument.Kit do
   straight away rather than replaced by a skeleton while they are read again. Every later read runs
   in a task, and while it does the block draws a skeleton; when a read fails it draws a line and a
   button to ask again. `cold?/1` still answers for the builder's canvas and the Preview, where
-  `MishkaCmsCore.Runtime.LiveViewHelpers.cold/2` renders a component with no process at all, and
-  reads inline there too.
+  `MishkaCmsCore.Runtime.LiveViewHelpers.static_component/1` renders a component with no process
+  at all, and reads inline there too.
 
   Each task is started through `MishkaGervaz.Messages.start_async/4`, which hands it the site and
   the locale the page renders in (`MishkaCmsCore.Runtime.LiveViewHelpers.carry_into_tasks/0`), so a

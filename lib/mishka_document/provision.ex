@@ -165,7 +165,7 @@ defmodule MishkaDocument.Provision do
   @document "#{@docs}/:workspace"
   @document_page "#{@document}/*section"
 
-  @typedoc "See `MishkaCmsCore.Runtime.ExtensionProvision.report/0`."
+  @typedoc "See `t:MishkaCmsCore.Runtime.ExtensionProvision.report/0`."
   @type report :: ExtensionProvision.report()
 
   # THE DOCUMENTATION'S OWN AREAS, created when it is installed — with its components and its

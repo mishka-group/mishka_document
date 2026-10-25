@@ -12,7 +12,7 @@ defmodule MishkaDocument.Plugins.ShareCardTargets do
 
   Answering is what puts the Redraw button in the documentation's "on this site" modal
   (`MishkaCmsCoreWeb.Live.Admin.Components.ExtensionInstallerPanel.doctor_modal/1`) and its row on
-  the SEO settings. Registered in `MishkaDocument.Application`.
+  the SEO settings. Registered in MishkaDocument.Application.
   """
   alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaDocument.ShareCards

@@ -135,7 +135,7 @@ defmodule MishkaDocument.Plugins.PageSeo do
   answers 404 as it does without this, and has no share card to draw. A note is drawn inside its
   page and has no address of its own, so its own SEO is not read here.
 
-  A module because a mishka_installer hook is one. Registered in `MishkaDocument.Application`.
+  A module because a mishka_installer hook is one. Registered in MishkaDocument.Application.
   """
 
   use Gettext, backend: MishkaCmsCore.Gettext

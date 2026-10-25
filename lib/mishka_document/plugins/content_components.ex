@@ -20,7 +20,7 @@ defmodule MishkaDocument.Plugins.ContentComponents do
 
   And the block only the bar under the header draws, `doc-switcher`
   (`MishkaDocument.Plugins.PageFrame`): no page or layout names it, so nothing else would bring its
-  classes into the stylesheet. Registered in `MishkaDocument.Application`.
+  classes into the stylesheet. Registered in MishkaDocument.Application.
   """
 
   use MishkaInstaller.Event.Hook,

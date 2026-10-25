@@ -18,7 +18,7 @@ defmodule MishkaDocument.Plugins.LiveVisit do
   page to hand down. The client sends `"_live_referer"` when the join comes from a live navigation,
   and never on the first connection after a full load.
 
-  A module because a mishka_installer hook is one. Registered in `MishkaDocument.Application`.
+  A module because a mishka_installer hook is one. Registered in MishkaDocument.Application.
   """
 
   use MishkaInstaller.Event.Hook,

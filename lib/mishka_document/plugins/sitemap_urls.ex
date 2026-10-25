@@ -64,7 +64,7 @@ defmodule MishkaDocument.Plugins.SitemapUrls do
   once: a document's slug is unique on its site, its own address in its language, and a page's slug
   among the pages under its parent.
 
-  Registered in `MishkaDocument.Application`.
+  Registered in MishkaDocument.Application.
   """
 
   use MishkaInstaller.Event.Hook, event: "seo:sitemap:urls", initial: %{priority: 60}

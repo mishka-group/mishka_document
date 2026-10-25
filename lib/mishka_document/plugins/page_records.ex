@@ -10,7 +10,7 @@ defmodule MishkaDocument.Plugins.PageRecords do
   to preview a page with. Each is labelled as the Documents admin names it, where its Permissions
   and SEO Tags are set. `MishkaDocument.Plugins.PageSeo` answers for the same kinds.
 
-  A module because a mishka_installer hook is one. Registered in `MishkaDocument.Application`.
+  A module because a mishka_installer hook is one. Registered in MishkaDocument.Application.
   """
 
   use Gettext, backend: MishkaCmsCore.Gettext

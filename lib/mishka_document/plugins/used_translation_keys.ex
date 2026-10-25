@@ -12,7 +12,7 @@ defmodule MishkaDocument.Plugins.UsedTranslationKeys do
   this, "Remove unused" on the site's translations would delete them, and what a translator wrote
   for them, as words nobody asks for.
 
-  Registered in `MishkaDocument.Application`.
+  Registered in MishkaDocument.Application.
   """
 
   use MishkaInstaller.Event.Hook,
