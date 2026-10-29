@@ -132,12 +132,13 @@ defmodule MishkaDocument.MixProject do
       test: ["ash.setup --quiet", "test"],
       setup: "ash.setup",
       ci: [
+        # First: after `compile` Mix has pruned its code path and the Hex archive's task is gone.
+        "hex.audit",
         "compile --warnings-as-errors",
         "format --check-formatted",
         "credo --strict",
         "sobelow --config",
         "deps.audit",
-        "hex.audit",
         "dialyzer",
         "ex_dna --max-clones 57",
         "test"
