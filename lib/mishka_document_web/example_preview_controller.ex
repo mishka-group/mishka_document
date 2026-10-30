@@ -120,8 +120,9 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
   # read with `URI.parse/1`, and only a host name or an address and a port number are written out.
   defp socket_sources(conn) do
     with [header | _rest] <- get_req_header(conn, "host"),
-         %URI{host: host, port: port} when is_binary(host) <- URI.parse("//" <> header),
-         true <- host_name?(host) and port_number?(port) do
+         %URI{host: host, port: port, authority: authority} when is_binary(host) <-
+           URI.parse("//" <> header),
+         true <- host_name?(host) and port_number?(port, authority) do
       for scheme <- ~w(ws wss), do: URI.to_string(%URI{scheme: scheme, host: host, port: port})
     else
       _unusable -> []
@@ -140,6 +141,9 @@ defmodule MishkaDocumentWeb.ExamplePreviewController do
       |> Enum.all?(&(&1 in ?a..?z or &1 in ?A..?Z or &1 in ?0..?9 or &1 == ?-))
   end
 
-  defp port_number?(nil), do: true
-  defp port_number?(port), do: port in 1..65_535
+  # `URI.parse/1` leaves the port nil for a number above 65535 (Elixir 1.20.5 and later), as it does
+  # for a header that names none, so a nil port counts as none only when the authority does not end
+  # in a colon and digits.
+  defp port_number?(nil, authority), do: not Regex.match?(~r/:\d+\z/, authority)
+  defp port_number?(port, _authority), do: port in 1..65_535
 end

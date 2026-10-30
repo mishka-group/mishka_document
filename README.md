@@ -43,7 +43,7 @@ Mishka Document is an extension of [Mishka CMS](https://mishka.tools/cms), an op
 Mishka Document is installed with [Mishka CMS](https://github.com/mishka-group/mishka_cms#-getting-started). Add it from Hex:
 
 ```elixir
-{:mishka_document, "~> 0.0.1"}
+{:mishka_document, "~> 0.0.2"}
 ```
 
 Mishka CMS loads it from `__extensions/mishka_document` instead when that folder exists.

@@ -5,7 +5,7 @@
 defmodule MishkaDocument.MixProject do
   use Mix.Project
 
-  @version "0.0.1"
+  @version "0.0.2"
   @source_url "https://github.com/mishka-group/mishka_document"
 
   def project do
@@ -97,7 +97,7 @@ defmodule MishkaDocument.MixProject do
       {:makeup_css, "~> 0.2"},
       {:ash_events, "~> 0.8"},
       {:guarded_struct, "~> 0.1.4"},
-      mishka_dep(:mishka_installer, "~> 0.1.14"),
+      mishka_dep(:mishka_installer, "~> 0.1.15"),
       {:igniter, "~> 0.8", only: [:dev, :test]},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.16", only: [:dev, :test], runtime: false},
@@ -106,8 +106,8 @@ defmodule MishkaDocument.MixProject do
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      mishka_dep(:mishka_cms_core, "~> 0.0.3"),
-      mishka_dep(:mishka_gervaz, "~> 0.0.2"),
+      mishka_dep(:mishka_cms_core, "~> 0.0.4"),
+      mishka_dep(:mishka_gervaz, "~> 0.0.3"),
       # `mix hex.publish` builds the docs with it.
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
