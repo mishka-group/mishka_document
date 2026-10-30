@@ -11,7 +11,7 @@ defmodule MishkaDocument.Test.IconLibrary do
       setup {MishkaDocument.Test.IconLibrary, :registered}
   """
 
-  @behaviour MishkaCmsCore.Runtime.PageBuilder.IconLibrary
+  @behaviour MishkaCmsCore.Runtime.Authoring.IconLibrary
 
   @glyphs ~w(hero-bell hero-circle-stack hero-cloud hero-envelope hero-inbox hero-moon hero-star)
 

@@ -510,7 +510,7 @@ defmodule MishkaDocument.KitTest do
 
     # EDITOR HINTS ARE PART OF THE COMPONENT, not documentation kept somewhere else. The inspector
     # reads `opts.doc` for the line under a control and `opts.values` for a dropdown in place of a
-    # text box — see `MishkaCmsCore.Runtime.PageBuilder.Inspector` — so an attribute shipping
+    # text box — see `MishkaCmsCore.Runtime.Authoring.Inspector` — so an attribute shipping
     # neither is a blank field an author has to guess the accepted words for.
     test "and every author-facing attribute explains itself to the inspector" do
       for component <- components(),
