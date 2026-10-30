@@ -53,6 +53,10 @@ jobs:
 
       - run: MIX_ENV=test mix compile --warnings-as-errors
 
+      # Tailwind's binary goes into the cached _build here, so no test downloads it from GitHub
+      # inside its own timeout. `--if-missing` keeps the copy a cache restored.
+      - run: MIX_ENV=test mix tailwind.install --if-missing
+
   # Beside the tests rather than in front of them.
   format:
     needs: build
