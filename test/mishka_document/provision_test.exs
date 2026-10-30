@@ -33,7 +33,9 @@ defmodule MishkaDocument.ProvisionTest do
   alias MishkaCmsCore.Install.{Bootstrap, Extensions}
   alias MishkaCmsCore.Runtime.Component
   alias MishkaCmsCore.Runtime.ExtensionProvision
+  alias MishkaCmsCore.Runtime.Helpers
   alias MishkaCmsCore.Runtime.Languages
+  alias MishkaCmsCore.Runtime.Media
   alias MishkaCmsCore.Runtime.Page
   alias MishkaCmsCore.Runtime.PageProvision
   alias MishkaCmsCore.Runtime.States.SiteState
@@ -1114,7 +1116,14 @@ defmodule MishkaDocument.ProvisionTest do
                  extensions: ["mishka_document"]
                })
 
-      on_exit(fn -> SiteState.delete(first.id) end)
+      # THE RUN COMPILES THE SITE ONTO DISK, as it does for a real one: its templates under
+      # `priv/static/temp/runtime/<name>` and the media the starter content saves under
+      # `uploads/<id>`. Neither goes away with the database's rollback, so each is removed here.
+      on_exit(fn ->
+        SiteState.delete(first.id)
+        File.rm_rf(Helpers.static_temp_dir(["runtime", first.name]))
+        File.rm_rf(Path.join([Media.static_dir(), "uploads", first.id]))
+      end)
 
       assert Install.installed?()
       assert Extensions.installed?(first.id, :mishka_document)
