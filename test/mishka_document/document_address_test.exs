@@ -10,8 +10,6 @@ defmodule MishkaDocument.DocumentAddressTest do
   """
   use MishkaDocument.DataCase, async: false
 
-  import MishkaDocument.Test.Factory
-
   require Ash.Query
 
   alias MishkaCmsCore.Runtime.Page

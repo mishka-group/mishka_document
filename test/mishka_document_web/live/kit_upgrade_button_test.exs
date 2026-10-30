@@ -20,7 +20,6 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
   use MishkaDocument.ConnCase
 
   import Phoenix.LiveViewTest
-  import MishkaDocument.Test.Factory
 
   alias MishkaCmsCore.Accounts.{Permission, User, UserPermission}
   alias MishkaCmsCore.Install.Extensions
@@ -30,9 +29,9 @@ defmodule MishkaDocumentWeb.Test.KitUpgradeButtonTest do
   alias MishkaCmsCore.Runtime.PageDraft
   alias MishkaCmsCore.Runtime.ShareCard
   alias MishkaCmsCore.Runtime.States.SiteState
+  alias MishkaCmsCore.Test.VersionHelpers
   alias MishkaDocument.Plugins.ShareCardTargets
   alias MishkaDocument.Provision
-  alias MishkaDocument.Test.VersionHelpers
   alias MishkaInstaller.Event.{Event, EventHandler}
 
   require Ash.Query
