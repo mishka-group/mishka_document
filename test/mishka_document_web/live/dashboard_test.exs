@@ -405,7 +405,7 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
            |> Enum.count() == 4
 
     create_workspace!(site_id: site.id)
-    render_async(view, 5_000)
+    settle(view)
 
     assert figure(view, "documents") == {"2", "+2 this week"}
   end
