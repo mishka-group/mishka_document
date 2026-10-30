@@ -1,6 +1,6 @@
 # Changelog for MishkaDocument 0.0.2
 
-- The visual editor now comes from the `mishka_cms_builder` package instead of `mishka_cms_core`. The extension runs on `mishka_cms_core` 0.0.3 from Hex
+- The visual editor now comes from the `mishka_cms_builder` package instead of `mishka_cms_core`. The extension runs on `mishka_cms_core` 0.0.4, `mishka_gervaz` 0.0.3 and `mishka_installer` 0.1.15 from Hex
 - A `doc-notice` dropped on a page from the palette says "Nothing here yet." instead of drawing an empty box
 - A `doc-section` placed on a page whose address names no document draws nothing for a reader. The line that tells the author what the block needs shows only in the editor and the preview
 - The example preview no longer allows a WebSocket source when the Host header carries a port above 65535
