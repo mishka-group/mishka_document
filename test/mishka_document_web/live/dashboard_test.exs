@@ -18,6 +18,7 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
   import MishkaDocument.Test.Factory
 
   alias MishkaCmsCore.Accounts.{Permission, User, UserPermission}
+  alias MishkaCmsCore.Localized
   alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaDocument.{Issue, Section}
 
@@ -348,6 +349,7 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
   test "the dashboard's figures are read from the documents, as the admin looking at them", %{
     conn: conn
   } do
+    started = DateTime.utc_now()
     site = master_site()
 
     [first, second] =
@@ -394,7 +396,8 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     assert figure(view, "contributors") == {"2", "2 active in the last day"}
     assert figure(view, "completion") == {"50%", "1 of 2 pages approved"}
     assert {_ago, date} = figure(view, "last-updated")
-    assert date == MishkaCmsCore.Localized.date(DateTime.utc_now(), :yMMMd)
+    # Written since `started`: that day, or the next one when the test ran across midnight.
+    assert date in Enum.map([started, DateTime.utc_now()], &Localized.date(&1, :yMMMd))
     refute has_element?(view, "#document-stats", "Page Views")
 
     assert view
