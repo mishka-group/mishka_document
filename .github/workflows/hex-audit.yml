@@ -25,11 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The same OTP and Elixir as ci.yml.
+      # The same OTP and Elixir as ci.yml: the ones in .tool-versions.
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "29.0.5"
-          elixir-version: "1.20.4-otp-29"
+          version-file: .tool-versions
           version-type: strict
           hexpm-mirrors: |
             https://builds.hex.pm
