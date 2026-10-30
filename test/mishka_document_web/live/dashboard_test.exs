@@ -379,7 +379,13 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     {:ok, view, html} =
       live(log_in(conn, create_admin("docstats@example.com")), "/admin/dashboard/document")
 
-    assert has_element?(view, "#document-stats [data-role=kpi-loading]")
+    # The first paint, not the view: the figures are read in the background and take the
+    # placeholders' place as soon as they arrive.
+    assert html
+           |> LazyHTML.from_fragment()
+           |> LazyHTML.query("#document-stats [data-role=kpi-loading]")
+           |> Enum.any?()
+
     refute html =~ "15.3K"
 
     render_async(view, 5_000)

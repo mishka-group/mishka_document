@@ -3363,7 +3363,7 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
         active: true
       )
 
-      {view, first_paint} =
+      {_view, first_paint} =
         mount_raw(
           site,
           list_block(%{live_visit: true, skeleton: "my-doc-skeleton", card: "my-doc-skeleton"})
@@ -3371,7 +3371,14 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
 
       assert roles(first_paint, "doc-list-skeleton") == 2
       assert roles(first_paint, "mine-pending") == 2, "the skeletons were not the author's"
-      assert has_element?(view, ~s([data-role="doc-list-skeleton"] [data-role="mine-pending"]))
+
+      # The first paint, not the view: the cards are read in the background and replace the
+      # skeletons as soon as they arrive.
+      assert first_paint
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query(~s([data-role="doc-list-skeleton"] [data-role="mine-pending"]))
+             |> Enum.count() == 2
+
       assert roles(first_paint, "doc-list-loading") == 1
     end
 
