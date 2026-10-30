@@ -510,7 +510,7 @@ defmodule MishkaDocument.KitTest do
 
     # EDITOR HINTS ARE PART OF THE COMPONENT, not documentation kept somewhere else. The inspector
     # reads `opts.doc` for the line under a control and `opts.values` for a dropdown in place of a
-    # text box — see `MishkaCmsCore.Runtime.PageBuilder.Inspector` — so an attribute shipping
+    # text box — see `MishkaCmsCore.Runtime.Authoring.Inspector` — so an attribute shipping
     # neither is a blank field an author has to guess the accepted words for.
     test "and every author-facing attribute explains itself to the inspector" do
       for component <- components(),
@@ -537,6 +537,21 @@ defmodule MishkaDocument.KitTest do
         assert attr["opts"]["default"] in values,
                "#{component["name"]}'s #{attr["name"]} defaults to a word it does not offer"
       end
+    end
+
+    # DROPPED ON ITS OWN, THE NOTICE SAYS SOMETHING. Its text defaults to nothing, which is right for
+    # a block that always hands it a line, and left an author who dragged it onto a page an empty
+    # dashed box. The kit's furnishing is what the editor writes on a plain drop; the core's own
+    # reader of it is asked, so a shape it would drop fails here.
+    test "and the notice arrives on a plain drop with neutral words, not an empty box" do
+      notice = Enum.find(components(), &(&1["name"] == "doc-notice"))
+
+      assert {:ok, furnishing} =
+               MishkaCmsCore.Builder.Furnishing.build(notice["extra"]["furnishing"])
+
+      assert %{"text" => text} = furnishing.attrs
+      assert String.trim(text) != ""
+      refute String.contains?(text, "\u2014"), "the notice's words carry an em dash"
     end
 
     # NOBODY MAY ASK FOR MORE ROWS THAN THEY WILL BE GIVEN. Every public read these components run
@@ -1193,6 +1208,13 @@ defmodule MishkaDocument.KitTest do
         if name not in @functions,
           do: assert([_ | _] = found.helpers, "#{name} arrived with no code")
       end
+    end
+
+    # What the editor's palette reads off the row, through the same calculation.
+    test "the notice's drop text reaches the installed row", %{site: site} do
+      notice = "doc-notice" |> row(site) |> Ash.load!(:furnishing, authorize?: false)
+
+      assert notice.furnishing["attrs"]["text"] == "Nothing here yet."
     end
 
     test "twice changes nothing and raises nothing", %{site: site} do

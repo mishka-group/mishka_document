@@ -3929,11 +3929,21 @@ defmodule MishkaDocument.LiveComponentsRenderTest do
   end
 
   describe "doc-section" do
-    test "says nothing is chosen when the URL names no document", %{site: site} do
+    # THE LINE THAT SAYS WHAT IS MISSING IS FOR WHOEVER BUILDS THE PAGE. On a published page that
+    # names no document it told a reader to "choose a document", which a reader cannot do; the
+    # builder's canvas and the Preview still say it, where the author can.
+    test "draws nothing for a reader when the URL names no document", %{site: site} do
       {:ok, view, _html} = mount_page(site, "doc-section")
 
-      assert text_of(view, ~s([data-role="doc-section-idle"])) == ["Choose a document."]
+      assert text_of(view, ~s([data-role="doc-section-idle"])) == []
       assert text_of(view, ~s([data-role="doc-section-article"])) == []
+    end
+
+    test "and says nothing is chosen on the builder's canvas", %{site: site} do
+      html = cold(site, "doc-section")
+
+      assert roles(html, "doc-section-idle") == 1
+      assert html =~ "Choose a document."
     end
 
     test "draws the document's front page when no page is named", %{site: site} do

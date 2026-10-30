@@ -10,8 +10,14 @@ defmodule MishkaDocument.ProvisionTest do
   `MishkaDocument.Provision.ensure!/2` is reached from two screens that can both run at any moment: the install
   wizard, for the extensions an operator ticked, and a button an admin can press as often as they
   like — both through `installer:extension:install`. So
-  every case here is written around the second run: the components, pages and snippet a site already
-  has must come through it untouched, including the ones an admin edited, archived or replaced.
+  every case here is written around the second run: the components and pages a site already has must
+  come through it untouched, including the ones an admin edited, archived or replaced.
+
+  The latest-documents snippet is not written here. The core keeps no snippet of its own: the run
+  hands it to whichever visual editor the host installed, on `runtime:provision:snippets`, and the
+  editor saves it once per site. This suite has no editor, so a run reports no snippet; where a case
+  is about what the documentation hands an editor, `MishkaDocument.Test.Plugins.ProvisionSnippetSaved`
+  stands in for one.
 
   The templates are not rendered here. `Page :master_create` compiles every one of them through
   `Validations.PageCodeCompiles` before it writes the row, so a sample page that does not compile
@@ -27,14 +33,17 @@ defmodule MishkaDocument.ProvisionTest do
   alias MishkaCmsCore.Install.{Bootstrap, Extensions}
   alias MishkaCmsCore.Runtime.Component
   alias MishkaCmsCore.Runtime.ExtensionProvision
+  alias MishkaCmsCore.Runtime.Helpers
   alias MishkaCmsCore.Runtime.Languages
+  alias MishkaCmsCore.Runtime.Media
   alias MishkaCmsCore.Runtime.Page
   alias MishkaCmsCore.Runtime.PageProvision
-  alias MishkaCmsCore.Runtime.Snippet
   alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaCmsCore.Runtime.Translation
+  alias MishkaCmsCore.Test.Installer, as: TestInstaller
   alias MishkaDocument.Plugins.{Installer, PageFrame}
   alias MishkaDocument.Provision
+  alias MishkaDocument.Test.Plugins.ProvisionSnippetSaved
   alias MishkaInstaller.Event.EventHandler
 
   require Ash.Query
@@ -67,12 +76,10 @@ defmodule MishkaDocument.ProvisionTest do
   defp component(site, name), do: Enum.find(components(site), &(&1.name == name))
   defp page(site, path), do: Enum.find(pages(site), &(&1.path == path))
 
-  defp snippets(site) do
-    Snippet
-    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
-    |> Ash.Query.filter(site_id == ^site.id)
-    |> Ash.read!(page: [limit: 100])
-    |> then(& &1.results)
+  # A VISUAL EDITOR ON THE SNIPPET'S EVENT, for the length of the test. The suite has none of its
+  # own: the snippet is the editor's to save, and the core answers `snippets: []` without one.
+  defp with_an_editor do
+    TestInstaller.register!(ProvisionSnippetSaved, "runtime:provision:snippets")
   end
 
   # THE CALLS A STORED TEMPLATE MAKES, as the templates are written: `<.component …/>` with one
@@ -110,10 +117,12 @@ defmodule MishkaDocument.ProvisionTest do
   defp written_as("{" <> rest), do: {:expression, String.trim_trailing(rest, "}")}
   defp written_as(other), do: {:neither, other}
 
-  # Every page this module writes, and the snippet, by the name to put in a failure message.
+  # Every page this module writes, and the snippet, by the name to put in a failure message. The
+  # snippet is the markup the run hands an editor for this site, the manifest's own function applied
+  # to the site's name, since no editor here saves it.
   defp templates(site) do
     Enum.map(pages(site), &{&1.path, &1.template}) ++
-      Enum.map(snippets(site), &{&1.name, &1.source})
+      [{Provision.snippet_name(), Provision.manifest().snippet.source.(site.name)}]
   end
 
   # A declaration is a map that has been through JSON and through Ash's own casting, so its keys are
@@ -589,16 +598,27 @@ defmodule MishkaDocument.ProvisionTest do
                Enum.sort(Provision.component_names())
     end
 
-    test "saves the latest-documents block as a snippet the page editor can offer", %{site: site} do
+    test "hands the latest-documents block to the page editor as a snippet", %{site: site} do
+      with_an_editor()
+
       report = Provision.ensure!(site)
 
       assert report.snippets == [Provision.snippet_name()]
 
-      assert [snippet] = snippets(site)
-      assert snippet.name == Provision.snippet_name()
-      assert snippet.section == :page
-      assert snippet.scope == :shared
-      assert snippet.source =~ "doc-workspace-list"
+      assert_received {:snippet_offered, offered}
+      assert offered.app == :mishka_document
+      assert offered.snippet.name == Provision.snippet_name()
+      assert offered.snippet.source =~ "doc-workspace-list"
+      assert offered.site_id == site.id
+      assert offered.site_name == site.name
+    end
+
+    test "reports no snippet without an editor, and gives the site the rest", %{site: site} do
+      report = Provision.ensure!(site)
+
+      assert report.snippets == []
+      assert length(report.pages) == length(Provision.page_paths())
+      assert length(components(site)) == length(Provision.component_names())
     end
 
     test "takes a site id as well as the record", %{site: site} do
@@ -629,7 +649,6 @@ defmodule MishkaDocument.ProvisionTest do
 
       assert length(components(site)) == length(Provision.component_names())
       assert length(pages(site)) == length(Provision.page_paths())
-      assert length(snippets(site)) == 1
     end
 
     # THE REASON THE WHOLE MODULE IS WRITTEN THE WAY IT IS. `UiKitHandler.install_kit!/2` upserts, so
@@ -821,6 +840,8 @@ defmodule MishkaDocument.ProvisionTest do
   # name was held. A held name is now answered with the next free one.
   describe "a name that is not free" do
     test "is answered with another name, at the address the docs are read at", %{site: site} do
+      with_an_editor()
+
       mine =
         create_page!(
           site_id: site.id,
@@ -909,40 +930,6 @@ defmodule MishkaDocument.ProvisionTest do
     :ok
   end
 
-  describe "the snippet" do
-    # `Snippet`'s `unique_name_per_scope` is `[:name, :site_id, :section, :document_id]` with
-    # `nils_distinct? false`, so a snippet an author saved out of ONE page's editor under this name
-    # holds a different key entirely — the shared one this block needs is still free. Counting it
-    # would leave the site with nothing to drop into a page and report `snippets: []` as though it
-    # had it.
-    test "is still created beside one an author saved under the same name on a page", %{
-      site: site
-    } do
-      page = create_page!(site_id: site.id, path: "/keeper", template: ~S(<div>mine</div>))
-
-      Snippet
-      |> Ash.Changeset.for_create(
-        :master_create,
-        %{
-          name: Provision.snippet_name(),
-          source: ~S(<div>mine</div>),
-          section: :page,
-          scope: :page,
-          document_id: page.id,
-          site_id: site.id
-        },
-        authorize?: false
-      )
-      |> Ash.create!()
-
-      assert Provision.ensure!(site).snippets == [Provision.snippet_name()]
-
-      assert [shared] = Enum.filter(snippets(site), &is_nil(&1.document_id))
-      assert shared.scope == :shared
-      assert shared.source =~ "doc-workspace-list"
-    end
-  end
-
   # A PLUGIN THE SUPERVISOR DOES NOT START NEVER REGISTERS, so the event it declares reaches it
   # nowhere and a created site is given nothing. Every case below registers it by hand, for the
   # reason `listening!/1` gives — which leaves this as the only assertion that the boot path names it
@@ -954,7 +941,10 @@ defmodule MishkaDocument.ProvisionTest do
   end
 
   describe "installing on request" do
-    setup do: listening!()
+    setup do
+      listening!()
+      with_an_editor()
+    end
 
     # THE EVENT IS THE ONLY DOOR. Core never names this module; it fires the event and whichever
     # plugin answers to the key does the work — which is what makes a second extension nothing more
@@ -964,7 +954,7 @@ defmodule MishkaDocument.ProvisionTest do
 
       assert length(components(site)) == length(Provision.component_names())
       assert Enum.sort(Enum.map(pages(site), & &1.path)) == Enum.sort(Provision.page_paths())
-      assert length(snippets(site)) == 1
+      assert report.snippets == [Provision.snippet_name()]
       assert report.pages != []
     end
 
@@ -975,7 +965,7 @@ defmodule MishkaDocument.ProvisionTest do
 
       assert components(site) == []
       assert pages(site) == []
-      assert snippets(site) == []
+      refute_received {:snippet_offered, _offered}
     end
 
     test "is offered by the installer's own registry, with the label it declared" do
@@ -1032,7 +1022,7 @@ defmodule MishkaDocument.ProvisionTest do
 
       assert components(site) == []
       assert pages(site) == []
-      assert snippets(site) == []
+      refute_received {:snippet_offered, _offered}
     end
   end
 
@@ -1045,6 +1035,7 @@ defmodule MishkaDocument.ProvisionTest do
       on_exit(fn -> :persistent_term.erase(:mishka_installed) end)
 
       listening!()
+      with_an_editor()
     end
 
     test "a request with nobody behind it installs while the CMS is not installed yet", %{
@@ -1074,7 +1065,7 @@ defmodule MishkaDocument.ProvisionTest do
       refute Extensions.installed?(site.id, :mishka_document)
       assert components(site) == []
       assert pages(site) == []
-      assert snippets(site) == []
+      refute_received {:snippet_offered, _offered}
       assert stored_permissions(names) == []
     end
 
@@ -1125,7 +1116,14 @@ defmodule MishkaDocument.ProvisionTest do
                  extensions: ["mishka_document"]
                })
 
-      on_exit(fn -> SiteState.delete(first.id) end)
+      # THE RUN COMPILES THE SITE ONTO DISK, as it does for a real one: its templates under
+      # `priv/static/temp/runtime/<name>` and the media the starter content saves under
+      # `uploads/<id>`. Neither goes away with the database's rollback, so each is removed here.
+      on_exit(fn ->
+        SiteState.delete(first.id)
+        File.rm_rf(Helpers.static_temp_dir(["runtime", first.name]))
+        File.rm_rf(Path.join([Media.static_dir(), "uploads", first.id]))
+      end)
 
       assert Install.installed?()
       assert Extensions.installed?(first.id, :mishka_document)

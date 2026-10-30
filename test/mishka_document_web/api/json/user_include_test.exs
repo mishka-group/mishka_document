@@ -14,8 +14,6 @@ defmodule MishkaDocumentWeb.Api.Json.UserIncludeTest do
   """
   use MishkaDocument.ConnCase
 
-  import MishkaDocument.Test.Factory
-
   require Ash.Query
 
   @user MishkaCmsCore.Accounts.User
