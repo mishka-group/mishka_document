@@ -130,6 +130,11 @@ defmodule MishkaDocumentWeb.Test.IssueCommentsLiveTest do
 
     view |> element("#delete-comment-#{tenant_comment.id}") |> render_click()
 
+    # The comment leaves the thread on the broadcast its delete sends the page, which hands it on to
+    # the thread with `send_update/3` after the click's own render, so the render after that one
+    # shows it gone.
+    render_async(view, 5_000)
+
     refute has_element?(view, "#comments-#{tenant_comment.id}")
 
     render_hook(view, "delete_comment", %{"comment-id" => master_comment.id})
@@ -183,6 +188,9 @@ defmodule MishkaDocumentWeb.Test.IssueCommentsLiveTest do
 
     view |> element("#edit-comment-#{tenant_comment.id}") |> render_click()
 
+    # The form loads the comment in `start_async/3` and draws the loading state until it has it.
+    render_async(view, 5_000)
+
     view
     |> form("##{MishkaGervaz.Resource.Info.Form.component_id(MishkaDocument.IssueComment)}-form",
       form: %{content: "Edited from the comment form"}
@@ -214,6 +222,9 @@ defmodule MishkaDocumentWeb.Test.IssueCommentsLiveTest do
       assert has_element?(view, "#delete-comment-#{comment.id}")
 
       view |> element("#delete-comment-#{comment.id}") |> render_click()
+
+      # Gone once the delete's broadcast has reached the thread, as in the tenant's delete.
+      render_async(view, 5_000)
 
       refute has_element?(view, "#comments-#{comment.id}")
 
