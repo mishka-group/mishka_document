@@ -18,6 +18,7 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
   import MishkaDocument.Test.Factory
 
   alias MishkaCmsCore.Accounts.{Permission, User, UserPermission}
+  alias MishkaCmsCore.Localized
   alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaDocument.{Issue, Section}
 
@@ -348,6 +349,7 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
   test "the dashboard's figures are read from the documents, as the admin looking at them", %{
     conn: conn
   } do
+    started = DateTime.utc_now()
     site = master_site()
 
     [first, second] =
@@ -379,7 +381,13 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     {:ok, view, html} =
       live(log_in(conn, create_admin("docstats@example.com")), "/admin/dashboard/document")
 
-    assert has_element?(view, "#document-stats [data-role=kpi-loading]")
+    # The first paint, not the view: the figures are read in the background and take the
+    # placeholders' place as soon as they arrive.
+    assert html
+           |> LazyHTML.from_fragment()
+           |> LazyHTML.query("#document-stats [data-role=kpi-loading]")
+           |> Enum.any?()
+
     refute html =~ "15.3K"
 
     render_async(view, 5_000)
@@ -388,7 +396,8 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     assert figure(view, "contributors") == {"2", "2 active in the last day"}
     assert figure(view, "completion") == {"50%", "1 of 2 pages approved"}
     assert {_ago, date} = figure(view, "last-updated")
-    assert date == MishkaCmsCore.Localized.date(DateTime.utc_now(), :yMMMd)
+    # Written since `started`: that day, or the next one when the test ran across midnight.
+    assert date in Enum.map([started, DateTime.utc_now()], &Localized.date(&1, :yMMMd))
     refute has_element?(view, "#document-stats", "Page Views")
 
     assert view
@@ -399,7 +408,7 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
            |> Enum.count() == 4
 
     create_workspace!(site_id: site.id)
-    render_async(view, 5_000)
+    settle(view)
 
     assert figure(view, "documents") == {"2", "+2 this week"}
   end

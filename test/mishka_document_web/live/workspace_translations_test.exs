@@ -84,14 +84,6 @@ defmodule MishkaDocumentWeb.Test.WorkspaceTranslationsTest do
     view
   end
 
-  # A CHANGE REACHES THE TABLE AS A BROADCAST THE PAGE HANDS ON WITH `send_update/3`, which the page
-  # runs after the render that delivered the broadcast — so it is the second render that shows it.
-  defp settle(view) do
-    render(view)
-    render_async(view, @await)
-    view
-  end
-
   defp card(workspace), do: ~s([data-role^="wscard"][id$="#{workspace.id}"])
 
   defp chip(master, edition),
@@ -152,11 +144,7 @@ defmodule MishkaDocumentWeb.Test.WorkspaceTranslationsTest do
 
   # THE ALERT ARRIVES AS AN UPDATE THE TABLE SENDS THE PAGE, run after the render that delivered the
   # click, and then reads what it shows off the page's process.
-  defp refused(view) do
-    render(view)
-    render_async(view, @await)
-    view
-  end
+  defp refused(view), do: settle(view)
 
   defp act(view) do
     view |> element(@act) |> render_click()

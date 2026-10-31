@@ -14,7 +14,8 @@ defmodule MishkaDocument.ConnCase do
   (`MishkaCmsCore.DataCase.setup_sandbox/1`), `make_api_request/3` (`MishkaCmsCore.ConnCase`, which
   calls the endpoint `config :mishka_cms_core, endpoint: …` names, this one), and the sites, users and
   runtime records a request needs (`MishkaCmsCore.Test.Factory`). What is added here is
-  `await_event_announcements/0`, because it decides when a page may be opened.
+  `await_event_announcements/0`, because it decides when a page may be opened, and `settle/2`,
+  because it decides when an open page may be read.
   """
 
   use ExUnit.CaseTemplate
@@ -58,6 +59,26 @@ defmodule MishkaDocument.ConnCase do
     |> Enum.filter(&announcing_for?(&1, caller))
     |> Enum.map(&Process.monitor/1)
     |> Enum.each(fn ref -> assert_receive {:DOWN, ^ref, :process, _pid, _reason} end)
+  end
+
+  @doc """
+  Returns `view` once it has taken every message already sent to it and the reads they started
+  have finished.
+
+  A write the test makes reaches an open page as a broadcast, and the page often hands it to a
+  component with `send_update/3`, a message to itself that starts the component's
+  `start_async/3` or `assign_async/3`. `render_async/2` alone can ask for the page's reads before
+  that message is taken, and so return before the read begins. The `render/1` first makes the page
+  take the broadcast, which queues its message ahead of the `render_async/2` that follows:
+
+      create_workspace!(site_id: site.id)
+      settle(view)
+  """
+  @spec settle(view, timeout()) :: view when view: struct()
+  def settle(view, timeout \\ 5_000) do
+    Phoenix.LiveViewTest.render(view)
+    Phoenix.LiveViewTest.render_async(view, timeout)
+    view
   end
 
   defp announcing_for?(pid, caller) do

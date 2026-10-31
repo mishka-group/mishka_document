@@ -165,10 +165,14 @@ defmodule MishkaDocument.Test.EventLogTimelineTest do
     end
 
     describe "day marks" do
+      # Rows a few seconds apart, written at noon: a day is a UTC day, and taking the clock's time
+      # instead puts those seconds on two days whenever the suite runs just after midnight.
+      @noon ~U[2026-06-15 12:00:00.000000Z]
+
       test "only the newest row of a day opens it, and carries that day's total" do
         master = create_user!()
         site = create_site!()
-        today = DateTime.utc_now()
+        today = @noon
         yesterday = DateTime.add(today, -1, :day)
 
         create_event!(site_id: site.id, occurred_at: DateTime.add(today, -60, :second))
@@ -185,7 +189,7 @@ defmodule MishkaDocument.Test.EventLogTimelineTest do
       test "a day's total counts the whole day, not the loaded window" do
         master = create_user!()
         site = create_site!()
-        now = DateTime.utc_now()
+        now = @noon
 
         for offset <- 1..5,
             do: create_event!(site_id: site.id, occurred_at: DateTime.add(now, -offset, :second))
@@ -198,7 +202,7 @@ defmodule MishkaDocument.Test.EventLogTimelineTest do
       test "the first row of page two does not repeat the day page one ended on" do
         master = create_user!()
         site = create_site!()
-        now = DateTime.utc_now()
+        now = @noon
 
         for offset <- 1..4,
             do: create_event!(site_id: site.id, occurred_at: DateTime.add(now, -offset, :second))
