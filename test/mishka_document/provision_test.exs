@@ -926,6 +926,7 @@ defmodule MishkaDocument.ProvisionTest do
   # refuses to pretend is one install.
   defp listening! do
     {:ok, _registered} = Installer.register()
+    {:ok, _started} = Installer.start()
     :ok = EventHandler.do_compile(@event, :start, false)
     :ok
   end

@@ -57,6 +57,7 @@ defmodule MishkaDocument.Plugins.UsedTranslationKeysTest do
 
       MishkaCmsCore.PluginRegistrations.reconcile(false)
       {:ok, _registered} = UsedTranslationKeys.register()
+      {:ok, _started} = UsedTranslationKeys.start()
       :ok = MishkaInstaller.Event.EventHandler.do_compile(event, :start, false)
 
       for word <- PageFrame.words() do
