@@ -90,7 +90,7 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
       |> assign(:show_pagination, show_pagination)
       |> assign(:show_bulk_actions, show_bulk_actions)
       |> assign(:features, features)
-      |> assign(:flagship_id, flagship_id(state))
+      |> assign(:flagship_id, flagship_id(assigns.stream))
 
     ~H"""
     <div class="mishka-gervaz-document-card">
@@ -656,21 +656,23 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
   @doc """
   Which workspace on this page wears the banner: the first featured one, or nothing if none is.
 
-  A stream never tells a row its position, but it does not have to — the page's own records are on
-  `state.records_result`, which is where the stream's contents came from. Reading them here keeps the
-  decision with the page rather than pushing a "first?" flag onto every record.
+  The table holds no rows in its state, so the decision reads the page's own stream: when a page is
+  loaded the stream carries exactly that page's rows, in order, and the first featured one wins. No
+  query is added and no rows are kept. Rows a live update sends alone arrive on a stream that was not
+  reset, which is not a page, so they never pick a banner of their own.
 
   Archived workspaces are skipped: the banner is a hero for live work, and a grey gradient reads as
   broken rather than as archived.
   """
-  def flagship_id(%{records_result: %{result: %{data: %{results: records}}}})
-      when is_list(records) do
-    records
-    |> Enum.find(&(Map.get(&1, :featured) == true and !archived?(&1)))
-    |> then(&(&1 && &1.id))
+  def flagship_id(%Phoenix.LiveView.LiveStream{reset?: true, inserts: inserts}) do
+    inserts
+    |> Enum.reverse()
+    |> Enum.find_value(fn {_dom_id, _at, record, _limit, _update_only} ->
+      (Map.get(record, :featured) == true and !archived?(record)) && record.id
+    end)
   end
 
-  def flagship_id(_state), do: nil
+  def flagship_id(_stream), do: nil
 
   # The editions row is one line that must not reflow. The card names its own language plus this many
   # siblings — two chips — and anything past that waits behind a "+N" the reader can open. A workspace
