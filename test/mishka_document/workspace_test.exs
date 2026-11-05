@@ -649,13 +649,18 @@ defmodule MishkaDocument.Test.WorkspaceTest do
       end
 
       # Refused for this reason, and not for another the same call could run into.
-      defp refused?({:error, %Ash.Error.Invalid{} = error}),
+      defp refused?({:error, %Ash.Error.Invalid{} = error}, :archive),
+        do:
+          Exception.message(error) =~
+            ~r/This is the original English version\. Its Persian translation is still live, so it can't be (archived|deleted) yet\. Archive or delete that translation first, then this one\./
+
+      defp refused?({:error, %Ash.Error.Invalid{} = error}, :destroy),
         do:
           Exception.message(error) =~
             "This is the original English version. Its Persian translation is still live, so " <>
               "it can't be deleted yet. Archive or delete that translation first, then this one."
 
-      defp refused?(_result), do: false
+      defp refused?(_result, _action), do: false
 
       test "archiving it is refused while a translation is live, however it is called", %{
         site: site,
@@ -666,16 +671,24 @@ defmodule MishkaDocument.Test.WorkspaceTest do
         as_master = Ash.get!(Workspace, master.id, action: :master_get, actor: master_user)
 
         assert refused?(
-                 Ash.destroy(master, action: :destroy, tenant: site.id, actor: tenant_user)
+                 Ash.destroy(master, action: :destroy, tenant: site.id, actor: tenant_user),
+                 :archive
                )
 
-        assert refused?(Ash.destroy(as_master, action: :master_destroy, actor: master_user))
-        assert refused?(Ash.destroy(master, action: :destroy, tenant: site.id, authorize?: false))
+        assert refused?(
+                 Ash.destroy(as_master, action: :master_destroy, actor: master_user),
+                 :archive
+               )
+
+        assert refused?(
+                 Ash.destroy(master, action: :destroy, tenant: site.id, authorize?: false),
+                 :archive
+               )
 
         assert master
                |> Ash.Changeset.for_destroy(:destroy, %{}, tenant: site.id, actor: tenant_user)
                |> Ash.destroy()
-               |> refused?()
+               |> refused?(:archive)
       end
 
       test "deleting it for good is refused while a translation is live", %{
@@ -691,11 +704,13 @@ defmodule MishkaDocument.Test.WorkspaceTest do
                    action: :permanent_destroy,
                    tenant: site.id,
                    actor: tenant_user
-                 )
+                 ),
+                 :destroy
                )
 
         assert refused?(
-                 Ash.destroy(as_master, action: :master_permanent_destroy, actor: master_user)
+                 Ash.destroy(as_master, action: :master_permanent_destroy, actor: master_user),
+                 :destroy
                )
       end
 
