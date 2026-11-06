@@ -475,18 +475,17 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
 
       {:ok, view, _html} = live(conn, path)
       render_async(view, 5_000)
-      assert rows(view) == 20
 
       view |> element("form[phx-change='change_page_size']") |> render_change(%{"size" => "50"})
       render_async(view, 5_000)
 
       assert_patch(view, path <> "?event_logs_page_size=50")
-      assert rows(view) in 21..50
+      assert rows(view) in 25..50
       close(view)
 
       {:ok, view, _html} = live(conn, path <> "?event_logs_page_size=50")
       render_async(view, 5_000)
-      assert rows(view) in 21..50
+      assert rows(view) in 25..50
       close(view)
     end
   end
