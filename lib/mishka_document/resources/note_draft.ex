@@ -611,7 +611,7 @@ defmodule MishkaDocument.NoteDraft do
 
       url_sync do
         mode :bidirectional
-        params [:filters, :sort, :page, :search]
+        params [:filters, :sort, :page, :page_size, :search]
         prefix "note_drafts"
         max_filter_length 500
         preserve_params [:return_to]

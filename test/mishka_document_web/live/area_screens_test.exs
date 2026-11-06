@@ -463,6 +463,41 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
         close(view)
       end
     end
+
+    test "keeps the rows-per-page choice in the address, and opens at it", %{
+      conn: conn,
+      site: site,
+      version: version
+    } do
+      for _n <- 1..25, do: create_section!(site_id: site.id, workspace_version_id: version.id)
+      conn = log_in(conn, tenant([@workspace, @section], site))
+      path = "/admin/dashboard/document/event-logs"
+
+      {:ok, view, _html} = live(conn, path)
+      render_async(view, 5_000)
+      assert rows(view) == 20
+
+      view |> element("form[phx-change='change_page_size']") |> render_change(%{"size" => "50"})
+      render_async(view, 5_000)
+
+      assert_patch(view, path <> "?event_logs_page_size=50")
+      assert rows(view) in 21..50
+      close(view)
+
+      {:ok, view, _html} = live(conn, path <> "?event_logs_page_size=50")
+      render_async(view, 5_000)
+      assert rows(view) in 21..50
+      close(view)
+    end
+  end
+
+  # The event rows drawn.
+  defp rows(view) do
+    view
+    |> render()
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("[id^='event-logs-table_event_logs-']")
+    |> Enum.count(&(&1 |> LazyHTML.attribute("id") |> hd() |> String.match?(~r/-[0-9a-f-]{36}$/)))
   end
 
   describe "dates and times" do

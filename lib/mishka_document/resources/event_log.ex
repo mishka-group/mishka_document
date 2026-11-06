@@ -337,7 +337,7 @@ defmodule MishkaDocument.EventLog do
 
       url_sync do
         mode :bidirectional
-        params [:filters, :page]
+        params [:filters, :page, :page_size]
         prefix "event_logs"
         max_filter_length 500
       end

@@ -369,7 +369,7 @@ defmodule MishkaDocument.Issue do
 
       url_sync do
         mode :bidirectional
-        params [:filters, :sort, :page, :search]
+        params [:filters, :sort, :page, :page_size, :search]
         prefix "issues"
         max_filter_length 500
       end
