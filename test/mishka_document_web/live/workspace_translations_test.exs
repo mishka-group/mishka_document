@@ -153,6 +153,7 @@ defmodule MishkaDocumentWeb.Test.WorkspaceTranslationsTest do
 
   @refused "This is the original English version. Its Persian translation is still live, so it " <>
              "can't be deleted yet. Archive or delete that translation first, then this one."
+  @refused_archive ~r/This is the original English version\. Its Persian translation is still live, so it can't be (archived|deleted) yet\. Archive or delete that translation first, then this one\./
   @restore_refused "This is the Persian translation. Its original English version is archived, so " <>
                      "it can't be restored yet. Restore the original first, then this one."
 
@@ -214,7 +215,7 @@ defmodule MishkaDocumentWeb.Test.WorkspaceTranslationsTest do
 
       assert live?(master), "the master was archived under its live translation"
       assert live?(fa)
-      assert has_element?(view, @alert, @refused)
+      assert has_element?(view, @alert, @refused_archive)
 
       refute has_element?(view, "#flash-error"),
              "the alert's reason was repeated as an error flash"

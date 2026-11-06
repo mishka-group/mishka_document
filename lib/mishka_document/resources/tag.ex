@@ -383,7 +383,7 @@ defmodule MishkaDocument.Tag do
 
       url_sync do
         mode :bidirectional
-        params [:filters, :sort, :page, :search]
+        params [:filters, :sort, :page, :page_size, :search]
         prefix "tags"
         max_filter_length 500
       end

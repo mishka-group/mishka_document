@@ -25,5 +25,22 @@
     sweep: ["Elixir.MishkaDocument.Test.Plugins."]
   )
 
-ExUnit.start(assert_receive_timeout: 5_000, exclude: [:benchmark])
+# The `:gervaz_pagination_row` tests choose a page size in the select a Load more list ends with, the
+# one pager row `Shared.render_pagination_row/1` of the mishka_gervaz after the 0.0.4 release. Against
+# a gervaz without it they are left out, and the run says so.
+excluded =
+  case Code.ensure_loaded?(MishkaGervaz.Table.Templates.Shared) and
+         function_exported?(MishkaGervaz.Table.Templates.Shared, :render_pagination_row, 1) do
+    true ->
+      [:benchmark]
+
+    false ->
+      IO.puts(
+        "This mishka_gervaz has no pagination row: the :gervaz_pagination_row tests are excluded."
+      )
+
+      [:benchmark, :gervaz_pagination_row]
+  end
+
+ExUnit.start(assert_receive_timeout: 5_000, exclude: excluded)
 Ecto.Adapters.SQL.Sandbox.mode(MishkaDocument.Repo, :manual)
