@@ -88,7 +88,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, created_message(result))}
+     |> put_flash(:success, created_message(result))}
   end
 
   @impl true
@@ -96,7 +96,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Workspace version updated successfully"))}
+     |> put_flash(:success, gettext("Workspace version updated successfully"))}
   end
 
   @impl true
@@ -180,7 +180,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.WorkspaceVersion.Index do
 
   @impl true
   def handle_async(:clone_version, {:ok, {:ok, version}}, socket),
-    do: {:noreply, socket |> assign_clone(nil, nil) |> put_flash(:info, created_message(version))}
+    do: {:noreply, socket |> assign_clone(nil, nil) |> put_flash(:success, created_message(version))}
 
   def handle_async(:clone_version, {:ok, {:error, form}}, socket),
     do: {:noreply, refuse_clone(socket, form)}

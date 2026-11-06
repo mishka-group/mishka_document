@@ -206,7 +206,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
 
     socket =
       socket
-      |> put_flash(:info, note_saved_message(action))
+      |> put_flash(:success, note_saved_message(action))
       |> assign(:show_note_form, false)
       |> assign(:editing_note_id, nil)
       |> assign(:note_section_id, nil)
@@ -227,7 +227,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
     {:noreply,
      socket
      |> close_form_modal("section-form-modal")
-     |> put_flash(:info, gettext("Section created successfully"))}
+     |> put_flash(:success, gettext("Section created successfully"))}
   end
 
   @impl true
@@ -235,7 +235,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
     {:noreply,
      socket
      |> close_form_modal("section-form-modal")
-     |> put_flash(:info, gettext("Section updated successfully"))}
+     |> put_flash(:success, gettext("Section updated successfully"))}
   end
 
   @impl true

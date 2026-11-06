@@ -200,7 +200,7 @@ defmodule MishkaDocumentWeb.Test.IssueCommentsLiveTest do
     render_async(view, 5_000)
 
     refute has_element?(view, "#issue-comment-form-modal")
-    assert has_element?(view, "#flash-info", "Comment updated successfully")
+    assert has_element?(view, "#flash-success", "Comment updated successfully")
 
     assert {:ok, %{content: "Edited from the comment form"}} =
              Ash.get(MishkaDocument.IssueComment, tenant_comment.id,

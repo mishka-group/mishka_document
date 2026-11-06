@@ -62,7 +62,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Tag.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Tag created successfully"))}
+     |> put_flash(:success, gettext("Tag created successfully"))}
   end
 
   @impl true
@@ -70,7 +70,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Tag.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Tag updated successfully"))}
+     |> put_flash(:success, gettext("Tag updated successfully"))}
   end
 
   @impl true
