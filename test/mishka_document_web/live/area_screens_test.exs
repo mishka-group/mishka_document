@@ -464,27 +464,38 @@ defmodule MishkaDocumentWeb.Test.AreaScreensTest do
       end
     end
 
-    test "keeps the rows-per-page choice in the address, and opens at it", %{
+    test "opens at the rows per page its address carries", %{
       conn: conn,
       site: site,
       version: version
     } do
       for _n <- 1..25, do: create_section!(site_id: site.id, workspace_version_id: version.id)
       conn = log_in(conn, tenant([@workspace, @section], site))
+
+      {:ok, view, _html} =
+        live(conn, "/admin/dashboard/document/event-logs?event_logs_page_size=50")
+
+      render_async(view, 5_000)
+      assert rows(view) in 25..50
+      close(view)
+    end
+
+    @tag :gervaz_pagination_row
+    test "writes the rows per page a reader chooses into the address", %{
+      conn: conn,
+      site: site,
+      version: version
+    } do
+      for _n <- 1..25, do: create_section!(site_id: site.id, workspace_version_id: version.id)
       path = "/admin/dashboard/document/event-logs"
 
-      {:ok, view, _html} = live(conn, path)
+      {:ok, view, _html} = live(log_in(conn, tenant([@workspace, @section], site)), path)
       render_async(view, 5_000)
 
       view |> element("form[phx-change='change_page_size']") |> render_change(%{"size" => "50"})
       render_async(view, 5_000)
 
       assert_patch(view, path <> "?event_logs_page_size=50")
-      assert rows(view) in 25..50
-      close(view)
-
-      {:ok, view, _html} = live(conn, path <> "?event_logs_page_size=50")
-      render_async(view, 5_000)
       assert rows(view) in 25..50
       close(view)
     end
