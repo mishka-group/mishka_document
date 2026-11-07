@@ -63,8 +63,8 @@ defmodule MishkaDocument.Test.TagTest do
           )
           |> Ash.create!()
 
-        # AshSlug ignores ".", "!", "?" but doesn't remove them from the end
-        assert tag.slug == "test-tag!"
+        # "!" is not a slug character
+        assert tag.slug == "test-tag"
       end
 
       test "defaults language to 'en'" do

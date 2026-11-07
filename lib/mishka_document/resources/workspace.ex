@@ -24,7 +24,6 @@ defmodule MishkaDocument.Workspace do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
-      AshSlug,
       AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
@@ -1101,7 +1100,7 @@ defmodule MishkaDocument.Workspace do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -1129,7 +1128,7 @@ defmodule MishkaDocument.Workspace do
       end
 
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
 
       # Add metadata for event tracking
       change fn changeset, _context ->
@@ -1161,7 +1160,7 @@ defmodule MishkaDocument.Workspace do
                 )
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -1190,7 +1189,7 @@ defmodule MishkaDocument.Workspace do
                 )
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
 
       # Add metadata for event tracking
       change fn changeset, _context ->
