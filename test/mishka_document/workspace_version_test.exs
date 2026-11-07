@@ -246,21 +246,12 @@ defmodule MishkaDocument.Test.WorkspaceVersionTest do
         assert updated.description == "New description"
       end
 
-      test "validates stable versions must have published_at" do
-        site = create_site!()
-        workspace = create_workspace!(site_id: site.id)
-        version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+      test "a version made stable with no published_at is published now" do
+        assert_stamped_on_stable(:update)
+      end
 
-        assert_raise Ash.Error.Invalid, fn ->
-          version
-          |> Ash.Changeset.for_update(
-            :update,
-            %{status: :stable},
-            tenant: site.id,
-            authorize?: false
-          )
-          |> Ash.update!()
-        end
+      test "a stable version keeps the published_at it is given" do
+        assert_keeps_given_date(:update)
       end
 
       test "prevents site_id changes" do
@@ -301,6 +292,54 @@ defmodule MishkaDocument.Test.WorkspaceVersionTest do
 
         assert updated.version_name == "Master Updated"
       end
+
+      test "a version made stable with no published_at is published now" do
+        assert_stamped_on_stable(:master_update)
+      end
+
+      test "a stable version keeps the published_at it is given" do
+        assert_keeps_given_date(:master_update)
+      end
+
+      test "a status other than stable leaves published_at empty" do
+        version = create_workspace_version!()
+
+        assert %{status: :beta, published_at: nil} =
+                 version
+                 |> Ash.Changeset.for_update(:master_update, %{status: :beta}, authorize?: false)
+                 |> Ash.update!()
+      end
+    end
+
+    defp update_version(version, action, params) do
+      tenant = if action == :update, do: version.site_id
+
+      version
+      |> Ash.Changeset.for_update(action, params, tenant: tenant, authorize?: false)
+      |> Ash.update!()
+    end
+
+    defp assert_stamped_on_stable(action) do
+      version = create_workspace_version!()
+      before = DateTime.utc_now(:second)
+
+      updated = update_version(version, action, %{status: :stable, published_at: nil})
+
+      assert updated.status == :stable
+      assert DateTime.compare(updated.published_at, before) != :lt
+
+      assert %{status: :stable, published_at: stored} =
+               Ash.get!(WorkspaceVersion, version.id, tenant: version.site_id, authorize?: false)
+
+      assert stored == updated.published_at
+    end
+
+    defp assert_keeps_given_date(action) do
+      version = create_workspace_version!()
+      given = ~U[2024-03-04 05:06:00Z]
+
+      assert %{status: :stable, published_at: ^given} =
+               update_version(version, action, %{status: :stable, published_at: given})
     end
 
     describe "read actions with multitenancy" do

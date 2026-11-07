@@ -780,19 +780,7 @@ defmodule MishkaDocument.WorkspaceVersion do
                where: [changing(:workspace_id)]
 
       change MishkaDocument.Resources.Changes.EnsureSingleLatestVersion
-
-      validate fn changeset, _context ->
-        status = Ash.Changeset.get_attribute(changeset, :status)
-        published_at = Ash.Changeset.get_attribute(changeset, :published_at)
-
-        if status == :stable and is_nil(published_at) do
-          {:error,
-           field: :published_at,
-           message: dgettext_noop("errors", "Stable versions must have published_at timestamp.")}
-        else
-          :ok
-        end
-      end
+      change MishkaDocument.Resources.Changes.StampPublishedAt
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -817,6 +805,7 @@ defmodule MishkaDocument.WorkspaceVersion do
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
 
       change MishkaDocument.Resources.Changes.EnsureSingleLatestVersion
+      change MishkaDocument.Resources.Changes.StampPublishedAt
 
       change fn changeset, _context ->
         Ash.Changeset.put_context(changeset, :ash_events_metadata, %{

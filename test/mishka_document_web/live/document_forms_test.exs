@@ -484,6 +484,38 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
   end
 
   describe "a version's Published At" do
+    test "left empty on a version saved as Stable is the time of the save, for a master and a site admin",
+         ctx do
+      form = FormInfo.component_id(WorkspaceVersion)
+
+      for conn <- [ctx.master_conn, ctx.site_admin_conn] do
+        WorkspaceVersion
+        |> Ash.get!(ctx.version.id, tenant: ctx.site.id, authorize?: false)
+        |> Ash.Seed.update!(%{status: :draft, published_at: nil})
+
+        before = DateTime.utc_now(:second)
+
+        view = open(conn, "#{@dashboard}/workspace-version/#{ctx.workspace.id}")
+        edit(view, ctx.version)
+
+        view
+        |> form("##{form}-form", form: %{status: "stable"})
+        |> render_submit()
+
+        render_async(view, @await)
+
+        refute has_element?(view, "##{form}-form[method=put]")
+
+        assert %{status: :stable, published_at: %DateTime{} = published_at} =
+                 Ash.get!(WorkspaceVersion, ctx.version.id,
+                   tenant: ctx.site.id,
+                   authorize?: false
+                 )
+
+        assert DateTime.compare(published_at, before) != :lt
+      end
+    end
+
     test "is a calendar that opens on the stored month, moves by month and year, and saves the day and time picked",
          ctx do
       form = FormInfo.component_id(WorkspaceVersion)
