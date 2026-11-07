@@ -43,7 +43,9 @@ defmodule MishkaDocument.Section do
   import MishkaGervaz.UIAdapters.Tailwind, only: [copy_button: 1]
   alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Runtime.Helpers
+  alias MishkaCmsCore.Runtime.Languages
   alias MishkaDocument.Resources.Helpers.Labels
+  alias MishkaSlug.Change
 
   # The card's action squares. `MishkaDocumentWeb.Templates.DocumentSection` gives them a row of their
   # own, so every one is icon-only and hides its label — which still reaches the DOM as `title` and as a
@@ -1475,7 +1477,7 @@ defmodule MishkaDocument.Section do
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change MishkaDocument.Resources.Changes.SetSectionLineageId
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       change manage_relationship(:tag_ids, :tenant_tags,
                type: :append_and_remove,
@@ -1527,7 +1529,7 @@ defmodule MishkaDocument.Section do
 
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
       change MishkaDocument.Resources.Changes.SetSectionLineageId
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       change manage_relationship(:tag_ids, :tenant_tags,
                type: :append_and_remove,
@@ -1686,7 +1688,7 @@ defmodule MishkaDocument.Section do
         end
       end
 
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       change manage_relationship(:tag_ids, :tenant_tags,
                type: :append_and_remove,
@@ -1729,7 +1731,7 @@ defmodule MishkaDocument.Section do
         end
       end
 
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       change manage_relationship(:tag_ids, :master_tags,
                type: :append_and_remove,

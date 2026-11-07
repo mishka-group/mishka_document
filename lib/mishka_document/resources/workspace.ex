@@ -41,7 +41,9 @@ defmodule MishkaDocument.Workspace do
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
   alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Runtime.Helpers
+  alias MishkaCmsCore.Runtime.Languages
   alias MishkaDocument.Resources.Helpers.Labels
+  alias MishkaSlug.Change
 
   @admin_fields [
     :name,
@@ -1100,7 +1102,7 @@ defmodule MishkaDocument.Workspace do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -1128,7 +1130,7 @@ defmodule MishkaDocument.Workspace do
       end
 
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, _context ->
@@ -1160,7 +1162,7 @@ defmodule MishkaDocument.Workspace do
                 )
       end
 
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -1189,7 +1191,7 @@ defmodule MishkaDocument.Workspace do
                 )
       end
 
-      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
+      change {Change, Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, _context ->
