@@ -26,7 +26,6 @@ defmodule MishkaDocument.SectionDraft do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
-      AshSlug,
       AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
@@ -41,7 +40,9 @@ defmodule MishkaDocument.SectionDraft do
   alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Runtime.Helpers
+  alias MishkaCmsCore.Runtime.Languages
   alias MishkaDocument.Resources.Helpers.Labels
+  alias MishkaSlug.Change
 
   @admin_fields [
     :workspace_version_id,
@@ -1162,7 +1163,7 @@ defmodule MishkaDocument.SectionDraft do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
 
       # Set created_by_user_id from actor only if not provided in form
       change fn changeset, context ->
@@ -1221,7 +1222,7 @@ defmodule MishkaDocument.SectionDraft do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
 
       # Set created_by_user_id from actor only if not provided in form
       change fn changeset, context ->
@@ -1301,7 +1302,7 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
 
       change MishkaDocument.Resources.Changes.HighlightCode
       change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
@@ -1346,7 +1347,7 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
 
       change MishkaDocument.Resources.Changes.HighlightCode
       change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}

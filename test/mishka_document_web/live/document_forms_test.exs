@@ -1017,13 +1017,16 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
     end
 
     test "a Persian title is saved with the slug the form showed", ctx do
+      {:ok, _setting} =
+        MishkaCmsCore.Settings.put("site.languages", ["fa", "en"], site_id: ctx.site.id)
+
       form = FormInfo.component_id(Section)
       view = open(ctx.site_admin_conn, "#{@dashboard}/sections/#{ctx.version.id}")
 
       type(view, form, :title, "راهنمای شروع")
       slug = shown(view, form, :slug)
 
-      assert slug == Slug.slugify("راهنمای شروع")
+      assert slug == "راهنمای-شروع"
 
       view
       |> form("##{form}-form", form: %{language: "en"})

@@ -20,7 +20,6 @@ defmodule MishkaDocument.Tag do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
-      AshSlug,
       AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
@@ -35,6 +34,8 @@ defmodule MishkaDocument.Tag do
   alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Localized
   alias MishkaCmsCore.Runtime.Helpers
+  alias MishkaCmsCore.Runtime.Languages
+  alias MishkaSlug.Change
 
   @admin_fields [:name, :slug, :language, :language_group_id, :site_id]
 
@@ -544,7 +545,7 @@ defmodule MishkaDocument.Tag do
                 field: :language_group_id, resource: MishkaDocument.Tag}
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
 
       # Add metadata for event tracking
@@ -569,7 +570,7 @@ defmodule MishkaDocument.Tag do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
 
       # Add metadata for event tracking
@@ -599,7 +600,7 @@ defmodule MishkaDocument.Tag do
         message dgettext_noop("errors", "Cannot edit archived tag. Please unarchive it first.")
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -625,7 +626,7 @@ defmodule MishkaDocument.Tag do
         message dgettext_noop("errors", "Cannot edit archived tag. Please unarchive it first.")
       end
 
-      change slugify(:slug, into: :slug, ignore: [".", "!", "?"])
+      change {Change, Languages.public_slug(language: :language)}
 
       change fn changeset, _context ->
         Ash.Changeset.put_context(changeset, :ash_events_metadata, %{
