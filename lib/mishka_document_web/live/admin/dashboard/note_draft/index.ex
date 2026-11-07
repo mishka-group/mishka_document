@@ -75,7 +75,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Note draft created successfully"))}
+     |> put_flash(:success, gettext("Note draft created successfully"))}
   end
 
   @impl true
@@ -83,7 +83,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Note draft updated successfully"))}
+     |> put_flash(:success, gettext("Note draft updated successfully"))}
   end
 
   @impl true

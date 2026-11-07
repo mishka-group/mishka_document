@@ -177,7 +177,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
       {:ok, _issue} ->
         {:noreply,
          socket
-         |> put_flash(:info, gettext("Issue restored successfully"))
+         |> put_flash(:success, gettext("Issue restored successfully"))
          |> stream_delete(:issues, %{id: id})}
 
       {:error, _} ->
@@ -243,7 +243,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
       {:ok, _issue} ->
         {:noreply,
          socket
-         |> put_flash(:info, gettext("Issue permanently deleted"))
+         |> put_flash(:success, gettext("Issue permanently deleted"))
          |> stream_delete(:issues, %{id: id})}
 
       {:error, _} ->
@@ -262,7 +262,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Workspace created successfully"))}
+     |> put_flash(:success, gettext("Workspace created successfully"))}
   end
 
   @impl true
@@ -270,7 +270,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Workspace updated successfully"))}
+     |> put_flash(:success, gettext("Workspace updated successfully"))}
   end
 
   @impl true

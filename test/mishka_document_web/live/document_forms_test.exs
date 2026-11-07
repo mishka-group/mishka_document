@@ -723,10 +723,11 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
         |> pick(form, :workspace, ctx.workspace.id)
 
       view
-      |> element(
-        "#{picker(form, :workspace_version_id)} input[name=_search_workspace_version_id]"
-      )
-      |> render_keyup(%{"value" => "2.0", "_search_workspace_version_id" => "2.0"})
+      |> element("##{form}-form")
+      |> render_change(%{
+        "_search_workspace_version_id" => "2.0",
+        "_target" => ["_search_workspace_version_id"]
+      })
 
       render_async(view, @await)
 

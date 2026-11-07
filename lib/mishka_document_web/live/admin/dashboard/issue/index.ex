@@ -108,7 +108,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index do
   def handle_event("delete_comment", %{"comment-id" => comment_id}, socket) do
     case delete_comment(socket.assigns.current_user, comment_id) do
       {:ok, _} ->
-        {:noreply, put_flash(socket, :info, gettext("Comment deleted"))}
+        {:noreply, put_flash(socket, :success, gettext("Comment deleted"))}
 
       {:error, error} ->
         {:noreply,
@@ -157,7 +157,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index do
       when action in [:create, :update] do
     {:noreply,
      socket
-     |> put_flash(:info, comment_saved_message(action))
+     |> put_flash(:success, comment_saved_message(action))
      |> assign(:show_comment_form, false)
      |> assign(:editing_comment_id, nil)
      |> assign(:comment_form_issue, nil)
@@ -169,7 +169,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index do
     {:noreply,
      socket
      |> close_form_modal("issue-form-modal")
-     |> put_flash(:info, gettext("Issue created successfully"))}
+     |> put_flash(:success, gettext("Issue created successfully"))}
   end
 
   @impl true
@@ -177,7 +177,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index do
     {:noreply,
      socket
      |> close_form_modal("issue-form-modal")
-     |> put_flash(:info, gettext("Issue updated successfully"))}
+     |> put_flash(:success, gettext("Issue updated successfully"))}
   end
 
   @impl true
@@ -399,7 +399,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Issue.Index do
              |> Ash.Changeset.for_update(action_name, %{}, opts)
              |> Ash.update() do
           {:ok, _updated} ->
-            put_flash(socket, :info, gettext("Issue status updated"))
+            put_flash(socket, :success, gettext("Issue status updated"))
 
           {:error, _} ->
             put_flash(socket, :error, gettext("Failed to update issue status"))

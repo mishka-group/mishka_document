@@ -220,7 +220,13 @@ defmodule MishkaDocumentWeb.Test.WorkspaceVersionCloneTest do
         ~s(button[phx-click="relation_select"][phx-value-filter="source_version_id"][phx-value-id="#{version.id}"])
 
     defp search(view, term) do
-      view |> element("#{@version_form} #{@search}") |> render_keyup(%{"value" => term})
+      view
+      |> element(@version_form)
+      |> render_change(%{
+        "_search_source_version_id" => term,
+        "_target" => ["_search_source_version_id"]
+      })
+
       view
     end
 

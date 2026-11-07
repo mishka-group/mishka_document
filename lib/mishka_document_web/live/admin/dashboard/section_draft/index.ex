@@ -80,7 +80,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Section draft created successfully"))}
+     |> put_flash(:success, gettext("Section draft created successfully"))}
   end
 
   @impl true
@@ -88,7 +88,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
     {:noreply,
      socket
      |> close_form_modal()
-     |> put_flash(:info, gettext("Section draft updated successfully"))}
+     |> put_flash(:success, gettext("Section draft updated successfully"))}
   end
 
   @impl true
