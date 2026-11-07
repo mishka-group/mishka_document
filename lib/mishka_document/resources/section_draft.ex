@@ -1161,7 +1161,7 @@ defmodule MishkaDocument.SectionDraft do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
 
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       # Set created_by_user_id from actor only if not provided in form
       change fn changeset, context ->
@@ -1220,7 +1220,7 @@ defmodule MishkaDocument.SectionDraft do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       # Set created_by_user_id from actor only if not provided in form
       change fn changeset, context ->
@@ -1300,7 +1300,7 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       change MishkaDocument.Resources.Changes.HighlightCode
       change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
@@ -1345,7 +1345,7 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       change MishkaDocument.Resources.Changes.HighlightCode
       change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}

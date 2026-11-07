@@ -1100,7 +1100,7 @@ defmodule MishkaDocument.Workspace do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -1128,7 +1128,7 @@ defmodule MishkaDocument.Workspace do
       end
 
       change {MishkaCmsCore.Runtime.Resources.Changes.SetLanguageGroupId, before_action?: true}
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, _context ->
@@ -1160,7 +1160,7 @@ defmodule MishkaDocument.Workspace do
                 )
       end
 
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, context ->
@@ -1189,7 +1189,7 @@ defmodule MishkaDocument.Workspace do
                 )
       end
 
-      change {MishkaSlug.Change, MishkaDocument.Resources.Helpers.Slug.options()}
+      change {MishkaSlug.Change, MishkaCmsCore.Runtime.Languages.public_slug(language: :language)}
 
       # Add metadata for event tracking
       change fn changeset, _context ->
