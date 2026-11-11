@@ -1,3 +1,7 @@
+# Changelog for MishkaDocument 0.0.3
+
+- Needs mishka_cms_core 0.0.5-alpha.13 (a page's event, info and state handlers keep their code signature with `CODE_SIGNING_KEY` set), mishka_gervaz 0.0.8 and guarded_struct 0.1.7. Every dependency is at its latest release, including ash 3.37.4 and spark 2.7.10
+
 # Changelog for MishkaDocument 0.0.2
 
 - Public slugs of workspaces, sections, section drafts and tags come from `mishka_slug` instead of `ash_slug`: a title keeps the script of the site languages (Persian stays Persian on a site that publishes `fa`), Latin accents become ASCII, `_` stays and `.`, `!`, `?` are dropped. A title in a script the site does not publish is a form error
