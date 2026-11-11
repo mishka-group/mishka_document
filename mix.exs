@@ -95,7 +95,7 @@ defmodule MishkaDocument.MixProject do
       {:makeup_ts, "~> 0.2"},
       {:makeup_css, "~> 0.2"},
       {:ash_events, "~> 0.8"},
-      {:guarded_struct, "~> 0.1.6"},
+      {:guarded_struct, "~> 0.1.7"},
       mishka_dep(:mishka_installer, "~> 0.1.16"),
       mishka_dep(:mishka_slug, "~> 0.0.1"),
       {:igniter, "~> 0.8", only: [:dev, :test]},
@@ -106,8 +106,8 @@ defmodule MishkaDocument.MixProject do
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      mishka_dep(:mishka_cms_core, "~> 0.0.5-alpha.12"),
-      mishka_dep(:mishka_gervaz, "~> 0.0.7"),
+      mishka_dep(:mishka_cms_core, "~> 0.0.5-alpha.13"),
+      mishka_dep(:mishka_gervaz, "~> 0.0.8"),
       # `mix hex.publish` builds the docs with it.
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
