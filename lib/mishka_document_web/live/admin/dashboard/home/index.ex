@@ -10,6 +10,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCore.Runtime.{ExtensionProvision, Site}
+  alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaCmsCoreWeb.Live.Admin.Components.ActivityFeed
   alias MishkaCmsCoreWeb.Live.Admin.Components.ExtensionInstallerPanel
   alias MishkaCmsCoreWeb.Live.Admin.Components.KitUpgradePanel
@@ -292,10 +293,12 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
       pubsub_notification: notification
     )
 
-    send_update(StatsLive, id: "document-stats", refresh: true)
-
-    {:noreply, socket}
+    {:noreply, schedule_stats_refresh(socket)}
   end
+
+  @impl true
+  def handle_info(:stats_refresh_sent, socket),
+    do: {:noreply, assign(socket, :stats_refresh_sent?, false)}
 
   # PubSub: issue unarchive
   @impl true
@@ -453,6 +456,18 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   # Any other broadcast this page subscribes to but does not draw.
   def handle_info(%Phoenix.Socket.Broadcast{}, socket), do: {:noreply, socket}
 
+  # A burst of workspace changes (a bulk edit sends one broadcast per row) reads the figures once.
+  # The refresh is queued behind the broadcasts already waiting, so it reads what they wrote; the
+  # ones among them are skipped, and the first one after it asks again.
+  defp schedule_stats_refresh(%{assigns: %{stats_refresh_sent?: true}} = socket), do: socket
+
+  defp schedule_stats_refresh(socket) do
+    send_update(StatsLive, id: "document-stats", refresh: true)
+    send(self(), :stats_refresh_sent)
+
+    assign(socket, :stats_refresh_sent?, true)
+  end
+
   @impl true
   def handle_async(:load_issues, {:ok, {page, results, _has_more, reset}}, socket) do
     socket =
@@ -513,8 +528,18 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
 
   # WHAT TO CALL THE SITE WHEN THERE IS NO PICKER. A tenant admin is offered no list — their site
   # is the only one this page will ever write to — so the modal says which site that is instead of
-  # drawing a dropdown that cannot move.
+  # drawing a dropdown that cannot move. The admin's own site is already in `SiteState`'s cache;
+  # the table is read only when it is not.
   defp site_name(site_id) when is_binary(site_id) do
+    case SiteState.get(site_id) do
+      {:ok, %{name: name}} -> name
+      {:error, :not_found} -> stored_site_name(site_id)
+    end
+  end
+
+  defp site_name(_no_site), do: nil
+
+  defp stored_site_name(site_id) do
     Site
     |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
     |> Ash.Query.filter(id == ^site_id)
@@ -525,8 +550,6 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
       _no_such_site -> nil
     end
   end
-
-  defp site_name(_no_site), do: nil
 
   defp offered_sites(session) do
     sites =

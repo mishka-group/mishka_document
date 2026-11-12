@@ -10,6 +10,7 @@ defmodule MishkaDocument.Test.WorkspaceTest do
 
   if Code.ensure_loaded?(MishkaDocument) do
     alias MishkaDocument.Workspace
+    alias MishkaDocumentWeb.Live.Admin.Dashboard.Home.StatsLive
 
     describe "resource configuration" do
       test "uses correct table name" do
@@ -1347,5 +1348,82 @@ defmodule MishkaDocument.Test.WorkspaceTest do
         assert fetched.id == workspace.id
       end
     end
+
+    describe "the figures of a page of workspace cards" do
+      test "health_metrics and maintainers_info cost as many statements for five cards as for one" do
+        site = create_site!()
+        admin = create_user_with_permissions!(["admin:dashboard:*"], site_id: site.id)
+        workspaces = for pages <- 1..5, do: workspace_with_pages!(site, admin, pages)
+
+        {[one], one_statements} = with_queries(fn -> figures(Enum.take(workspaces, 1), admin) end)
+        {five, five_statements} = with_queries(fn -> figures(workspaces, admin) end)
+
+        assert length(five_statements) == length(one_statements)
+        assert one.health_metrics.sections_count == 1
+
+        for {workspace, pages} <- Enum.zip(five, 1..5) do
+          assert workspace.health_metrics.sections_count == pages
+          assert workspace.health_metrics.total_items == pages
+
+          assert %{"count" => 1, "maintainers" => [%{"user_id" => id}]} =
+                   workspace.maintainers_info
+
+          assert id == admin.id
+        end
+      end
+
+      test "a workspace with nothing written in it gets zeros" do
+        site = create_site!()
+        admin = create_user_with_permissions!(["admin:dashboard:*"], site_id: site.id)
+        workspace = create_workspace!(site_id: site.id, skip_version: true)
+
+        assert [%{health_metrics: metrics, maintainers_info: info}] = figures([workspace], admin)
+        assert %{completion: 0, quality: 100, sections_count: 0, total_items: 0} = metrics
+        assert info == %{"count" => 0, "maintainers" => []}
+      end
+    end
+
+    describe "the figures across the top of the documents dashboard" do
+      test "are three reads, one per resource" do
+        site = create_site!()
+        admin = create_user_with_permissions!(["admin:dashboard:*"], site_id: site.id)
+        workspace_with_pages!(site, admin, 2)
+
+        {cards, statements} = with_queries(fn -> StatsLive.cards(admin) end)
+
+        assert Enum.map(cards, & &1.id) == ~w(documents contributors completion last-updated)
+        assert %{value: "1", note: "+1 this week"} = Enum.find(cards, &(&1.id == "documents"))
+        assert %{value: "0%"} = Enum.find(cards, &(&1.id == "completion"))
+        assert length(statements) == 3, Enum.join(statements, "\n\n")
+      end
+    end
+
+    # A workspace with `pages` pages, the first of them edited by `admin`.
+    defp workspace_with_pages!(site, admin, pages) do
+      workspace = create_workspace!(site_id: site.id, skip_version: true)
+      version = create_workspace_version!(workspace_id: workspace.id, site_id: site.id)
+
+      [first | _] =
+        for n <- 1..pages do
+          create_section!(site_id: site.id, workspace_version_id: version.id, slug: "page-#{n}")
+        end
+
+      first
+      |> Ash.Changeset.for_update(:update, %{title: "Edited"},
+        tenant: site.id,
+        actor: admin,
+        authorize?: false
+      )
+      |> Ash.update!()
+
+      workspace
+    end
+
+    defp figures(workspaces, admin),
+      do:
+        Ash.load!(workspaces, [:health_metrics, :maintainers_info],
+          actor: admin,
+          tenant: admin.site_id
+        )
   end
 end
