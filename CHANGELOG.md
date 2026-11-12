@@ -1,5 +1,7 @@
 # Changelog for MishkaDocument 0.0.3
 
+- Pages, notes and their drafts keep a version of every edit. The Sections, Section Drafts and Note Drafts screens open a record's version history, and an admin of the section area restores any of its own versions
+- The admin documents page reads its cards' health and maintainer figures in one query per page instead of two per card, the figures across the top in three reads instead of eight, and refreshes them once for a burst of document changes
 - Needs mishka_cms_core 0.0.5-alpha.13 (a page's event, info and state handlers keep their code signature with `CODE_SIGNING_KEY` set), mishka_gervaz 0.0.8 and guarded_struct 0.1.7. Every dependency is at its latest release, including ash 3.37.4 and spark 2.7.10
 
 # Changelog for MishkaDocument 0.0.2
