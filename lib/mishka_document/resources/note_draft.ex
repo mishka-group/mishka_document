@@ -28,6 +28,7 @@ defmodule MishkaDocument.NoteDraft do
     data_layer: AshPostgres.DataLayer,
     extensions: [
       AshArchival.Resource,
+      AshPaperTrail.Resource,
       AshJsonApi.Resource,
       AshEvents.Events,
       MishkaGervaz.Resource,
@@ -140,6 +141,30 @@ defmodule MishkaDocument.NoteDraft do
     ]
 
     exclude_destroy_actions [:permanent_destroy, :master_permanent_destroy]
+  end
+
+  # Every write keeps a copy of the note draft, so an edit can be looked at and rolled back.
+  paper_trail do
+    primary_key_type :uuid_v7
+    change_tracking_mode :snapshot
+    store_action_name? true
+    store_action_inputs? true
+    ignore_attributes [:inserted_at, :updated_at, :archived_at, :changed_fields]
+    ignore_actions [:unarchive, :permanent_destroy, :master_unarchive, :master_permanent_destroy]
+    attributes_as_attributes [:site_id]
+    create_version_on_destroy? true
+    only_when_changed? true
+    relationship_opts public?: true
+
+    # The version stays, with no author, when the account that made it is deleted.
+    belongs_to_actor :user, MishkaCmsCore.Accounts.User,
+      domain: MishkaCmsCore.Accounts,
+      on_delete: :nilify
+
+    version_extensions authorizers: [Ash.Policy.Authorizer]
+
+    mixin {MishkaDocument.Resources.Mixins.PaperTrailMixin, :postgres,
+           ["mishka_document_note_draft_versions"]}
   end
 
   # JSON API configuration for REST endpoints
@@ -559,6 +584,17 @@ defmodule MishkaDocument.NoteDraft do
 
           ui do
             label fn -> dgettext("mishka_gervaz", "Edit") end
+          end
+        end
+
+        action :versions do
+          type :event
+          event "show_versions"
+          visible :active
+
+          ui do
+            label fn -> dgettext("mishka_gervaz", "Versions") end
+            icon "hero-clock"
           end
         end
 
@@ -1253,6 +1289,179 @@ defmodule MishkaDocument.NoteDraft do
               resource_type: :note_draft, for_action: :update}
     end
 
+    read :get_with_versions do
+      description "Retrieves one note draft with a page of its version history (tenant users)"
+      get? true
+
+      argument :versions_limit, :integer do
+        default 20
+        allow_nil? true
+      end
+
+      argument :versions_offset, :integer do
+        default 0
+        allow_nil? true
+      end
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      prepare fn query, _context ->
+        limit = Ash.Query.get_argument(query, :versions_limit)
+        offset = Ash.Query.get_argument(query, :versions_offset)
+
+        Ash.Query.load(query,
+          sorted_versions:
+            MishkaDocument.NoteDraft.Version
+            |> Ash.Query.new()
+            |> Ash.Query.load([:user])
+            |> Ash.Query.limit(limit)
+            |> Ash.Query.offset(offset)
+        )
+      end
+    end
+
+    read :master_get_with_versions do
+      description "Retrieves one note draft with a page of its version history (master users)"
+      multitenancy :bypass
+      get? true
+
+      argument :versions_limit, :integer do
+        default 20
+        allow_nil? true
+      end
+
+      argument :versions_offset, :integer do
+        default 0
+        allow_nil? true
+      end
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
+
+      prepare fn query, _context ->
+        limit = Ash.Query.get_argument(query, :versions_limit)
+        offset = Ash.Query.get_argument(query, :versions_offset)
+
+        Ash.Query.load(query,
+          sorted_versions:
+            MishkaDocument.NoteDraft.Version
+            |> Ash.Query.new()
+            |> Ash.Query.load([:user])
+            |> Ash.Query.limit(limit)
+            |> Ash.Query.offset(offset)
+        )
+      end
+    end
+
+    update :restore_version do
+      description "Restores the note draft to one of its own versions (tenant users)"
+      accept []
+      require_atomic? false
+      transaction? true
+
+      argument :version_id, :uuid do
+        allow_nil? false
+      end
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      validate absent(:archived_at) do
+        message dgettext_noop(
+                  "errors",
+                  "Cannot restore a version of an archived note draft. Please unarchive it first."
+                )
+      end
+
+      change {MishkaDocument.Resources.Changes.RestoreVersion,
+              version: MishkaDocument.NoteDraft.Version,
+              fields: [:title, :content, :order_position, :change_version, :schema, :seo_tags],
+              label: dgettext_noop("errors", "draft")}
+
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
+    end
+
+    update :master_restore_version do
+      description "Restores the note draft to one of its own versions (master users)"
+      accept []
+      require_atomic? false
+      transaction? true
+      multitenancy :bypass
+
+      argument :version_id, :uuid do
+        allow_nil? false
+      end
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
+
+      validate absent(:archived_at) do
+        message dgettext_noop(
+                  "errors",
+                  "Cannot restore a version of an archived note draft. Please unarchive it first."
+                )
+      end
+
+      change {MishkaDocument.Resources.Changes.RestoreVersion,
+              version: MishkaDocument.NoteDraft.Version,
+              fields: [:title, :content, :order_position, :change_version, :schema, :seo_tags],
+              label: dgettext_noop("errors", "draft")}
+
+      change MishkaDocument.Resources.Changes.HighlightCode
+      change {MishkaDocument.Resources.Changes.StartFromSource, @start_from_source}
+    end
+
+    action :restore_version_api, :struct do
+      description "Restores the note draft to one of its own versions (tenant users)"
+      constraints instance_of: MishkaDocument.NoteDraft
+
+      argument :id, :uuid, allow_nil?: false
+      argument :version_id, :uuid, allow_nil?: false
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
+
+      run fn input, context ->
+        with {:ok, record} when not is_nil(record) <-
+               Ash.get(MishkaDocument.NoteDraft, input.arguments.id, Ash.Scope.to_opts(context)) do
+          record
+          |> Ash.Changeset.for_update(
+            :restore_version,
+            %{version_id: input.arguments.version_id},
+            Ash.Scope.to_opts(context)
+          )
+          |> Ash.update()
+        end
+      end
+    end
+
+    action :master_restore_version_api, :struct do
+      description "Restores the note draft to one of its own versions (master users)"
+      constraints instance_of: MishkaDocument.NoteDraft
+
+      argument :id, :uuid, allow_nil?: false
+      argument :version_id, :uuid, allow_nil?: false
+
+      validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
+
+      run fn input, context ->
+        case Ash.get(
+               MishkaDocument.NoteDraft,
+               input.arguments.id,
+               Ash.Scope.to_opts(context, action: :master_get, tenant: nil)
+             ) do
+          {:ok, record} when not is_nil(record) ->
+            record
+            |> Ash.Changeset.for_update(
+              :master_restore_version,
+              %{version_id: input.arguments.version_id},
+              Ash.Scope.to_opts(context, tenant: nil)
+            )
+            |> Ash.update()
+
+          _not_found ->
+            {:error, Ash.Error.Query.NotFound.exception(resource: MishkaDocument.NoteDraft)}
+        end
+      end
+    end
+
     read :master_read do
       description "Reads all note drafts system-wide, bypassing tenant filtering (master users only)"
       multitenancy :bypass
@@ -1442,6 +1651,8 @@ defmodule MishkaDocument.NoteDraft do
     publish :master_unarchive, [[nil, :site_id], "updated"]
     publish :master_destroy, [[nil, :site_id], "destroyed"]
     publish :master_permanent_destroy, [[nil, :site_id], "destroyed"]
+    publish :restore_version, [[nil, :site_id], "updated"]
+    publish :master_restore_version, [[nil, :site_id], "updated"]
   end
 
   # Every id this record holds names a record of its own site, whoever writes it.
@@ -1624,6 +1835,17 @@ defmodule MishkaDocument.NoteDraft do
   end
 
   relationships do
+    # Read through the version resource's `:sorted_versions` as whoever runs the read. A version
+    # query handed to a load is left unbuilt (`Ash.Query.new/1`) so that this action builds it.
+    has_many :sorted_versions, MishkaDocument.NoteDraft.Version do
+      public? true
+      source_attribute :id
+      destination_attribute :version_source_id
+      read_action :sorted_versions
+      sort version_inserted_at: :desc
+      description "All versions of this note draft, newest first"
+    end
+
     belongs_to :site, MishkaCmsCore.Runtime.Site do
       read_action :read_any
       allow_nil? false

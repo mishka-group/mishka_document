@@ -8,10 +8,20 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
 
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User
+  alias MishkaCmsCoreWeb.Templates.CardChrome
+  alias MishkaCmsCoreWeb.Templates.VersionHistory
   alias MishkaDocument.Resources.Helpers.Labels
+  alias MishkaDocumentWeb.Live.Admin.Dashboard.VersionsModal
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
   alias Phoenix.HTML.Safe
+
+  @versions [
+    resource: MishkaDocument.SectionDraft,
+    name: :title,
+    modal: "section-draft-versions-modal",
+    not_found: gettext_noop("Section draft not found or access denied")
+  ]
 
   @impl true
   def mount(params, _session, socket) do
@@ -22,6 +32,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
       |> assign(:page_title, gettext("Section Drafts"))
       |> assign(:url_state, nil)
       |> assign(:return_to, checked(params)["return_to"])
+      |> VersionsModal.assign_defaults()
       |> subscribe_when_connected(current_user)
 
     {:ok, socket}
@@ -97,6 +108,9 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
   end
 
   @impl true
+  def handle_info({:row_action, "show_versions", %{"id" => record_id}}, socket),
+    do: {:noreply, VersionsModal.show(socket, @versions, record_id)}
+
   def handle_info({:row_action, _event, _payload}, socket), do: {:noreply, socket}
 
   @impl true
@@ -166,6 +180,26 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
 
   @impl true
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("close_versions", _params, socket),
+    do: {:noreply, VersionsModal.reset(socket)}
+
+  def handle_event("versions_prev_page", _params, socket),
+    do: {:noreply, VersionsModal.previous_page(socket, @versions)}
+
+  def handle_event("versions_next_page", _params, socket),
+    do: {:noreply, VersionsModal.next_page(socket, @versions)}
+
+  def handle_event("toggle_version_preview", %{"version-id" => version_id}, socket),
+    do: {:noreply, VersionsModal.toggle_preview(socket, version_id)}
+
+  def handle_event("restore_version", %{"version-id" => version_id}, socket),
+    do: {:noreply, VersionsModal.restore(socket, @versions, version_id)}
+
+  @impl true
+  def handle_async(:load_versions, result, socket),
+    do: {:noreply, VersionsModal.loaded(socket, @versions, result)}
 
   @impl true
   def handle_async({:load_expanded, _id}, {:ok, data}, socket) do
