@@ -10,6 +10,9 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
   content_review_status and technical_review_status are set to :approved,
   it automatically applies the note.
 
+  A draft of an archived note is not applied: the approval is refused with a field error on the
+  draft's note, until the note is unarchived.
+
   A draft of an existing note writes only the fields it changes (its `changed_fields`, kept by
   `MishkaDocument.Resources.Changes.StartFromSource`); a draft of a new note writes all of itself.
 
@@ -102,10 +105,26 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
 
         {:ok, mark_draft_applied(draft, tenant, context)}
 
+      {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} ->
+        {:error, archived_source()}
+
       {:error, _} = error ->
         error
     end
   end
+
+  # The note is archived (a deleted one takes its drafts with it), so the draft waits for it to
+  # be restored rather than writing to a note nobody reads.
+  defp archived_source,
+    do:
+      Ash.Error.Changes.InvalidAttribute.exception(
+        field: :source_note_id,
+        message:
+          dgettext_noop(
+            "errors",
+            "Cannot apply a draft of an archived note. Please unarchive the note first."
+          )
+      )
 
   defp changes(draft),
     do: Enum.filter(MishkaDocument.NoteDraft.note_fields(), &(&1 in draft.changed_fields))

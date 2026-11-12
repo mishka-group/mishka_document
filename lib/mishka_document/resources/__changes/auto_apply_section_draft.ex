@@ -10,6 +10,9 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
   content_review_status and technical_review_status are set to :approved,
   it automatically applies the section.
 
+  A draft of an archived page is not applied: the approval is refused with a field error on the
+  draft's page, until the page is unarchived.
+
   A draft of an existing page writes only the fields it changes (its `changed_fields`, kept by
   `MishkaDocument.Resources.Changes.StartFromSource`); a draft of a new page writes all of itself.
 
@@ -19,6 +22,7 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
   whatever the approver may list.
   """
   use Ash.Resource.Change
+  use Gettext, backend: MishkaCmsCore.Gettext
 
   def change(changeset, _opts, context) do
     Ash.Changeset.after_action(changeset, fn _changeset, draft ->
@@ -60,10 +64,26 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
 
         {:ok, mark_draft_applied(draft, tenant, context)}
 
+      {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} ->
+        {:error, archived_source()}
+
       {:error, _} = error ->
         error
     end
   end
+
+  # The page is archived (a deleted one takes its drafts with it), so the draft waits for it to
+  # be restored rather than writing to a page nobody reads.
+  defp archived_source,
+    do:
+      Ash.Error.Changes.InvalidAttribute.exception(
+        field: :source_section_id,
+        message:
+          dgettext_noop(
+            "errors",
+            "Cannot apply a draft of an archived page. Please unarchive the page first."
+          )
+      )
 
   defp changes(draft),
     do: Enum.filter(MishkaDocument.SectionDraft.page_fields(), &(&1 in draft.changed_fields))

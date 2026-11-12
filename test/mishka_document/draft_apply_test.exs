@@ -300,4 +300,68 @@ defmodule MishkaDocument.DraftApplyTest do
     assert length(note.seo_tags) == 1
     assert length(note.schema) == 1
   end
+
+  describe "a draft whose page or note is archived" do
+    test "of a page is refused on approval, naming the archived page, and stays unapplied", ctx do
+      draft = edit_draft!(ctx)
+      Ash.destroy!(ctx.page, action: :destroy, tenant: ctx.site.id, authorize?: false)
+
+      assert {:error, %Ash.Error.Invalid{errors: errors}} =
+               draft
+               |> Ash.Changeset.for_update(
+                 :update,
+                 %{content_review_status: :approved, technical_review_status: :approved},
+                 tenant: ctx.site.id,
+                 actor: ctx.admin
+               )
+               |> Ash.update()
+
+      assert [%Ash.Error.Changes.InvalidAttribute{field: :source_section_id, message: message}] =
+               errors
+
+      assert message =~ "archived page"
+
+      assert %{applied_at: nil, content_review_status: :pending} =
+               Ash.get!(SectionDraft, draft.id, tenant: ctx.site.id, authorize?: false)
+    end
+
+    test "of a note is refused on approval, naming the archived note", ctx do
+      note = create_note!(site_id: ctx.site.id, section_id: ctx.page.id, title: "Tip")
+
+      draft =
+        NoteDraft
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            workspace_version_id: ctx.version.id,
+            section_id: ctx.page.id,
+            source_note_id: note.id,
+            title: "Pay day",
+            content: "<p>Pay day is the last Friday.</p>",
+            change_version: "1.1.0",
+            version_increment_type: :minor
+          },
+          tenant: ctx.site.id,
+          actor: ctx.admin
+        )
+        |> Ash.create!()
+
+      Ash.destroy!(note, action: :destroy, tenant: ctx.site.id, authorize?: false)
+
+      assert {:error, %Ash.Error.Invalid{errors: errors}} =
+               draft
+               |> Ash.Changeset.for_update(
+                 :update,
+                 %{content_review_status: :approved, technical_review_status: :approved},
+                 tenant: ctx.site.id,
+                 actor: ctx.admin
+               )
+               |> Ash.update()
+
+      assert [%Ash.Error.Changes.InvalidAttribute{field: :source_note_id, message: message}] =
+               errors
+
+      assert message =~ "archived note"
+    end
+  end
 end
