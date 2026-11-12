@@ -439,11 +439,14 @@ defmodule MishkaDocument.SiteReferencesTest do
     end
   end
 
+  # A version resource of `ash_paper_trail` is written by its record's own writes, never by an
+  # update of its own, so it is not asked.
   describe "an update that keeps a record on its site" do
     test "says so in its description", _ctx do
       silent =
         for resource <- Ash.Domain.Info.resources(MishkaDocument),
             Ash.Resource.Info.attribute(resource, :site_id),
+            is_nil(Ash.Resource.Info.attribute(resource, :version_source_id)),
             name <- [:update, :master_update],
             %{accept: accept, description: description} <- [
               Ash.Resource.Info.action(resource, name)
