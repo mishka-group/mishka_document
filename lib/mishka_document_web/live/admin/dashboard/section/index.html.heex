@@ -197,6 +197,31 @@ SPDX-License-Identifier: Apache-2.0
     </.modal>
 
     <.modal
+      id="section-versions-modal"
+      width_class="max-w-[840px]"
+      padding_class="p-0"
+      on_cancel={JS.push("close_versions")}
+    >
+      <CardChrome.modal_head
+        icon="hero-clock"
+        title={gettext("Version history")}
+        subtitle={@versions_record_name || gettext("Loading…")}
+      />
+
+      <VersionHistory.panel
+        id="section-versions"
+        versions={@versions}
+        loading={@versions_loading}
+        page={@versions_page}
+        per_page={@versions_per_page}
+        total={@versions_total}
+        preview_id={@preview_version_id}
+        master_ids={@version_masters}
+        empty_hint={gettext("Edits to this page will be recorded here.")}
+      />
+    </.modal>
+
+    <.modal
       :if={@admin_action}
       id="document-admin-action-modal"
       show

@@ -85,6 +85,12 @@ defmodule MishkaDocument.Application do
   # `MishkaDocument.Resources.Changes.HighlightCode`.
   @highlight_supervisor {Task.Supervisor, name: MishkaDocument.HighlightSupervisor}
 
+  # The writes an agent receipt can be kept for (an `agent:operations` plugin, see
+  # `MishkaCmsCore.Agent.Operation`).
+  @agent_plugins [
+    MishkaDocument.Plugins.AgentOperations
+  ]
+
   @doc """
   Every mishka_installer plugin this extension ships, all of which `start/2` supervises. A plugin
   left out of it never registers, so the event it listens on never reaches it.
@@ -96,7 +102,8 @@ defmodule MishkaDocument.Application do
         @settings_plugins ++
         @sidebar_menus ++
         @provision_plugins ++
-        @seo_plugins ++ @share_card_plugins ++ @runtime_plugins ++ @translation_plugins
+        @seo_plugins ++
+        @share_card_plugins ++ @runtime_plugins ++ @translation_plugins ++ @agent_plugins
 
   @impl true
   def start(_type, _args) do

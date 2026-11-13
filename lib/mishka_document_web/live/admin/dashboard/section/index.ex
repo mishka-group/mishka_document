@@ -6,10 +6,16 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  # Tells an agent receipt this page received the broadcast of the row it is about.
+  on_mount MishkaCmsCore.Agent.UiObserver
+
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCore.Localized
+  alias MishkaCmsCoreWeb.Templates.CardChrome
+  alias MishkaCmsCoreWeb.Templates.VersionHistory
   alias MishkaDocumentWeb.AdminActions
+  alias MishkaDocumentWeb.Live.Admin.Dashboard.VersionsModal
   alias MishkaDocumentWeb.Templates.DocumentCard
   alias MishkaDocumentWeb.Templates.DocumentSection
   alias MishkaGervaz.Table.Web.UrlSync
@@ -17,6 +23,21 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   require Ash.Query
 
   @activity_logs_limit 5
+  @versions_modal "section-versions-modal"
+  @versions [
+    section: [
+      resource: MishkaDocument.Section,
+      name: :title,
+      modal: @versions_modal,
+      not_found: gettext_noop("Section not found or access denied")
+    ],
+    note: [
+      resource: MishkaDocument.Note,
+      name: :title,
+      modal: @versions_modal,
+      not_found: gettext_noop("Note not found")
+    ]
+  ]
   @section_activity_logs_limit 3
 
   @doc """
@@ -78,6 +99,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
       |> assign(:admin_context, nil)
       |> assign(:admin_actions, [])
       |> assign(:admin_action, nil)
+      |> assign(:versions_of, :section)
+      |> VersionsModal.assign_defaults()
 
     socket =
       if connected?(socket) do
@@ -120,6 +143,15 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
 
     {:noreply, assign(socket, :url_state, url_state)}
   end
+
+  # One modal shows the history of a page or of one of its notes, whichever was asked for last.
+  defp show_versions(socket, kind, record_id) do
+    socket
+    |> assign(:versions_of, kind)
+    |> VersionsModal.show(@versions[kind], record_id)
+  end
+
+  defp versions_config(socket), do: @versions[socket.assigns.versions_of]
 
   defp no_version_path(user, workspace_id) do
     if workspace_admin?(user),
@@ -199,6 +231,24 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   def handle_event("close_admin_action", _params, socket),
     do: {:noreply, assign(socket, :admin_action, nil)}
 
+  def handle_event("show_note_versions", %{"id" => note_id}, socket),
+    do: {:noreply, show_versions(socket, :note, note_id)}
+
+  def handle_event("close_versions", _params, socket),
+    do: {:noreply, VersionsModal.reset(socket)}
+
+  def handle_event("versions_prev_page", _params, socket),
+    do: {:noreply, VersionsModal.previous_page(socket, versions_config(socket))}
+
+  def handle_event("versions_next_page", _params, socket),
+    do: {:noreply, VersionsModal.next_page(socket, versions_config(socket))}
+
+  def handle_event("toggle_version_preview", %{"version-id" => version_id}, socket),
+    do: {:noreply, VersionsModal.toggle_preview(socket, version_id)}
+
+  def handle_event("restore_version", %{"version-id" => version_id}, socket),
+    do: {:noreply, VersionsModal.restore(socket, versions_config(socket), version_id)}
+
   @impl true
   def handle_info({:form_saved, action, %MishkaDocument.Note{} = note}, socket)
       when action in [:create, :update] do
@@ -261,6 +311,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
      |> assign(:editing_note_id, nil)
      |> assign(:note_section_id, section_id)}
   end
+
+  @impl true
+  def handle_info({:row_action, "show_versions", %{"id" => section_id}}, socket),
+    do: {:noreply, show_versions(socket, :section, section_id)}
 
   @impl true
   def handle_info({:expand_row, id}, socket) do
@@ -494,6 +548,10 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
   end
 
   @impl true
+  def handle_async(:load_versions, result, socket),
+    do: {:noreply, VersionsModal.loaded(socket, versions_config(socket), result)}
+
+  @impl true
   def handle_async(:load_workspace, {:ok, {workspace, version}}, socket) do
     current_user = socket.assigns.current_user
 
@@ -704,6 +762,14 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Section.Index do
                     class="grid size-[26px] flex-none place-items-center rounded-[7px] border border-[#e4e2f7] bg-[#f2f1fc] text-[#5b57d6] transition-colors hover:bg-[#e9e7fb]"
                   >
                     <.icon name="hero-pencil-square" class="size-3" />
+                  </button>
+                  <button
+                    phx-click="show_note_versions"
+                    phx-value-id={note.id}
+                    title={gettext("Versions")}
+                    class="grid size-[26px] flex-none place-items-center rounded-[7px] border border-[#ecebe6] bg-[#faf9f6] text-[#6d6a63] transition-colors hover:bg-[#f2f1ec]"
+                  >
+                    <.icon name="hero-clock" class="size-3" />
                   </button>
                   <a
                     href={"/admin/dashboard/document/note-drafts?note_drafts_filter_source_note_id=#{note.id}&note_drafts_filter_section_id=#{@section_id}&return_to=#{@workspace_version_id}"}

@@ -13,11 +13,16 @@ defmodule MishkaDocument do
     otp_app: :mishka_document,
     validate_config_inclusion?: false,
     extensions: [
+      AshPaperTrail.Domain,
       AshJsonApi.Domain,
       MishkaGervaz.Domain
     ]
 
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
+
+  paper_trail do
+    include_versions? true
+  end
 
   json_api do
     open_api do

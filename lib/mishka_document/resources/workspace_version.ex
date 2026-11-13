@@ -33,7 +33,8 @@ defmodule MishkaDocument.WorkspaceVersion do
     notifiers: [
       Ash.Notifier.PubSub,
       MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook,
-      MishkaCmsCore.Runtime.Resources.Notifiers.SitemapRefresh
+      MishkaCmsCore.Runtime.Resources.Notifiers.SitemapRefresh,
+      MishkaCmsCore.Agent.Notifiers.ReceiptHook
     ],
     authorizers: [Ash.Policy.Authorizer]
 

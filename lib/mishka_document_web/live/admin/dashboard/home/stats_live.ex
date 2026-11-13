@@ -30,6 +30,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.StatsLive do
 
   require Ash.Query
 
+  import Ash.Expr, only: [expr: 1]
+
   alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCore.Dashboard.Widget
   alias MishkaCmsCore.Localized
@@ -117,15 +119,57 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.StatsLive do
 
   @doc """
   The figures `user` may read, in the order they are drawn, each as `card/1` takes it.
+
+  Three reads in all, one per resource, each asking the database for every figure it gives at once.
   """
   @spec cards(User.t()) :: [map()]
   def cards(user) do
-    [&documents/1, &contributors/1, &completion/1, &last_updated/1]
-    |> Enum.flat_map(fn figure ->
-      case figure.(user) do
-        {:ok, card} -> [card]
-        :not_readable -> []
-      end
+    week_ago = DateTime.add(DateTime.utc_now(), -7, :day)
+    day_ago = DateTime.add(DateTime.utc_now(), -1, :day)
+
+    documents =
+      Workspace
+      |> read(user)
+      |> aggregate(user, [
+        {:total, :count},
+        {:added, :count, query: [filter: expr(inserted_at >= ^week_ago)]},
+        {:updated_at, :max, field: :updated_at}
+      ])
+
+    pages =
+      Section
+      |> read(user)
+      |> aggregate(user, [
+        {:total, :count},
+        {:approved, :count,
+         query: [
+           filter:
+             expr(content_review_status == :approved and technical_review_status == :approved)
+         ]},
+        {:updated_at, :max, field: :updated_at}
+      ])
+
+    writers =
+      EventLog
+      |> read(user)
+      |> Ash.Query.filter(
+        resource in ^@written and action_type in [:create, :update] and not is_nil(actor_id)
+      )
+      |> aggregate(user, [
+        {:total, :count, field: :actor_id, uniq?: true},
+        {:active, :count,
+         field: :actor_id, uniq?: true, query: [filter: expr(occurred_at >= ^day_ago)]}
+      ])
+
+    [
+      documents(documents),
+      contributors(writers),
+      completion(pages),
+      last_updated(documents, pages)
+    ]
+    |> Enum.flat_map(fn
+      {:ok, card} -> [card]
+      :not_readable -> []
     end)
   end
 
@@ -135,92 +179,72 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.StatsLive do
     MishkaGervaz.Messages.assign_async(socket, :stats, fn -> {:ok, %{stats: cards(user)}} end)
   end
 
-  defp documents(user) do
-    week_ago = DateTime.add(DateTime.utc_now(), -7, :day)
-
-    with {:ok, total} <- count(read(Workspace, user), user),
-         {:ok, added} <-
-           Workspace |> read(user) |> Ash.Query.filter(inserted_at >= ^week_ago) |> count(user) do
-      {:ok,
-       %{
-         id: "documents",
-         label: gettext("Total Documents"),
-         icon: "hero-document-text",
-         tone: "bg-[#eeedfb] text-[#5b57d6]",
-         value: Localized.number(total),
-         note: gettext("+%{count} this week", count: Localized.number(added)),
-         note_tone: if(added > 0, do: "text-[#1f9d6b]", else: "text-[#8a877f]")
-       }}
-    end
+  defp documents({:ok, %{total: total, added: added}}) do
+    {:ok,
+     %{
+       id: "documents",
+       label: gettext("Total Documents"),
+       icon: "hero-document-text",
+       tone: "bg-[#eeedfb] text-[#5b57d6]",
+       value: Localized.number(total),
+       note: gettext("+%{count} this week", count: Localized.number(added)),
+       note_tone: if(added > 0, do: "text-[#1f9d6b]", else: "text-[#8a877f]")
+     }}
   end
 
-  defp contributors(user) do
-    day_ago = DateTime.add(DateTime.utc_now(), -1, :day)
-    written = EventLog |> read(user) |> Ash.Query.filter(resource in ^@written)
+  defp documents(:not_readable), do: :not_readable
 
-    written =
-      Ash.Query.filter(written, action_type in [:create, :update] and not is_nil(actor_id))
-
-    with {:ok, total} <- count(written, user, field: :actor_id, uniq?: true),
-         {:ok, active} <-
-           written
-           |> Ash.Query.filter(occurred_at >= ^day_ago)
-           |> count(user, field: :actor_id, uniq?: true) do
-      {:ok,
-       %{
-         id: "contributors",
-         label: gettext("Contributors"),
-         icon: "hero-users",
-         tone: "bg-[#eeedfb] text-[#5b57d6]",
-         value: Localized.number(total),
-         note: gettext("%{count} active in the last day", count: Localized.number(active)),
-         note_tone: "text-[#8a877f]"
-       }}
-    end
+  defp contributors({:ok, %{total: total, active: active}}) do
+    {:ok,
+     %{
+       id: "contributors",
+       label: gettext("Contributors"),
+       icon: "hero-users",
+       tone: "bg-[#eeedfb] text-[#5b57d6]",
+       value: Localized.number(total),
+       note: gettext("%{count} active in the last day", count: Localized.number(active)),
+       note_tone: "text-[#8a877f]"
+     }}
   end
 
-  defp completion(user) do
-    with {:ok, total} <- count(read(Section, user), user),
-         {:ok, approved} <-
-           Section
-           |> read(user)
-           |> Ash.Query.filter(
-             content_review_status == :approved and technical_review_status == :approved
-           )
-           |> count(user) do
-      {:ok,
-       %{
-         id: "completion",
-         label: gettext("Completion"),
-         icon: "hero-check-circle",
-         tone: "bg-[#fbf1df] text-[#cf8a24]",
-         value: percent(approved, total),
-         note:
-           gettext("%{approved} of %{total} pages approved",
-             approved: Localized.number(approved),
-             total: Localized.number(total)
-           ),
-         note_tone: "text-[#8a877f]"
-       }}
-    end
+  defp contributors(:not_readable), do: :not_readable
+
+  defp completion({:ok, %{total: total, approved: approved}}) do
+    {:ok,
+     %{
+       id: "completion",
+       label: gettext("Completion"),
+       icon: "hero-check-circle",
+       tone: "bg-[#fbf1df] text-[#cf8a24]",
+       value: percent(approved, total),
+       note:
+         gettext("%{approved} of %{total} pages approved",
+           approved: Localized.number(approved),
+           total: Localized.number(total)
+         ),
+       note_tone: "text-[#8a877f]"
+     }}
   end
 
-  defp last_updated(user) do
-    with {:ok, document_at} <- latest(Workspace, user) do
-      page_at =
-        case latest(Section, user) do
-          {:ok, at} -> at
-          :not_readable -> nil
-        end
+  defp completion(:not_readable), do: :not_readable
 
-      case Enum.reject([document_at, page_at], &is_nil/1) do
-        [] ->
-          {:ok, last_updated_card("—", gettext("Nothing written yet"))}
+  # Last Updated needs the documents; the pages count only for an admin who may read them.
+  defp last_updated(:not_readable, _pages), do: :not_readable
 
-        changed ->
-          at = Enum.max(changed, DateTime)
-          {:ok, last_updated_card(Widget.relative_time(at), Localized.date(at, :yMMMd))}
+  defp last_updated({:ok, %{updated_at: document_at}}, pages) do
+    page_at =
+      case pages do
+        {:ok, %{updated_at: at}} -> at
+        :not_readable -> nil
       end
+
+    case Enum.reject([document_at, page_at], &is_nil/1) do
+      [] ->
+        {:ok, last_updated_card("—", gettext("Nothing written yet"))}
+
+      changed ->
+        at = Enum.max(changed, DateTime)
+        {:ok, last_updated_card(Widget.relative_time(at), Localized.date(at, :yMMMd))}
     end
   end
 
@@ -235,13 +259,6 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.StatsLive do
       note_tone: "text-[#8a877f]"
     }
 
-  defp latest(resource, user) do
-    resource
-    |> read(user)
-    |> Ash.max(:updated_at, read_opts(user))
-    |> readable()
-  end
-
   defp percent(_approved, 0), do: "—"
   defp percent(approved, total), do: "#{round(approved * 100 / total)}%"
 
@@ -254,8 +271,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.StatsLive do
   defp read_opts(%User{site_id: nil} = user), do: [actor: user]
   defp read_opts(%User{site_id: site_id} = user), do: [actor: user, tenant: site_id]
 
-  defp count(query, user, opts \\ []),
-    do: query |> Ash.count(Keyword.merge(read_opts(user), opts)) |> readable()
+  defp aggregate(query, user, aggregates),
+    do: query |> Ash.aggregate(aggregates, read_opts(user)) |> readable()
 
   # A read the admin's areas do not reach leaves its figure out; any other failure is a bug.
   defp readable({:ok, value}), do: {:ok, value}
