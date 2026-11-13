@@ -244,7 +244,10 @@ defmodule MishkaDocumentWeb.Test.SectionFiguresTest do
 
   describe "the Contributor filter" do
     defp offered(view) do
-      view |> element("#sections-table-filter-contributor") |> render_focus()
+      view
+      |> element("#multi-select-sections-table-contributor")
+      |> render_hook("relation_focus", %{"filter" => "contributor"})
+
       render_async(view, @await)
 
       view
