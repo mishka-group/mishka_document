@@ -157,8 +157,8 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
       view = ctx.master_conn |> open("#{@dashboard}/tags") |> edit(tag)
 
       view
-      |> element("#{picker(form, :language_group_id)} input[name=_search_language_group_id]")
-      |> render_focus()
+      |> element(picker(form, :language_group_id))
+      |> render_hook("relation_focus", %{"filter" => "language_group_id"})
 
       render_async(view, @await)
 
@@ -907,7 +907,7 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
 
         assert holding.(~s(id="multi-select-#{form}-permissions")) == holding.("SEO Tags")
 
-        view |> element("#{picker} input[name='_search_permissions']") |> render_focus()
+        view |> element(picker) |> render_hook("relation_focus", %{"filter" => "permissions"})
         render_async(view, @await)
         view |> element("#{picker} [phx-value-id='#{permission.name}']") |> render_click()
 
@@ -1179,7 +1179,10 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
   end
 
   defp pick(view, form, field, id) do
-    view |> element("#{picker(form, field)} input[name=_search_#{field}]") |> render_focus()
+    view
+    |> element(picker(form, field))
+    |> render_hook("relation_focus", %{"filter" => "#{field}"})
+
     render_async(view, @await)
 
     view |> element(option(form, field, id)) |> render_click()
@@ -1189,7 +1192,9 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
   end
 
   defp offered(view, form, field) do
-    view |> element("#{picker(form, field)} input[name=_search_#{field}]") |> render_focus()
+    view
+    |> element(picker(form, field))
+    |> render_hook("relation_focus", %{"filter" => "#{field}"})
 
     view
     |> render_async(@await)
@@ -1203,7 +1208,9 @@ defmodule MishkaDocumentWeb.Test.DocumentFormsTest do
   # The options a picker lists once opened, by id, each with the text it reads as.
   defp labels(view, form, field, open? \\ true) do
     if open? do
-      view |> element("#{picker(form, field)} input[name=_search_#{field}]") |> render_focus()
+      view
+      |> element(picker(form, field))
+      |> render_hook("relation_focus", %{"filter" => "#{field}"})
     end
 
     view
