@@ -6,6 +6,9 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.SectionDraft.Index do
   @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  # Tells an agent receipt this page received the broadcast of the row it is about.
+  on_mount MishkaCmsCore.Agent.UiObserver
+
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCoreWeb.Templates.CardChrome

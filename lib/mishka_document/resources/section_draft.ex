@@ -32,7 +32,11 @@ defmodule MishkaDocument.SectionDraft do
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
     ],
-    notifiers: [Ash.Notifier.PubSub, MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook],
+    notifiers: [
+      Ash.Notifier.PubSub,
+      MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook,
+      MishkaCmsCore.Agent.Notifiers.ReceiptHook
+    ],
     authorizers: [Ash.Policy.Authorizer]
 
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext

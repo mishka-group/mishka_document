@@ -34,7 +34,11 @@ defmodule MishkaDocument.NoteDraft do
       MishkaGervaz.Resource,
       GuardedStruct.AshResource
     ],
-    notifiers: [Ash.Notifier.PubSub, MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook],
+    notifiers: [
+      Ash.Notifier.PubSub,
+      MishkaCmsCore.Runtime.Resources.Notifiers.PluginHook,
+      MishkaCmsCore.Agent.Notifiers.ReceiptHook
+    ],
     authorizers: [Ash.Policy.Authorizer]
 
   require Ash.Query
