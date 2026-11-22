@@ -95,7 +95,7 @@ defmodule MishkaDocument.MixProject do
       {:makeup_ts, "~> 0.2"},
       {:makeup_css, "~> 0.2"},
       {:ash_events, "~> 0.8"},
-      {:guarded_struct, "~> 0.1.10"},
+      {:guarded_struct, "~> 0.1.11"},
       mishka_dep(:mishka_installer, "~> 0.1.17"),
       mishka_dep(:mishka_slug, "~> 0.0.1"),
       {:igniter, "~> 0.8", only: [:dev, :test]},
