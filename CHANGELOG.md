@@ -1,5 +1,6 @@
 # Changelog for MishkaDocument 0.0.3
 
+- Dependencies updated to hammer 7.6.0, postgrex 0.23.0 and, for development, ex_doc 0.40.5. assent 0.4.0 and color 1.0.0 stay behind: ash_authentication requires `~> 0.3.2` and image requires `~> 0.13`
 - Needs mishka_gervaz 0.0.10, whose relation selects open through their `.SearchSelect` hook in place of `phx-focus`, and mishka_cms_core 0.0.5-alpha.17. Every dependency is at its latest release, including joken 2.8.0 and mochiweb 3.6.1
 - Pages, notes and their drafts keep a version of every edit. The Sections, Section Drafts and Note Drafts screens open a record's version history, and an admin of the section area restores any of its own versions
 - The admin documents page reads its cards' health and maintainer figures in one query per page instead of two per card, the figures across the top in three reads instead of eight, and refreshes them once for a burst of document changes

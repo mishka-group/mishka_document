@@ -5,7 +5,7 @@
 defmodule MishkaDocument.MixProject do
   use Mix.Project
 
-  @version "0.0.3-alpha.5"
+  @version "0.0.3"
   @source_url "https://github.com/mishka-group/mishka_document"
 
   def project do
@@ -107,7 +107,7 @@ defmodule MishkaDocument.MixProject do
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       mishka_dep(:mishka_cms_core, "~> 0.0.5-alpha.18"),
-      mishka_dep(:mishka_gervaz, "~> 0.0.10"),
+      mishka_dep(:mishka_gervaz, "~> 0.0.12"),
       # `mix hex.publish` builds the docs with it.
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
