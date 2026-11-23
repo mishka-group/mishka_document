@@ -97,7 +97,7 @@ defmodule MishkaDocument.MixProject do
       {:ash_events, "~> 0.8"},
       {:guarded_struct, "~> 0.1.11"},
       mishka_dep(:mishka_installer, "~> 0.1.17"),
-      mishka_dep(:mishka_slug, "~> 0.0.1"),
+      mishka_dep(:mishka_slug, "~> 0.0.3"),
       {:igniter, "~> 0.8", only: [:dev, :test]},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.16", only: [:dev, :test], runtime: false},
