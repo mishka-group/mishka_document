@@ -42,6 +42,7 @@ defmodule MishkaDocument.SectionDraft do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
+  alias Ash.Error.Query.NotFound
   alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Runtime.Helpers
@@ -1589,7 +1590,7 @@ defmodule MishkaDocument.SectionDraft do
             |> Ash.update()
 
           _not_found ->
-            {:error, Ash.Error.Query.NotFound.exception(resource: MishkaDocument.SectionDraft)}
+            {:error, NotFound.exception(resource: MishkaDocument.SectionDraft)}
         end
       end
     end

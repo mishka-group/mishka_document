@@ -52,6 +52,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.VersionsModal do
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [push_event: 3, put_flash: 3]
 
+  alias AshPaperTrail.Resource.Info, as: PaperTrailInfo
   alias MishkaCmsCore.Accounts.User
   alias MishkaCmsCoreWeb.Templates.VersionHistory
 
@@ -270,7 +271,7 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.VersionsModal do
 
   defp with_total(record, resource, record_id, current_user) do
     resource
-    |> AshPaperTrail.Resource.Info.version_resource()
+    |> PaperTrailInfo.version_resource()
     |> Ash.Query.for_read(:read_any, %{}, actor: current_user)
     |> Ash.Query.filter(version_source_id: record_id)
     |> Ash.count(actor: current_user)

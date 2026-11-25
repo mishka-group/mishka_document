@@ -24,6 +24,9 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
   use Ash.Resource.Change
   use Gettext, backend: MishkaCmsCore.Gettext
 
+  alias Ash.Error.Changes.InvalidAttribute
+  alias Ash.Error.Query.NotFound
+
   def change(changeset, _opts, context) do
     Ash.Changeset.after_action(changeset, fn _changeset, draft ->
       if should_apply?(draft) do
@@ -64,7 +67,7 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
 
         {:ok, mark_draft_applied(draft, tenant, context)}
 
-      {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} ->
+      {:error, %Ash.Error.Invalid{errors: [%NotFound{}]}} ->
         {:error, archived_source()}
 
       {:error, _} = error ->
@@ -76,7 +79,7 @@ defmodule MishkaDocument.Resources.Changes.AutoApplySectionDraft do
   # be restored rather than writing to a page nobody reads.
   defp archived_source,
     do:
-      Ash.Error.Changes.InvalidAttribute.exception(
+      InvalidAttribute.exception(
         field: :source_section_id,
         message:
           dgettext_noop(

@@ -42,6 +42,7 @@ defmodule MishkaDocument.Section do
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaCmsCore.CoreComponents, only: [icon: 1]
   import MishkaGervaz.UIAdapters.Tailwind, only: [copy_button: 1]
+  alias Ash.Error.Query.NotFound
   alias Ecto.Adapters.SQL
   alias MishkaCmsCore.Runtime.Helpers
   alias MishkaCmsCore.Runtime.Languages
@@ -1985,7 +1986,7 @@ defmodule MishkaDocument.Section do
             |> Ash.update()
 
           _not_found ->
-            {:error, Ash.Error.Query.NotFound.exception(resource: MishkaDocument.Section)}
+            {:error, NotFound.exception(resource: MishkaDocument.Section)}
         end
       end
     end

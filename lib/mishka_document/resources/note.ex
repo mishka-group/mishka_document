@@ -32,6 +32,7 @@ defmodule MishkaDocument.Note do
     authorizers: [Ash.Policy.Authorizer]
 
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
+  alias Ash.Error.Query.NotFound
 
   @admin_fields [
     :section_id,
@@ -692,7 +693,7 @@ defmodule MishkaDocument.Note do
             |> Ash.update()
 
           _not_found ->
-            {:error, Ash.Error.Query.NotFound.exception(resource: MishkaDocument.Note)}
+            {:error, NotFound.exception(resource: MishkaDocument.Note)}
         end
       end
     end

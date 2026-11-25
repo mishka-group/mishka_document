@@ -33,6 +33,9 @@ defmodule MishkaDocument.Resources.Changes.RestoreVersion do
   use Ash.Resource.Change
   use Gettext, backend: MishkaCmsCore.Gettext
 
+  alias Ash.Error.Changes.InvalidAttribute
+  alias Ash.Error.Query.NotFound
+
   @impl true
   def init(opts) do
     case {opts[:version], opts[:fields], opts[:label]} do
@@ -57,7 +60,7 @@ defmodule MishkaDocument.Resources.Changes.RestoreVersion do
       {:ok, _another_records_version} ->
         Ash.Changeset.add_error(
           changeset,
-          Ash.Error.Changes.InvalidAttribute.exception(
+          InvalidAttribute.exception(
             field: :version_id,
             message: refusal(opts[:label])
           )
@@ -66,7 +69,7 @@ defmodule MishkaDocument.Resources.Changes.RestoreVersion do
       _missing ->
         Ash.Changeset.add_error(
           changeset,
-          Ash.Error.Query.NotFound.exception(resource: opts[:version])
+          NotFound.exception(resource: opts[:version])
         )
     end
   end
