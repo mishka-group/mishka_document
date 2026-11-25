@@ -46,6 +46,7 @@ defmodule MishkaDocument.NoteDraft do
   use MishkaGervaz.Messages, backend: MishkaCmsCore.Gettext
   import Phoenix.Component, only: [sigil_H: 2]
   import MishkaGervaz.UIAdapters.Tailwind, only: [cell_stacked: 1, cell_stats: 1]
+  alias Ash.Error.Query.NotFound
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Localized
   alias MishkaDocument.Resources.Helpers.Labels
@@ -1461,7 +1462,7 @@ defmodule MishkaDocument.NoteDraft do
             |> Ash.update()
 
           _not_found ->
-            {:error, Ash.Error.Query.NotFound.exception(resource: MishkaDocument.NoteDraft)}
+            {:error, NotFound.exception(resource: MishkaDocument.NoteDraft)}
         end
       end
     end

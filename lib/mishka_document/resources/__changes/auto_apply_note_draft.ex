@@ -24,6 +24,9 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
   use Ash.Resource.Change
   use Gettext, backend: MishkaCmsCore.Gettext
 
+  alias Ash.Error.Changes.InvalidAttribute
+  alias Ash.Error.Query.NotFound
+
   require Ash.Query
 
   def change(changeset, _opts, context) do
@@ -105,7 +108,7 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
 
         {:ok, mark_draft_applied(draft, tenant, context)}
 
-      {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} ->
+      {:error, %Ash.Error.Invalid{errors: [%NotFound{}]}} ->
         {:error, archived_source()}
 
       {:error, _} = error ->
@@ -117,7 +120,7 @@ defmodule MishkaDocument.Resources.Changes.AutoApplyNoteDraft do
   # be restored rather than writing to a note nobody reads.
   defp archived_source,
     do:
-      Ash.Error.Changes.InvalidAttribute.exception(
+      InvalidAttribute.exception(
         field: :source_note_id,
         message:
           dgettext_noop(
