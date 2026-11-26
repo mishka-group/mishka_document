@@ -13,6 +13,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.EventLog.Index do
   """
   use MishkaCmsCore.ExtensionLiveView
 
+  on_mount MishkaCmsCore.Accounts.AdminSite
+
   alias MishkaCmsCore.Localized
   alias MishkaDocument.EventLog
   alias MishkaGervaz.Table.Web.UrlSync

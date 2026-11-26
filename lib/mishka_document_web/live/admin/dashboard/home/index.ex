@@ -6,6 +6,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  on_mount MishkaCmsCore.Accounts.AdminSite
+
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User

@@ -1,5 +1,6 @@
 # Changelog for MishkaDocument 0.0.4
 
+- Every documentation admin page follows the site a master picked in the top bar (`MishkaCmsCore.Accounts.AdminSite`): with one site picked the workspaces, the figures and the setup and check window are that site's alone, so the window no longer starts on the request's site while the top bar names another; with All sites every site's workspaces are listed, each card naming its site. Needs mishka_cms_core 0.0.7
 - The check and repair window on the documentation dashboard lists the checks installed extensions add, each under its extension's name, and runs and repairs them as the signed-in admin. It needs mishka_cms_core 0.0.7
 - Every dependency is at its latest release, including ash 3.38.1, image 0.74.0 with color 1.0.0, igniter 0.8.6, lazy_html 0.1.15, eqrcode 0.3.0 and db_connection 2.10.3. assent 0.4.0 and bcrypt_elixir 4.0.0 stay behind: ash_authentication requires `~> 0.3.2` and `~> 3.0`
 
