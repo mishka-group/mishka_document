@@ -8,8 +8,10 @@ defmodule MishkaDocument.Plugins.Seed do
   (`MishkaCmsCore.Install.Seeds`).
 
   Subscribing is the whole declaration. The installer lists the documentation's row with its two
-  parts, the host's seed scripts run them with every other plugin's, and the `samples` part's `nav`
-  puts `/docs` in every dev site's `Dev` dropdown. Priority 20 runs the documentation after the
+  parts, the host's seed scripts run them with every other plugin's. The documentation's link
+  (`/docs`) is declared once, on `MishkaDocument.Plugins.Installer`: the `pages` part's install adds
+  it to the site's header menu the first time, and every dev site's `Dev` dropdown lists it.
+  Priority 20 runs the documentation after the
   blog.
 
   | part | | installers |
@@ -52,8 +54,7 @@ defmodule MishkaDocument.Plugins.Seed do
           summary:
             gettext_noop("Five products' docs in versions and languages, with notes and issues"),
           envs: [:dev],
-          default: true,
-          nav: [%{label: "Docs", path: "/docs"}]
+          default: true
         }
       ]
     }

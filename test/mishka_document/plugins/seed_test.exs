@@ -22,6 +22,8 @@ defmodule MishkaDocument.Plugins.SeedTest do
   alias MishkaDocument.Test.Plugins.ProvisionSnippetSaved
   alias MishkaInstaller.Event.{Event, EventHandler, Hook}
 
+  require Ash.Query
+
   # Registered by hand for the reason `MishkaDocument.ProvisionTest`'s `listening!/0` gives: this
   # suite's registry is not up when the extension's supervisor starts its plugins. The CMS is not
   # installed yet, as during the installer's own run, so the install is answered with no actor.
@@ -93,7 +95,14 @@ defmodule MishkaDocument.Plugins.SeedTest do
     assert pages.label == "Documentation pages and components"
 
     assert %{id: "samples", envs: [:dev], required: false, default: true} = samples
-    assert samples.nav == [%{label: "Docs", path: "/docs"}]
+    assert samples.nav == []
+
+    # The link is the extension's own, declared once on its installer plugin: its first install
+    # adds it to a site's header menu, and the Dev dropdown lists it.
+    assert %{nav: [%{label: "Docs", path: "/docs"}]} =
+             Enum.find(Extensions.installable(), &(&1.key == "mishka_document"))
+
+    assert %{label: "Docs", path: "/docs"} in Seeds.nav()
 
     assert %{parts: [%{id: "pages"}]} = docs(:prod)
   end
@@ -114,6 +123,49 @@ defmodule MishkaDocument.Plugins.SeedTest do
 
     assert report.pages != []
     assert Extensions.installed?(site.id, :mishka_document)
+  end
+
+  test "pages puts the documentation's link in the site's header menu once, on its first install" do
+    site = starter_site!()
+
+    for _run <- 1..2 do
+      assert %{reports: [report]} =
+               Hook.call(Seeds.event(), %{
+                 payload("mishka_document", "pages", site.id)
+                 | env: :prod
+               })
+
+      refute Map.has_key?(report, :error)
+    end
+
+    header = header(site)
+    assert length(String.split(header, ~s|site_path("/:lang/docs"|)) == 2
+    assert header =~ ">Docs</.link>"
+  end
+
+  # A site with the starter's header, as the core's own parts leave it before an extension's part.
+  defp starter_site! do
+    dir = Path.join(System.tmp_dir!(), "seed_nav_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    Application.put_env(:mishka_cms_core, :media_static_dir, dir)
+
+    on_exit(fn ->
+      Application.delete_env(:mishka_cms_core, :media_static_dir)
+      File.rm_rf(dir)
+    end)
+
+    name = "nav#{System.unique_integer([:positive])}"
+    site = create_site!(name: name, host: "#{name}.test", active: true, master: true)
+    MishkaCmsCore.Install.StarterContent.seed!(site)
+    site
+  end
+
+  defp header(site) do
+    MishkaCmsCore.Runtime.Layout
+    |> Ash.Query.for_read(:read_any, %{}, authorize?: false)
+    |> Ash.Query.filter(site_id == ^site.id and name == "site-main")
+    |> Ash.read_one!(authorize?: false)
+    |> Map.fetch!(:template)
   end
 
   test "pages reports the refusal as an error, and records nothing" do
