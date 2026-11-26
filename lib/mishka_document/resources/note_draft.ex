@@ -1048,43 +1048,9 @@ defmodule MishkaDocument.NoteDraft do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
-
-      # Validate section_id XOR section_draft_id
-      validate fn changeset, _context ->
-        section_id = Ash.Changeset.get_attribute(changeset, :section_id)
-        section_draft_id = Ash.Changeset.get_attribute(changeset, :section_draft_id)
-
-        cond do
-          is_nil(section_id) and is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Must specify either section_id or section_draft_id.")}
-
-          !is_nil(section_id) and !is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Cannot specify both section_id and section_draft_id.")}
-
-          true ->
-            :ok
-        end
-      end
+      validate MishkaDocument.Resources.Validations.SectionOrSectionDraft
 
       # If section_draft_id is set, ensure change_version matches the section draft
       validate fn changeset, _context ->
@@ -1141,43 +1107,9 @@ defmodule MishkaDocument.NoteDraft do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
-
-      # Validate section_id XOR section_draft_id
-      validate fn changeset, _context ->
-        section_id = Ash.Changeset.get_attribute(changeset, :section_id)
-        section_draft_id = Ash.Changeset.get_attribute(changeset, :section_draft_id)
-
-        cond do
-          is_nil(section_id) and is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Must specify either section_id or section_draft_id.")}
-
-          !is_nil(section_id) and !is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Cannot specify both section_id and section_draft_id.")}
-
-          true ->
-            :ok
-        end
-      end
+      validate MishkaDocument.Resources.Validations.SectionOrSectionDraft
 
       # If section_draft_id is set, ensure change_version matches the section draft
       validate fn changeset, _context ->
@@ -1310,19 +1242,8 @@ defmodule MishkaDocument.NoteDraft do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.NoteDraft.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.NoteDraft.Version}
     end
 
     read :master_get_with_versions do
@@ -1342,19 +1263,8 @@ defmodule MishkaDocument.NoteDraft do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.NoteDraft.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.NoteDraft.Version}
     end
 
     update :restore_version do

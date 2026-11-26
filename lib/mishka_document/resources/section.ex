@@ -1532,18 +1532,9 @@ defmodule MishkaDocument.Section do
                on_match: :ignore
              )
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section cannot be its own parent.")}
 
       # Highlights the code blocks of the sanitized content, before the row is written, and stores
       # the components it names.
@@ -1584,18 +1575,9 @@ defmodule MishkaDocument.Section do
                on_match: :ignore
              )
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section cannot be its own parent.")}
 
       change MishkaDocument.Resources.Changes.HighlightCode
       change MishkaDocument.Resources.Changes.ContentFacts
@@ -1722,18 +1704,9 @@ defmodule MishkaDocument.Section do
                 field: :source_section_id, resource: MishkaDocument.Section},
                where: [changing(:source_section_id)]
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section cannot be its own parent.")}
 
       change {Change, Languages.public_slug(language: :language)}
 
@@ -1765,18 +1738,9 @@ defmodule MishkaDocument.Section do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section cannot be its own parent.")}
 
       change {Change, Languages.public_slug(language: :language)}
 
@@ -1810,19 +1774,8 @@ defmodule MishkaDocument.Section do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.Section.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.Section.Version}
     end
 
     read :master_get_with_versions do
@@ -1842,19 +1795,8 @@ defmodule MishkaDocument.Section do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.Section.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.Section.Version}
     end
 
     update :restore_version do

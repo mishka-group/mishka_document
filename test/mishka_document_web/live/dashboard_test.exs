@@ -545,6 +545,80 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     end
   end
 
+  # The issues are a stream: what it held while the installer was drawn instead would never come
+  # back, so the panel closes with the dashboard and opens again with a fresh read.
+  test "the issues panel shows its issues again after the installer was opened and put away", %{
+    conn: conn
+  } do
+    issue = create_issue!(site_id: master_site().id)
+
+    {:ok, view, _html} =
+      live(log_in(conn, create_admin("docgate@example.com")), "/admin/dashboard/document")
+
+    view |> element("#toggle-issues-btn") |> render_click()
+    render_async(view, 5_000)
+    assert has_element?(view, "#issues-#{issue.id}")
+
+    render_hook(view, "extension_open", %{})
+    refute has_element?(view, "#toggle-issues-btn")
+    render_hook(view, "extension_skip", %{})
+
+    assert has_element?(view, ~s(#toggle-issues-btn[aria-expanded="false"]))
+
+    view |> element("#toggle-issues-btn") |> render_click()
+    render_async(view, 5_000)
+    assert has_element?(view, "#issues-#{issue.id}")
+  end
+
+  describe "the site of a workspace card" do
+    setup do
+      other = create_site!()
+      here = create_workspace!(site_id: master_site().id, name: "Same name")
+      there = create_workspace!(site_id: other.id, name: "Same name")
+      %{other: other, here: here, there: there}
+    end
+
+    defp site_chips(view, workspace) do
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s([id$="#{workspace.id}"] [data-testid="document-card-site"]))
+      |> Enum.map(&String.trim(LazyHTML.text(&1)))
+    end
+
+    test "names each card's site for a master reading every site", %{
+      conn: conn,
+      other: other,
+      here: here,
+      there: there
+    } do
+      {:ok, view, _html} =
+        live(log_in(conn, create_admin("docsites@example.com")), "/admin/dashboard/document")
+
+      render_async(view, 5_000)
+
+      assert site_chips(view, here) == [master_site().name]
+      assert site_chips(view, there) == [other.name]
+    end
+
+    test "is not drawn for a site's own admin, who sees only that site", %{
+      conn: conn,
+      here: here,
+      there: there
+    } do
+      tenant = create_user_with_permissions!(["*"], site_id: master_site().id)
+
+      {:ok, view, _html} =
+        live(log_in(conn, tenant, false), "/admin/dashboard/document")
+
+      render_async(view, 5_000)
+
+      assert has_element?(view, ~s([data-role^="wscard"][id$="#{here.id}"]))
+      refute has_element?(view, ~s([id$="#{there.id}"]))
+      assert site_chips(view, here) == []
+    end
+  end
+
   defp create_admin(email) do
     {:ok, user} =
       User
@@ -564,10 +638,10 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     user
   end
 
-  defp log_in(conn, user) do
+  defp log_in(conn, user, master_mode \\ true) do
     conn
     |> Plug.Test.init_test_session(%{})
-    |> Plug.Conn.put_session(:master_mode, true)
+    |> Plug.Conn.put_session(:master_mode, master_mode)
     |> AshAuthentication.Plug.Helpers.store_in_session(user)
   end
 end

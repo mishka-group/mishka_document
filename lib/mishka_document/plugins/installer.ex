@@ -33,7 +33,8 @@ defmodule MishkaDocument.Plugins.Installer do
           label: gettext_noop("Documentation"),
           summary:
             gettext_noop("Versioned documents and their sections, with the pages that read them"),
-          fields: []
+          fields: [],
+          nav: [%{label: gettext_noop("Docs"), path: "/docs"}]
         }
       ]
     }

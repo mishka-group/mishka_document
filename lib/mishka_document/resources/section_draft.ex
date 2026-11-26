@@ -1206,35 +1206,11 @@ defmodule MishkaDocument.SectionDraft do
 
       change {Change, Languages.public_slug(language: :language)}
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
-
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       # Highlights the code blocks of the sanitized content, before the row is written.
       change MishkaDocument.Resources.Changes.HighlightCode
@@ -1265,35 +1241,11 @@ defmodule MishkaDocument.SectionDraft do
 
       change {Change, Languages.public_slug(language: :language)}
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
-
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       change MishkaDocument.Resources.Changes.HighlightCode
 
@@ -1330,18 +1282,9 @@ defmodule MishkaDocument.SectionDraft do
                 field: :language_group_id, resource: MishkaDocument.Section},
                where: [changing(:language_group_id)]
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       change {Change, Languages.public_slug(language: :language)}
 
@@ -1375,18 +1318,9 @@ defmodule MishkaDocument.SectionDraft do
                 )
       end
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       change {Change, Languages.public_slug(language: :language)}
 
@@ -1416,19 +1350,8 @@ defmodule MishkaDocument.SectionDraft do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.SectionDraft.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.SectionDraft.Version}
     end
 
     read :master_get_with_versions do
@@ -1448,19 +1371,8 @@ defmodule MishkaDocument.SectionDraft do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.SectionDraft.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.SectionDraft.Version}
     end
 
     update :restore_version do

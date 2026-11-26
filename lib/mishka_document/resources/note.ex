@@ -541,19 +541,8 @@ defmodule MishkaDocument.Note do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: false}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.Note.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.Note.Version}
     end
 
     read :master_get_with_versions do
@@ -573,19 +562,8 @@ defmodule MishkaDocument.Note do
 
       validate {MishkaCmsCore.Runtime.Resources.Validations.TenantContext, require_master: true}
 
-      prepare fn query, _context ->
-        limit = Ash.Query.get_argument(query, :versions_limit)
-        offset = Ash.Query.get_argument(query, :versions_offset)
-
-        Ash.Query.load(query,
-          sorted_versions:
-            MishkaDocument.Note.Version
-            |> Ash.Query.new()
-            |> Ash.Query.load([:user])
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(offset)
-        )
-      end
+      prepare {MishkaDocument.Resources.Preparations.LoadVersionsPage,
+               version: MishkaDocument.Note.Version}
     end
 
     update :restore_version do

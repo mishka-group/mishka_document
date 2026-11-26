@@ -6,6 +6,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Tag.Index do
   @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  on_mount MishkaCmsCore.Accounts.AdminSite
+
   alias MishkaCmsCore.Accounts.User
   alias MishkaGervaz.Table.Web.UrlSync
 

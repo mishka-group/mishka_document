@@ -6,6 +6,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.NoteDraft.Index do
   @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  on_mount MishkaCmsCore.Accounts.AdminSite
+
   # Tells an agent receipt this page received the broadcast of the row it is about.
   on_mount MishkaCmsCore.Agent.UiObserver
 

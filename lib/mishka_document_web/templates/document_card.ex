@@ -266,11 +266,20 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
                 {dgettext("mishka_gervaz", "FEATURED")}
               </span>
             </div>
-            <div
-              dir="ltr"
-              class="mt-0.5 truncate font-['Space_Grotesk'] text-[11.5px] font-semibold text-white/80 rtl:text-right"
-            >
-              {@record.path || "/" <> @record.slug}
+            <div class="mt-0.5 flex min-w-0 items-center gap-2">
+              <span
+                :if={@site}
+                data-testid="document-card-site"
+                class="flex-none rounded-[20px] bg-white/20 px-2 py-[2px] text-[10.5px] font-semibold text-white"
+              >
+                {@site}
+              </span>
+              <span
+                dir="ltr"
+                class="truncate font-['Space_Grotesk'] text-[11.5px] font-semibold text-white/80 rtl:text-right"
+              >
+                {@record.path || "/" <> @record.slug}
+              </span>
             </div>
           </div>
 
@@ -487,14 +496,24 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
           ]}>
             {@record.name}
           </div>
-          <div
-            dir="ltr"
-            class={[
-              "mt-0.5 truncate font-['Space_Grotesk'] text-[11px] font-semibold rtl:text-right",
-              @progress.solid
-            ]}
-          >
-            {@record.path || "/" <> @record.slug}
+          <div class="mt-0.5 flex min-w-0 items-center gap-2">
+            <span
+              :if={@site}
+              data-testid="document-card-site"
+              class="flex-none text-[11px] font-semibold text-[#4f4bcc]"
+            >
+              {@site}
+            </span>
+            <span :if={@site} class="size-[3px] flex-none rounded-full bg-[#c3c0b8]"></span>
+            <span
+              dir="ltr"
+              class={[
+                "truncate font-['Space_Grotesk'] text-[11px] font-semibold rtl:text-right",
+                @progress.solid
+              ]}
+            >
+              {@record.path || "/" <> @record.slug}
+            </span>
           </div>
         </div>
       </div>
@@ -710,11 +729,17 @@ defmodule MishkaDocumentWeb.Templates.DocumentCard do
     |> assign(:editions, editions(record))
     |> assign(:edition_view, edition_view(state))
     |> assign(:tags, tags(record))
+    |> assign(:site, site_name(record, state))
     |> assign(
       :visible_row_actions,
       Enum.filter(assigns.static.row_actions, &Gervaz.action_visible?(&1, record, state))
     )
   end
+
+  # A site user only ever sees their own site, so naming it on every card is noise; a master reads
+  # across sites and needs to know which one each workspace belongs to.
+  defp site_name(%{site: %{name: name}}, %{master_user?: true}) when is_binary(name), do: name
+  defp site_name(_record, _state), do: nil
 
   attr :value, :any, required: true
   attr :label, :string, required: true

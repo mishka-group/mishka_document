@@ -217,6 +217,31 @@ defmodule MishkaDocument.Test.SectionTest do
 
         assert updated.site_id == site1.id
       end
+
+      test "refuses a section made its own parent and keeps another page as its parent" do
+        site = create_site!()
+        section = create_section!(site_id: site.id)
+
+        parent =
+          create_section!(site_id: site.id, workspace_version_id: section.workspace_version_id)
+
+        update = fn parent_id ->
+          section
+          |> Ash.Changeset.for_update(:update, %{parent_section_id: parent_id},
+            tenant: site.id,
+            authorize?: false
+          )
+          |> Ash.update()
+        end
+
+        assert {:error, %Ash.Error.Invalid{errors: errors}} = update.(section.id)
+
+        assert [%{field: :parent_section_id, message: "Section cannot be its own parent."}] =
+                 errors
+
+        assert {:ok, %{parent_section_id: parent_id}} = update.(parent.id)
+        assert parent_id == parent.id
+      end
     end
 
     describe "master_update action" do

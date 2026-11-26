@@ -6,6 +6,8 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   @moduledoc false
   use MishkaCmsCore.ExtensionLiveView
 
+  on_mount MishkaCmsCore.Accounts.AdminSite
+
   alias MishkaCmsCore.Accounts.Checks.AccessPermissions
   alias MishkaCmsCore.Accounts.Helper
   alias MishkaCmsCore.Accounts.User
@@ -86,8 +88,19 @@ defmodule MishkaDocumentWeb.Live.Admin.Dashboard.Home.Index do
   # THE GATE, ANSWERED ON EVERY RENDER rather than once at mount: an install, a skip or the badge all
   # change it, and each of them is an event. `MishkaCmsCoreWeb.Live.Admin.Components.ExtensionInstallerPanel`
   # pins the answer once an admin has said, so this follows what they said rather than re-deciding.
-  defp gate(socket),
-    do: assign(socket, :showing_installer?, ExtensionInstallerPanel.showing_installer?(socket))
+  defp gate(socket) do
+    showing? = ExtensionInstallerPanel.showing_installer?(socket)
+
+    socket
+    |> assign(:showing_installer?, showing?)
+    |> installer_over(showing?)
+  end
+
+  # The issues are a stream, and a stream keeps nothing on the server: the rows the panel held never
+  # come back once the installer is drawn in place of the dashboard. The panel closes with it, so
+  # the dashboard put back (Not now, Set up, a retry) opens it again with a fresh read.
+  defp installer_over(socket, true), do: close_issues_panel(socket)
+  defp installer_over(socket, false), do: socket
 
   defp subscribe_when_connected(socket, user) do
     if connected?(socket), do: subscribe_to_pubsub(socket, user), else: socket
