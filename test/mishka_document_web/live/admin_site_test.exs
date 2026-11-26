@@ -98,6 +98,42 @@ defmodule MishkaDocumentWeb.Test.AdminSiteTest do
     assert view |> element("#document-kit-upgrade-site-fixed") |> render() =~ other.name
   end
 
+  test "a master picks the site in the top bar's switcher on a documentation page", %{
+    conn: conn,
+    master: master,
+    home: home,
+    other: other
+  } do
+    {:ok, view, _html} = live(conn, @home)
+    render_async(view, 5_000)
+
+    assert has_element?(view, "[data-testid=site-switcher-name]", "All sites")
+    assert has_element?(view, "[data-testid=site-switcher-site-#{home.id}]", home.name)
+
+    view |> element("[data-testid=site-switcher-site-#{other.id}]") |> render_click()
+
+    assert {@home, _flash} = assert_redirect(view)
+    assert AdminSite.chosen(master) == other.id
+
+    {:ok, view, _html} = live(conn, @home)
+    html = render_async(view, 5_000)
+    assert has_element?(view, "[data-testid=site-switcher-name]", other.name)
+    refute html =~ "Home Handbook"
+  end
+
+  test "a site's own admin has no switcher on a documentation page", %{home: home} do
+    site_admin = MishkaCmsCore.Test.Admin.create_admin("doc-site-admin@example.com", home.id)
+
+    {:ok, view, _html} =
+      "localhost"
+      |> MishkaCmsCore.Test.Admin.build_conn_for_host()
+      |> log_in(site_admin)
+      |> live(@home)
+
+    render_async(view, 5_000)
+    refute has_element?(view, "[data-testid=site-switcher]")
+  end
+
   test "a pick made on another page opens the open page again in the picked site", %{
     conn: conn,
     master: master,
