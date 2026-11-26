@@ -37,9 +37,12 @@ defmodule MishkaDocument.Application do
 
   # Installs this extension onto a site when an admin asks for it — the `installer:extension:install`
   # event. Subscribing is also how the installer's own registry learns this extension exists, so
-  # there is nothing else to register: see `MishkaCmsCore.Install.Extensions`.
+  # there is nothing else to register: see `MishkaCmsCore.Install.Extensions`. The documentation's
+  # parts of the installer's checklist, its pages and in development its sample data, are an
+  # `installer:seed` plugin (`MishkaCmsCore.Install.Seeds`).
   @provision_plugins [
-    MishkaDocument.Plugins.Installer
+    MishkaDocument.Plugins.Installer,
+    MishkaDocument.Plugins.Seed
   ]
 
   # Lists this extension's documents in a site's sitemap (a `seo:sitemap:urls` plugin), names a
@@ -91,17 +94,9 @@ defmodule MishkaDocument.Application do
     MishkaDocument.Plugins.AgentOperations
   ]
 
-  # Adds the documentation's sample data to the dev seeds (a `dev:seed` plugin, see
-  # `MishkaCmsCore.Dev.Seeds`). Supervised only where the config sets `:env_dev?` or `:env_test?`
-  # (`dev_plugins/0`), so a production build never registers it.
-  @dev_plugins [
-    MishkaDocument.Plugins.DevSeed
-  ]
-
   @doc """
   Every mishka_installer plugin this extension ships, all of which `start/2` supervises. A plugin
-  left out of it never registers, so the event it listens on never reaches it. The dev seed plugin
-  is among them only in development and test.
+  left out of it never registers, so the event it listens on never reaches it.
   """
   @spec plugins() :: [module()]
   def plugins,
@@ -111,15 +106,7 @@ defmodule MishkaDocument.Application do
         @sidebar_menus ++
         @provision_plugins ++
         @seo_plugins ++
-        @share_card_plugins ++
-        @runtime_plugins ++ @translation_plugins ++ @agent_plugins ++ dev_plugins()
-
-  defp dev_plugins do
-    if Application.get_env(:mishka_cms_core, :env_dev?, false) or
-         Application.get_env(:mishka_cms_core, :env_test?, false),
-       do: @dev_plugins,
-       else: []
-  end
+        @share_card_plugins ++ @runtime_plugins ++ @translation_plugins ++ @agent_plugins
 
   @impl true
   def start(_type, _args) do

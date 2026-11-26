@@ -41,10 +41,10 @@ defmodule MishkaDocument.ProvisionTest do
   alias MishkaCmsCore.Runtime.States.SiteState
   alias MishkaCmsCore.Runtime.Translation
   alias MishkaCmsCore.Test.Installer, as: TestInstaller
-  alias MishkaDocument.Plugins.{Installer, PageFrame}
+  alias MishkaDocument.Plugins.{Installer, PageFrame, Seed}
   alias MishkaDocument.Provision
   alias MishkaDocument.Test.Plugins.ProvisionSnippetSaved
-  alias MishkaInstaller.Event.EventHandler
+  alias MishkaInstaller.Event.{Event, EventHandler}
 
   require Ash.Query
 
@@ -1108,13 +1108,20 @@ defmodule MishkaDocument.ProvisionTest do
 
     test "the install wizard sets the documentation up with nobody behind the request, and the same request is refused after it",
          %{site: site} do
+      # THE WIZARD'S CHECKLIST OFFERS THE DOCUMENTATION THROUGH ITS `installer:seed` PLUGIN, whose
+      # "pages" part asks for this install.
+      {:ok, _registered} = Seed.register()
+      {:ok, _started} = Seed.start()
+      :ok = EventHandler.do_compile(Seed.config(:__event__), :start, false)
+      on_exit(fn -> Event.unregister(:name, Seed, false) end)
+
       assert {:ok, %{site: first}} =
                Bootstrap.run(%{
                  email: "owner-#{System.unique_integer([:positive])}@example.com",
                  password: "Password123!",
                  site_name: "Docs wizard",
                  host: "wizard-#{System.unique_integer([:positive])}.example.com",
-                 extensions: ["mishka_document"]
+                 parts: %{"mishka_document" => ["pages"]}
                })
 
       # THE RUN COMPILES THE SITE ONTO DISK, as it does for a real one: its templates under
