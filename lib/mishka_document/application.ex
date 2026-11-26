@@ -91,9 +91,17 @@ defmodule MishkaDocument.Application do
     MishkaDocument.Plugins.AgentOperations
   ]
 
+  # Adds the documentation's sample data to the dev seeds (a `dev:seed` plugin, see
+  # `MishkaCmsCore.Dev.Seeds`). Supervised only where the config sets `:env_dev?` or `:env_test?`
+  # (`dev_plugins/0`), so a production build never registers it.
+  @dev_plugins [
+    MishkaDocument.Plugins.DevSeed
+  ]
+
   @doc """
   Every mishka_installer plugin this extension ships, all of which `start/2` supervises. A plugin
-  left out of it never registers, so the event it listens on never reaches it.
+  left out of it never registers, so the event it listens on never reaches it. The dev seed plugin
+  is among them only in development and test.
   """
   @spec plugins() :: [module()]
   def plugins,
@@ -103,7 +111,15 @@ defmodule MishkaDocument.Application do
         @sidebar_menus ++
         @provision_plugins ++
         @seo_plugins ++
-        @share_card_plugins ++ @runtime_plugins ++ @translation_plugins ++ @agent_plugins
+        @share_card_plugins ++
+        @runtime_plugins ++ @translation_plugins ++ @agent_plugins ++ dev_plugins()
+
+  defp dev_plugins do
+    if Application.get_env(:mishka_cms_core, :env_dev?, false) or
+         Application.get_env(:mishka_cms_core, :env_test?, false),
+       do: @dev_plugins,
+       else: []
+  end
 
   @impl true
   def start(_type, _args) do
