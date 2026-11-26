@@ -1048,22 +1048,7 @@ defmodule MishkaDocument.NoteDraft do
 
       change &Ash.Changeset.force_change_attribute(&1, :site_id, &2.tenant)
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
-
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
       # Validate section_id XOR section_draft_id
       validate fn changeset, _context ->
@@ -1141,22 +1126,7 @@ defmodule MishkaDocument.NoteDraft do
         Ash.Changeset.set_tenant(changeset, site_id)
       end
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
-
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
       # Validate section_id XOR section_draft_id
       validate fn changeset, _context ->

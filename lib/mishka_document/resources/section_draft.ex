@@ -1206,22 +1206,7 @@ defmodule MishkaDocument.SectionDraft do
 
       change {Change, Languages.public_slug(language: :language)}
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
-
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
       validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
                 field: :parent_section_id,
@@ -1256,22 +1241,7 @@ defmodule MishkaDocument.SectionDraft do
 
       change {Change, Languages.public_slug(language: :language)}
 
-      # Set created_by_user_id from actor only if not provided in form
-      change fn changeset, context ->
-        existing_user_id = Ash.Changeset.get_attribute(changeset, :created_by_user_id)
-
-        if is_nil(existing_user_id) do
-          case context.actor do
-            %{id: user_id} ->
-              Ash.Changeset.force_change_attribute(changeset, :created_by_user_id, user_id)
-
-            _ ->
-              changeset
-          end
-        else
-          changeset
-        end
-      end
+      change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
       validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
                 field: :parent_section_id,
