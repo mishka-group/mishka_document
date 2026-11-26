@@ -1223,18 +1223,9 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       # Highlights the code blocks of the sanitized content, before the row is written.
       change MishkaDocument.Resources.Changes.HighlightCode
@@ -1282,18 +1273,9 @@ defmodule MishkaDocument.SectionDraft do
         end
       end
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       change MishkaDocument.Resources.Changes.HighlightCode
 
@@ -1330,18 +1312,9 @@ defmodule MishkaDocument.SectionDraft do
                 field: :language_group_id, resource: MishkaDocument.Section},
                where: [changing(:language_group_id)]
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       change {Change, Languages.public_slug(language: :language)}
 
@@ -1375,18 +1348,9 @@ defmodule MishkaDocument.SectionDraft do
                 )
       end
 
-      validate fn changeset, _context ->
-        parent_id = Ash.Changeset.get_attribute(changeset, :parent_section_id)
-        section_id = changeset.data.id
-
-        if !is_nil(parent_id) and parent_id == section_id do
-          {:error,
-           field: :parent_section_id,
-           message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
-        else
-          :ok
-        end
-      end
+      validate {MishkaDocument.Resources.Validations.NotItsOwnParent,
+                field: :parent_section_id,
+                message: dgettext_noop("errors", "Section draft cannot be its own parent.")}
 
       change {Change, Languages.public_slug(language: :language)}
 
