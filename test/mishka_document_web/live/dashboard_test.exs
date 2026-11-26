@@ -545,6 +545,31 @@ defmodule MishkaDocumentWeb.Test.DashboardTest do
     end
   end
 
+  # The issues are a stream: what it held while the installer was drawn instead would never come
+  # back, so the panel closes with the dashboard and opens again with a fresh read.
+  test "the issues panel shows its issues again after the installer was opened and put away", %{
+    conn: conn
+  } do
+    issue = create_issue!(site_id: master_site().id)
+
+    {:ok, view, _html} =
+      live(log_in(conn, create_admin("docgate@example.com")), "/admin/dashboard/document")
+
+    view |> element("#toggle-issues-btn") |> render_click()
+    render_async(view, 5_000)
+    assert has_element?(view, "#issues-#{issue.id}")
+
+    render_hook(view, "extension_open", %{})
+    refute has_element?(view, "#toggle-issues-btn")
+    render_hook(view, "extension_skip", %{})
+
+    assert has_element?(view, ~s(#toggle-issues-btn[aria-expanded="false"]))
+
+    view |> element("#toggle-issues-btn") |> render_click()
+    render_async(view, 5_000)
+    assert has_element?(view, "#issues-#{issue.id}")
+  end
+
   defp create_admin(email) do
     {:ok, user} =
       User
