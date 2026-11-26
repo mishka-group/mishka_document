@@ -1050,26 +1050,7 @@ defmodule MishkaDocument.NoteDraft do
 
       change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
-      # Validate section_id XOR section_draft_id
-      validate fn changeset, _context ->
-        section_id = Ash.Changeset.get_attribute(changeset, :section_id)
-        section_draft_id = Ash.Changeset.get_attribute(changeset, :section_draft_id)
-
-        cond do
-          is_nil(section_id) and is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Must specify either section_id or section_draft_id.")}
-
-          !is_nil(section_id) and !is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Cannot specify both section_id and section_draft_id.")}
-
-          true ->
-            :ok
-        end
-      end
+      validate MishkaDocument.Resources.Validations.SectionOrSectionDraft
 
       # If section_draft_id is set, ensure change_version matches the section draft
       validate fn changeset, _context ->
@@ -1128,26 +1109,7 @@ defmodule MishkaDocument.NoteDraft do
 
       change MishkaDocument.Resources.Changes.SetCreatedByUserId
 
-      # Validate section_id XOR section_draft_id
-      validate fn changeset, _context ->
-        section_id = Ash.Changeset.get_attribute(changeset, :section_id)
-        section_draft_id = Ash.Changeset.get_attribute(changeset, :section_draft_id)
-
-        cond do
-          is_nil(section_id) and is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Must specify either section_id or section_draft_id.")}
-
-          !is_nil(section_id) and !is_nil(section_draft_id) ->
-            {:error,
-             message:
-               dgettext_noop("errors", "Cannot specify both section_id and section_draft_id.")}
-
-          true ->
-            :ok
-        end
-      end
+      validate MishkaDocument.Resources.Validations.SectionOrSectionDraft
 
       # If section_draft_id is set, ensure change_version matches the section draft
       validate fn changeset, _context ->
